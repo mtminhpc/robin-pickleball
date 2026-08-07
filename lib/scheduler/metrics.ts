@@ -180,8 +180,19 @@ export interface PlayerFairness {
   name: string;
   status: Player["status"];
   games: number;
+  /** Suất đáng được hưởng, cộng dồn qua các vòng người này CÓ MẶT. */
   expected: number;
+  /**
+   * Thiệt thòi thật: `expected − games`. Cố ý không cộng khoản đuổi kịp vào.
+   *
+   * Bảng Công bằng là thứ người chơi mở ra để tự kiểm chứng, nên con số ở đây
+   * phải trả lời đúng một câu: "tôi có bị thiệt không". Cộng thêm khoản ưu tiên
+   * của người mới vào sẽ khiến họ hiện lệch +7 ngay lúc vừa đặt chân tới sân,
+   * trong khi họ chưa mất suất nào cả.
+   */
   deficit: number;
+  /** Khoản ưu tiên đuổi kịp còn lại của người vào giữa chừng, hiện thành cột riêng. */
+  catchUp: number;
   byes: number;
   currentPlayStreak: number;
   longestPlayStreak: number;
@@ -219,8 +230,9 @@ export function fairnessReport(state: EventState): FairnessReport {
       name: p.name,
       status: p.status,
       games: h.games[i],
-      expected: round2(h.expected[i] + p.catchUpCredit),
-      deficit: round2(h.deficit[i]),
+      expected: round2(h.expected[i]),
+      deficit: round2(h.expected[i] - h.games[i]),
+      catchUp: round2(Math.max(0, p.catchUpCredit - h.games[i])),
       byes: h.byes[i],
       currentPlayStreak: h.playStreak[i],
       longestPlayStreak: h.longestPlayStreak[i],

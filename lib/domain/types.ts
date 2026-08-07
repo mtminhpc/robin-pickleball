@@ -41,6 +41,12 @@ export interface EventConfig {
   /**
    * Người vào giữa chừng được "nợ" bao nhiêu phần số trận của người ít nhất.
    * 1 = đuổi kịp hoàn toàn, 0 = nhập cuộc bình đẳng từ lúc vào.
+   *
+   * Mặc định 0, và đó là phần cốt lõi của định nghĩa công bằng ở đây. Người tới
+   * vòng thứ chín không hề bị thiệt tám trận — họ chỉ chưa có mặt. Coi đó là nợ
+   * rồi trả bằng suất của người khác là lấy của người tới đúng giờ: đo với 16
+   * người trên 2 sân thì hệ số 1 cho người tới muộn 7 trận trong khi người tới
+   * đúng giờ chỉ còn 4–5.
    */
   catchUpFactor: number;
   /** Số vòng sinh sẵn trước mặt để mọi người biết khi nào tới lượt. */
@@ -69,7 +75,7 @@ export const DEFAULT_CONFIG: EventConfig = {
   scoring: { pointsTo: 11, winBy2: true },
   softMaxConsecutive: 2,
   hardMaxConsecutive: 3,
-  catchUpFactor: 1,
+  catchUpFactor: 0,
   lookaheadRounds: 6,
   commitRounds: 2,
   eligibilityRatio: 0.6,

@@ -30,6 +30,9 @@ export default function StandingsPage() {
     [data],
   );
   const fair = useMemo(() => (data ? fairnessReport(data.state) : null), [data]);
+  // Cột "Ưu tiên" chỉ hiện khi thực sự có người đang được đuổi kịp. Mặc định
+  // `catchUpFactor` là 0 nên hầu hết buổi đánh sẽ không bao giờ thấy cột này.
+  const hasCatchUp = fair?.players.some((p) => p.catchUp > 0) ?? false;
 
   if (!data || !table || !fair) return null;
   const { state, role } = data;
@@ -113,6 +116,14 @@ export default function StandingsPage() {
               Cột <strong className="text-slate-300">Lệch</strong> mới là thước đo.
               Số trận thô lệch nhau là bình thường khi có người đến muộn hoặc về
               sớm; điều phải gần 0 là chênh lệch so với suất kỳ vọng.
+              {fair.players.some((p) => p.catchUp > 0) && (
+                <>
+                  {" "}
+                  Cột <strong className="text-slate-300">Ưu tiên</strong> là số trận
+                  người vào giữa chừng còn được xếp trước để đuổi kịp — đó là phần
+                  cộng thêm, không phải thiệt thòi.
+                </>
+              )}
             </p>
             <table className="w-full text-sm tabular-nums">
               <thead className="text-xs text-slate-500">
@@ -121,6 +132,9 @@ export default function StandingsPage() {
                   <th className="pb-2 pr-3 text-right font-medium">Trận</th>
                   <th className="pb-2 pr-3 text-right font-medium">Kỳ vọng</th>
                   <th className="pb-2 pr-3 text-right font-medium">Lệch</th>
+                  {hasCatchUp && (
+                    <th className="pb-2 pr-3 text-right font-medium">Ưu tiên</th>
+                  )}
                   <th className="pb-2 pr-3 text-right font-medium">Nghỉ</th>
                   <th className="pb-2 pr-3 text-right font-medium">Chuỗi</th>
                   <th className="pb-2 text-right font-medium">Bạn đôi</th>
@@ -143,6 +157,11 @@ export default function StandingsPage() {
                       >
                         {signed(p.deficit)}
                       </td>
+                      {hasCatchUp && (
+                        <td className="py-2 pr-3 text-right text-court-100">
+                          {p.catchUp > 0 ? `+${p.catchUp}` : "—"}
+                        </td>
+                      )}
                       <td className="py-2 pr-3 text-right text-slate-400">{p.byes}</td>
                       <td className="py-2 pr-3 text-right text-slate-400">
                         {p.longestPlayStreak}

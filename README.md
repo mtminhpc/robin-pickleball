@@ -21,7 +21,7 @@ Dữ liệu lưu vào `.data/sheet.json`. Khi nào sẵn sàng dùng thật thì
 trường Google và ứng dụng tự chuyển sang Google Sheet — xem [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
-pnpm test          # 130 bài kiểm thử
+pnpm test          # 140 bài kiểm thử
 pnpm sim --matrix  # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
 
@@ -52,11 +52,17 @@ Thước đo dùng trong toàn bộ ứng dụng là **suất kỳ vọng**. M�
 đáng được `min(1, 4 × số trận / số người có mặt)` lượt đánh. Cộng dồn qua các vòng
 người đó *có mặt*, trừ đi số trận thực đánh, ra `deficit` — ai dương là đang bị thiệt.
 
+Hệ quả quan trọng: người tới vòng thứ chín **không nợ tám trận**, họ chỉ chưa có mặt.
+Nên lúc vừa đặt chân tới sân, cột Lệch của họ bằng 0 và từ đó họ đánh cùng nhịp với
+mọi người. Ai muốn cho người tới muộn được ưu tiên đuổi kịp thì chỉnh `catchUpFactor`,
+nhưng nên biết cái giá: đo với 16 người trên 2 sân, hệ số 1 cho người tới muộn 7 trận
+trong khi người tới đúng giờ chỉ còn 4–5. Suất đó lấy từ đâu thì lấy của họ.
+
 Ba tình huống khó tự xử lý đúng nhờ định nghĩa này, không cần luật riêng nào:
 
 | Tình huống | Kết quả |
 |---|---|
-| Vào từ vòng 5 | Không bị tính là thiếu 4 trận. Được ưu tiên vừa phải để đuổi kịp |
+| Vào từ vòng 5 | Không bị tính là thiếu 4 trận. Đánh cùng nhịp với mọi người từ lúc vào |
 | Về sau vòng 9 | Không bị tính là "được ưu ái". Kết quả đã đánh giữ nguyên trong bảng xếp hạng |
 | Trận bị huỷ | Suất kỳ vọng của cả nhóm giảm theo, nên không ai chịu thiệt |
 
@@ -65,12 +71,12 @@ Ví dụ thật, 12 người / 2 sân / 16 vòng, một người vào ở vòng 
 ```
 Người    Trận  Kỳ vọng  Lệch   Nghỉ  Chuỗi   Trạng thái
 Giang    11    10.5     -0.54  5     3       đang chơi
-Bình     10    10.5     +0.46  6     2       đang chơi
-Ngọc      9     9.8     +0.79  3     3       đang chơi   <- vào giữa chừng
-An        6      5.1    -0.87  2     2       đã về       <- về sớm
+Nam      10    10.5     +0.46  6     2       đang chơi
+Ngọc      7     7.8     +0.79  5     2       đang chơi   <- vào giữa chừng
+An        5     5.1     +0.13  3     2       đã về       <- về sớm
 ```
 
-Số trận thô lệch từ 6 tới 11, nhưng mức thiệt thòi thực chỉ trong khoảng ±0.87 trận.
+Số trận thô lệch từ 5 tới 11, nhưng mức thiệt thòi thực chỉ trong khoảng ±0.79 trận.
 Đó mới là con số đáng nhìn.
 
 ### Xếp lịch
@@ -85,6 +91,19 @@ sổ sáu vòng phía trước. Mọi định nghĩa công bằng nằm gọn tr
 2. Ai cũng được đánh đúng suất của mình
 3. Không ai phải ngồi chờ quá lâu
 4. Càng nhiều bạn đôi và đối thủ khác nhau càng tốt
+
+### Dời lịch bằng tay
+
+Nút **Sớm hơn / Muộn hơn** đổi chỗ **cả hai vòng** cho nhau chứ không nhấc riêng một
+trận sang chỗ khác. Lý do là số học: lịch round robin thì vòng nào cũng kín sân, nên
+nhét thêm bốn người vào một vòng là có kẻ phải đánh hai trận — đo trên lịch thật thì
+cách dời từng trận hỏng 22 trên 24 lần. Đổi cả vòng thì luôn làm được, và không ai
+thêm hay bớt trận nào, không ai đổi bạn đôi; chỉ thứ tự trước sau thay đổi.
+
+Trước khi đổi, hộp xác nhận chạy `validateRoundSwap` ngay trên trình duyệt và nói rõ
+ai sẽ phải đánh liên tiếp mấy vòng. Vượt trần chỉ là **cảnh báo**, không phải chặn:
+trần chuỗi là mức thuật toán cố giữ chứ không phải luật chơi, mà chủ sự kiện có lý do
+ngoài sân mà phần mềm không biết.
 
 Hai vòng gần nhất được coi là đã chốt và không đổi nữa — người chơi nhìn lịch để canh
 giờ nghỉ, nên nó phải đứng yên. Các vòng xa hơn được xếp lại mỗi lần để tin tức mới
@@ -149,7 +168,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            130 bài kiểm thử
+tests/            140 bài kiểm thử
 ```
 
 Nguyên tắc: `lib/domain` và `lib/scheduler` là hàm thuần, không đọc đồng hồ, không gọi

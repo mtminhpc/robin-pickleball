@@ -151,40 +151,64 @@ describe("đa dạng bạn đôi và đối thủ", () => {
 });
 
 describe("người vào giữa chừng", () => {
-  it("người mới được ưu tiên nhiều hơn người đã chơi từ đầu", () => {
+  it("người mới không bị coi là đang thiếu trận lúc vừa tới", () => {
+    // Đây là điểm cốt lõi của định nghĩa công bằng. Người tới ở vòng bảy không
+    // hề bị thiệt sáu trận — họ chỉ chưa có mặt. Nếu tính đó là nợ thì hệ thống
+    // sẽ trả bằng suất của người tới đúng giờ.
     const sim = new EventSim({ seed: 3, config: { courts: 2 }, planning: FAST });
     sim.addPlayers(names(12));
     sim.start();
     sim.playRounds(6);
 
     const newcomer = sim.joinMidEvent("Muộn");
-    const before = countGames(sim, newcomer);
+    expect(Math.abs(deficitOf(sim, newcomer)), "vừa tới đã bị tính là thiếu trận").toBeLessThan(0.01);
+  });
+
+  it("người mới đánh cùng nhịp với mọi người kể từ lúc vào", () => {
+    const sim = new EventSim({ seed: 3, config: { courts: 2 }, planning: FAST });
+    const incumbents = sim.addPlayers(names(12));
+    sim.start();
+    sim.playRounds(6);
+
+    const newcomer = sim.joinMidEvent("Muộn");
+    const before = new Map(
+      [...incumbents, newcomer].map((id) => [id, countGames(sim, id)] as const),
+    );
     sim.playRounds(8);
+
+    const gainedBy = (id: string) => countGames(sim, id) - before.get(id)!;
+    const others = incumbents.map(gainedBy);
+    const mine = gainedBy(newcomer);
 
     assertScheduleValid(sim.state);
     assertStreakCap(sim.state, 1);
-
-    // "Đuổi kịp" nghĩa là được chia nhiều suất hơn mức trung bình, không phải là
-    // san bằng ngay lập tức. Với 13 người trên 2 sân, mức trung bình là 8/13 suất
-    // mỗi vòng; người mới phải trên mức đó thì mới thực sự đang đuổi.
-    const gained = countGames(sim, newcomer) - before;
-    const average = (8 / 13) * 8;
-    expect(gained, "người mới không được ưu tiên hơn mức trung bình").toBeGreaterThan(average);
+    // Cùng nhịp nghĩa là nằm trong dải của nhóm cũ, không vọt lên trên.
+    expect(mine, `người mới nhận ${mine} trận, nhóm cũ nhận ${Math.min(...others)}–${Math.max(...others)}`)
+      .toBeLessThanOrEqual(Math.max(...others));
+    expect(mine).toBeGreaterThanOrEqual(Math.min(...others));
   });
 
-  it("người mới đuổi kịp dần chứ không vọt lên chiếm chỗ", () => {
-    const sim = new EventSim({ seed: 3, config: { courts: 2 }, planning: FAST });
-    sim.addPlayers(names(12));
+  it("bật hệ số đuổi kịp thì người mới mới được ưu tiên", () => {
+    // Hệ số vẫn còn trong cấu hình cho nhóm nào muốn, chỉ là không còn mặc định.
+    const sim = new EventSim({
+      seed: 3,
+      config: { courts: 2, catchUpFactor: 1 },
+      planning: FAST,
+    });
+    const incumbents = sim.addPlayers(names(16));
     sim.start();
-    sim.playRounds(6);
+    sim.playRounds(8);
 
     const newcomer = sim.joinMidEvent("Muộn");
-    const deficitAtJoin = deficitOf(sim, newcomer);
-    sim.playRounds(10);
+    const before = new Map(
+      [...incumbents, newcomer].map((id) => [id, countGames(sim, id)] as const),
+    );
+    sim.playRounds(9);
 
-    // Khoản nợ phải teo dần...
-    expect(deficitOf(sim, newcomer)).toBeLessThan(deficitAtJoin);
-    // ...nhưng trần số vòng liên tiếp vẫn chặn, không cho họ đánh dồn tới kiệt sức.
+    const gainedBy = (id: string) => countGames(sim, id) - before.get(id)!;
+    const others = incumbents.map(gainedBy);
+    expect(gainedBy(newcomer), "bật hệ số mà người mới vẫn không được ưu tiên")
+      .toBeGreaterThan(Math.max(...others));
     assertStreakCap(sim.state, 1);
   });
 
