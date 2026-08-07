@@ -12,7 +12,7 @@ import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { Command } from "@/lib/domain/commands";
-import { firstOpenRound } from "@/lib/domain/rounds";
+import { firstUnplayedRound } from "@/lib/domain/rounds";
 import type { Match } from "@/lib/domain/types";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
@@ -34,7 +34,10 @@ export default function LivePage() {
   const view = useMemo(() => {
     if (!data) return null;
     const state = data.state;
-    const round = firstOpenRound(state);
+    // Vòng đang tới, tính theo "đã đánh chưa". Dùng `firstOpenRound` ở đây là
+    // sai: trận bị ghim cũng bị coi là đông cứng, nên chỉ cần chủ sự kiện ghim
+    // một trận là màn hình này nhảy cóc qua luôn vòng đó.
+    const round = firstUnplayedRound(state);
     const current = state.matches
       .filter((m) => m.round === round && m.status !== "cancelled")
       .sort((a, b) => a.court - b.court);

@@ -10,7 +10,7 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { firstOpenRound } from "@/lib/domain/rounds";
+import { firstUnplayedRound } from "@/lib/domain/rounds";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { PasswordGate } from "@/components/PasswordGate";
@@ -113,7 +113,7 @@ export default function AdminPage() {
             Huỷ toàn bộ trận chưa đánh và chốt bảng xếp hạng. Không mở lại được.
             Hiện còn{" "}
             {state.matches.filter((m) => m.status === "scheduled").length} trận
-            chưa đánh từ vòng {firstOpenRound(state)}.
+            chưa đánh từ vòng {firstUnplayedRound(state)}.
           </p>
           <Button tone="danger" full onClick={() => setEnding(true)}>
             Kết thúc buổi đánh

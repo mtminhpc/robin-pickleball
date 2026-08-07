@@ -8,7 +8,10 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { firstUnplayedRound } from "../lib/domain/rounds";
+import type { EventState } from "../lib/domain/types";
 import { fairnessReport } from "../lib/scheduler/metrics";
+import { validateRoundSwap } from "../lib/scheduler/validate";
 import { EventSim } from "../lib/testing/harness";
 import {
   assertFairShare,
@@ -386,9 +389,203 @@ describe("dời lịch bằng tay", () => {
       toRound: 1,
       toCourt: 1,
     });
-    expect(error).toMatch(/hai trận cùng một vòng|đã có trận/);
+    expect(error).toMatch(/phải đánh hai trận trong vòng/);
+  });
+
+  it("đổi chỗ được với trận ở ô đích khi không ai bị trùng", () => {
+    // 6 người trên 1 sân: mỗi vòng chỉ 4 người đánh, nên còn chỗ để hai trận
+    // hoán đổi cho nhau mà không ai phải đánh hai lần.
+    const sim = new EventSim({ seed: 21, config: { courts: 1 }, planning: FAST });
+    sim.addPlayers(names(6));
+    sim.start();
+
+    const a = sim.state.matches.find((m) => m.round === 2)!;
+    const b = sim.state.matches.find((m) => m.round === 3)!;
+    const quadA = [...a.teamA, ...a.teamB].sort();
+    const quadB = [...b.teamA, ...b.teamB].sort();
+
+    const error = sim.trySend({
+      type: "ReorderMatch",
+      matchId: a.id,
+      toRound: 3,
+      toCourt: b.court,
+    });
+
+    if (error) {
+      // Cấu hình này vẫn có thể trùng người; khi đó phải từ chối có lý do rõ ràng.
+      expect(error).toMatch(/phải đánh hai trận trong vòng/);
+      return;
+    }
+
+    const movedA = sim.state.matches.find((m) => m.id === a.id)!;
+    const movedB = sim.state.matches.find((m) => m.id === b.id)!;
+    expect(movedA.round, "trận được dời phải sang vòng đích").toBe(3);
+    expect(movedB.round, "trận ở ô đích phải lùi về chỗ cũ của trận kia").toBe(2);
+    expect([...movedA.teamA, ...movedA.teamB].sort()).toEqual(quadA);
+    expect([...movedB.teamA, ...movedB.teamB].sort()).toEqual(quadB);
+    expect(movedA.pinned && movedB.pinned, "cả hai phải được ghim").toBe(true);
+    assertScheduleValid(sim.state);
+  });
+
+  it("không dời được vào vòng đã đánh xong", () => {
+    const sim = new EventSim({ seed: 22, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(12));
+    sim.start();
+    sim.playRounds(2);
+
+    const later = sim.state.matches.find((m) => m.status === "scheduled")!;
+    const error = sim.trySend({
+      type: "ReorderMatch",
+      matchId: later.id,
+      toRound: 1,
+      toCourt: 1,
+    });
+    expect(error).toMatch(/đã đánh rồi/);
   });
 });
+
+describe("đổi chỗ hai vòng", () => {
+  /**
+   * Đây là thứ nút "sớm hơn / muộn hơn" thực sự gửi đi.
+   *
+   * Dời riêng một trận gần như luôn bất khả thi khi lịch kín sân — đo trên lịch
+   * thật thì hỏng 22 trên 24 lần. Đổi cả vòng thì luôn làm được, và đó mới là
+   * điều người bấm nút muốn: cặp này đánh trước cặp kia.
+   */
+  it("đổi được ở mọi cấu hình, không ai thêm hay bớt trận nào", () => {
+    for (const [players, courts] of [[8, 2], [9, 2], [11, 3], [12, 2], [20, 4]] as const) {
+      const sim = new EventSim({ seed: 31, config: { courts }, planning: FAST });
+      sim.addPlayers(names(players));
+      sim.start();
+      sim.playRounds(3);
+
+      const before = gamesPerPlayer(sim.state);
+      const open = firstUnplayedRound(sim.state);
+      const inOpen = matchIds(sim.state, open);
+      const inNext = matchIds(sim.state, open + 1);
+
+      const error = sim.trySend({ type: "SwapRounds", roundA: open, roundB: open + 1 });
+      expect(error, `${players} người / ${courts} sân: ${error}`).toBeNull();
+
+      expect(matchIds(sim.state, open), "vòng đầu phải nhận nội dung vòng sau").toEqual(inNext);
+      expect(matchIds(sim.state, open + 1), "và ngược lại").toEqual(inOpen);
+      expect(gamesPerPlayer(sim.state), "không ai được thêm hay bớt trận").toEqual(before);
+      assertScheduleValid(sim.state);
+    }
+  });
+
+  it("vòng đã đổi chỗ không bị thuật toán trả về chỗ cũ", () => {
+    const sim = new EventSim({ seed: 32, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(12));
+    sim.start();
+    sim.playRounds(2);
+
+    const open = firstUnplayedRound(sim.state);
+    const wanted = matchIds(sim.state, open + 1);
+    sim.send({ type: "SwapRounds", roundA: open, roundB: open + 1 });
+    sim.reschedule("rebuild");
+
+    expect(matchIds(sim.state, open)).toEqual(wanted);
+  });
+
+  it("từ chối đổi vòng đã đánh xong", () => {
+    const sim = new EventSim({ seed: 33, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(12));
+    sim.start();
+    sim.playRounds(3);
+
+    expect(sim.trySend({ type: "SwapRounds", roundA: 1, roundB: 2 })).toMatch(/đã đánh rồi/);
+  });
+
+  it("đổi đi rồi đổi lại được, ghim xong vẫn đổi tiếp", () => {
+    // Lỗi thật gặp khi chạy thử: `SwapRounds` ghim các trận, mà `firstOpenRound`
+    // coi trận đã ghim là đông cứng — nên vừa đổi chỗ xong là không đổi lại được
+    // nữa, chủ sự kiện bị khoá bởi đúng thao tác mình vừa làm.
+    const sim = new EventSim({ seed: 36, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(12));
+    sim.start();
+    sim.playRounds(2);
+
+    const open = firstUnplayedRound(sim.state);
+    const before = matchIds(sim.state, open);
+    sim.send({ type: "SwapRounds", roundA: open, roundB: open + 1 });
+    expect(sim.trySend({ type: "SwapRounds", roundA: open, roundB: open + 1 })).toBeNull();
+    expect(matchIds(sim.state, open), "đổi hai lần phải về đúng chỗ cũ").toEqual(before);
+  });
+
+  it("người về sớm không còn tên trong trận đã ghim", () => {
+    // Lỗi thật gặp khi chạy thử: đổi chỗ vòng làm các trận bị ghim, mà chỗ gỡ
+    // người ra khỏi lịch lại lấy mốc `firstOpenRound` — hàm bỏ qua trận đã ghim.
+    // Kết quả là người đã về vẫn còn tên trong lịch, cả sân đứng chờ một người
+    // không có mặt.
+    const sim = new EventSim({ seed: 37, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(12));
+    sim.start();
+    sim.playRounds(2);
+
+    const open = firstUnplayedRound(sim.state);
+    sim.send({ type: "SwapRounds", roundA: open, roundB: open + 1 });
+
+    const leaving = sim.state.matches.find(
+      (m) => m.round === open && m.status === "scheduled",
+    )!.teamA[0];
+    sim.send({ type: "PlayerLeft", playerId: leaving });
+
+    const left = sim.state.matches.filter(
+      (m) => m.status === "scheduled" && [...m.teamA, ...m.teamB].includes(leaving),
+    );
+    expect(left, "người đã về vẫn còn trong lịch").toEqual([]);
+    assertScheduleValid(sim.state);
+  });
+
+  it("cảnh báo chuỗi liên tiếp nhưng không chặn chủ sự kiện", () => {
+    // Trần chuỗi là mức bộ xếp lịch cố giữ, không phải luật chơi. Chủ sự kiện có
+    // lý do ngoài sân mà phần mềm không biết, nên họ phải được đọc cảnh báo rồi
+    // tự quyết — chứ không bị khoá nút.
+    const sim = new EventSim({ seed: 34, config: { courts: 3 }, planning: FAST });
+    sim.addPlayers(names(11));
+    sim.start();
+    sim.playRounds(3);
+
+    const open = firstUnplayedRound(sim.state);
+    const v = validateRoundSwap(sim.state, open, open + 1, Date.now());
+    expect(v.severity, "không bao giờ được chặn").not.toBe("block");
+    expect(v.preview, "phải xem trước được").not.toBeNull();
+  });
+
+  it("không cảnh báo chuỗi khi trần đó vốn bất khả thi", () => {
+    // 8 người trên 2 sân thì ai cũng phải đánh mọi vòng. Đem so với trần 3 vòng
+    // trong cấu hình rồi báo đỏ là cảnh báo về một ràng buộc không ai thoả được.
+    const sim = new EventSim({ seed: 35, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(8));
+    sim.start();
+    sim.playRounds(2);
+
+    const open = firstUnplayedRound(sim.state);
+    const v = validateRoundSwap(sim.state, open, open + 1, Date.now());
+    expect(v.notes.some((n) => /vòng liên tiếp/.test(n.message))).toBe(false);
+    expect(v.severity).toBe("ok");
+  });
+});
+
+/** Số trận của từng người, để khẳng định đổi chỗ không làm ai thiệt. */
+function gamesPerPlayer(state: EventState): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const p of state.players) out[p.id] = 0;
+  for (const m of state.matches) {
+    if (m.status === "cancelled") continue;
+    for (const id of [...m.teamA, ...m.teamB]) out[id] = (out[id] ?? 0) + 1;
+  }
+  return out;
+}
+
+/** Mã các trận trong một vòng, sắp theo sân. */
+function matchIds(state: EventState, round: number): string[] {
+  return state.matches
+    .filter((m) => m.round === round)
+    .sort((a, b) => a.court - b.court)
+    .map((m) => m.id);
+}
 
 describe("tính tái lập", () => {
   it("cùng hạt giống cho ra cùng một lịch", () => {

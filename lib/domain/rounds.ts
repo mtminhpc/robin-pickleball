@@ -18,6 +18,30 @@ export function firstOpenRound(state: EventState): number {
   return earliest ?? state.lastRound + 1;
 }
 
+/**
+ * Vòng sớm nhất chưa ai đánh.
+ *
+ * Khác `firstOpenRound` ở một điểm quan trọng: chỗ này hỏi "đã đánh chưa", còn
+ * chỗ kia hỏi "thuật toán còn được xếp lại không". Một trận vừa bị chủ sự kiện
+ * ghim là đông cứng với thuật toán nhưng vẫn chưa đánh, nên vẫn phải dời hay đổi
+ * chỗ tiếp được — lấy nhầm hàm ở đây sẽ khoá luôn thao tác mà chính họ vừa làm.
+ */
+export function firstUnplayedRound(state: EventState): number {
+  let earliest: number | null = null;
+  for (const m of state.matches) {
+    if (m.status !== "scheduled" && m.status !== "cancelled") continue;
+    if (earliest === null || m.round < earliest) earliest = m.round;
+  }
+  return earliest ?? state.lastRound + 1;
+}
+
+/** Vòng này đã có trận đang đánh hoặc đã xong chưa. */
+export function roundIsPlayed(state: EventState, round: number): boolean {
+  return state.matches.some(
+    (m) => m.round === round && m.status !== "scheduled" && m.status !== "cancelled",
+  );
+}
+
 /** Các trận thuộc một vòng, sắp theo số sân. */
 export function matchesInRound(matches: Match[], round: number): Match[] {
   return matches

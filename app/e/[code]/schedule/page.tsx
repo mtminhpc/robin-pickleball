@@ -3,10 +3,16 @@
 /**
  * Toàn bộ lịch, và chỗ chủ sự kiện dời trận lên xuống.
  *
- * Việc dời lịch chạy `validateMove` ngay trên trình duyệt trước khi gửi đi. Hàm
- * đó là hàm thuần và trạng thái đã có sẵn ở đây, nên xem trước hậu quả là tức
- * thì và không tốn lời gọi mạng nào. Người dùng thấy "Nam sẽ phải đánh 3 vòng
- * liên tiếp" TRƯỚC khi quyết định, chứ không phải phát hiện ra sau.
+ * Nút "sớm hơn / muộn hơn" đổi chỗ CẢ HAI VÒNG cho nhau chứ không nhấc riêng một
+ * trận sang chỗ khác. Ở lịch kín sân thì vòng nào cũng đủ người, nên nhét thêm
+ * bốn người vào một vòng là có kẻ phải đánh hai trận — đo trên lịch thật thì
+ * cách dời một trận hỏng 22 trên 24 lần. Đổi cả vòng thì không ai thêm hay bớt
+ * trận nào, không ai đổi bạn đôi, chỉ thứ tự trước sau thay đổi.
+ *
+ * Việc đổi chỗ chạy `validateRoundSwap` ngay trên trình duyệt trước khi gửi đi.
+ * Hàm đó là hàm thuần và trạng thái đã có sẵn ở đây, nên xem trước hậu quả là
+ * tức thì và không tốn lời gọi mạng nào. Người dùng thấy "Nam sẽ phải đánh 3
+ * vòng liên tiếp" TRƯỚC khi quyết định, chứ không phải phát hiện ra sau.
  *
  * Dùng nút lên/xuống chứ không kéo thả: ngón tay trên điện thoại kéo thả rất hay
  * trượt, mà trượt ở đây nghĩa là xáo trộn lịch của cả nhóm.
@@ -14,9 +20,9 @@
 
 import { useMemo, useState } from "react";
 import type { Command } from "@/lib/domain/commands";
-import { firstOpenRound } from "@/lib/domain/rounds";
+import { firstUnplayedRound } from "@/lib/domain/rounds";
 import type { Match } from "@/lib/domain/types";
-import { validateMove, type MoveValidation } from "@/lib/scheduler/validate";
+import { validateRoundSwap, type MoveValidation } from "@/lib/scheduler/validate";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { MatchCard, pendingScoreFor } from "@/components/MatchCard";
@@ -30,7 +36,7 @@ export default function SchedulePage() {
 
   const [scoring, setScoring] = useState<Match | null>(null);
   const [cancelling, setCancelling] = useState<Match | null>(null);
-  const [move, setMove] = useState<{ match: Match; toRound: number } | null>(null);
+  const [swap, setSwap] = useState<{ from: number; to: number } | null>(null);
 
   const rounds = useMemo(() => {
     if (!data) return [];
@@ -51,7 +57,9 @@ export default function SchedulePage() {
   if (!data) return null;
   const { state, role } = data;
   const isAdmin = role === "admin";
-  const open = firstOpenRound(state);
+  // Mốc "đã đánh chưa", không phải mốc "thuật toán còn xếp lại được": vòng vừa
+  // bị ghim vẫn chưa đánh, dán nhãn "đã xong" cho nó là nói sai với người dùng.
+  const open = firstUnplayedRound(state);
 
   if (rounds.length === 0) {
     return <Empty>Chưa có lịch. Bắt đầu buổi đánh để hệ thống xếp.</Empty>;
@@ -90,14 +98,14 @@ export default function SchedulePage() {
                     tone="ghost"
                     className="px-3 text-sm"
                     disabled={round <= open}
-                    onClick={() => setMove({ match, toRound: round - 1 })}
+                    onClick={() => setSwap({ from: round, to: round - 1 })}
                   >
                     ▲ Sớm hơn
                   </Button>
                   <Button
                     tone="ghost"
                     className="px-3 text-sm"
-                    onClick={() => setMove({ match, toRound: round + 1 })}
+                    onClick={() => setSwap({ from: round, to: round + 1 })}
                   >
                     ▼ Muộn hơn
                   </Button>
@@ -123,51 +131,49 @@ export default function SchedulePage() {
         onClose={() => setCancelling(null)}
         onSubmit={(c: Command) => queue.send(c)}
       />
-      <MoveDialog
-        move={move}
-        onClose={() => setMove(null)}
+      <SwapDialog
+        swap={swap}
+        onClose={() => setSwap(null)}
         onConfirm={(c) => {
           queue.send(c);
-          setMove(null);
+          setSwap(null);
         }}
       />
     </div>
   );
 }
 
-function MoveDialog({
-  move,
+function SwapDialog({
+  swap,
   onClose,
   onConfirm,
 }: {
-  move: { match: Match; toRound: number } | null;
+  swap: { from: number; to: number } | null;
   onClose: () => void;
   onConfirm: (command: Command) => void;
 }) {
   const { data } = useEvent();
 
   const validation: MoveValidation | null = useMemo(() => {
-    if (!move || !data) return null;
-    // Sân trống đầu tiên ở vòng đích. Người dùng chỉ nghĩ theo "sớm hơn / muộn
-    // hơn", còn chọn sân là việc của hệ thống.
-    const taken = new Set(
-      data.state.matches
-        .filter((m) => m.round === move.toRound && m.status !== "cancelled")
-        .map((m) => m.court),
-    );
-    let court = 1;
-    while (taken.has(court)) court += 1;
-    return validateMove(data.state, move.match.id, move.toRound, court, Date.now());
-  }, [move, data]);
+    if (!swap || !data) return null;
+    return validateRoundSwap(data.state, swap.from, swap.to, Date.now());
+  }, [swap, data]);
 
-  if (!move || !validation || !data) return null;
+  if (!swap || !validation || !data) return null;
 
-  const court = validation.preview?.matches.find((m) => m.id === move.match.id)?.court ?? 1;
   const blocked = validation.severity === "block";
+  const earlier = Math.min(swap.from, swap.to);
+  const later = Math.max(swap.from, swap.to);
 
   return (
-    <Dialog open onClose={onClose} title={`Dời sang vòng ${move.toRound}`}>
+    <Dialog open onClose={onClose} title={`Đổi chỗ vòng ${earlier} và vòng ${later}`}>
       <div className="space-y-4">
+        <Card className="p-3 text-sm text-slate-300">
+          Mọi trận của <strong className="text-slate-100">vòng {swap.from}</strong> sẽ
+          chuyển sang <strong className="text-slate-100">vòng {swap.to}</strong>, và
+          ngược lại.
+        </Card>
+
         <div className="space-y-2">
           {validation.notes.map((note, i) => (
             <p
@@ -186,14 +192,6 @@ function MoveDialog({
           ))}
         </div>
 
-        {!blocked && (
-          <Card className="p-3 text-xs text-slate-400">
-            Trận sẽ được <strong className="text-slate-200">ghim</strong> ở vị trí
-            mới. Hệ thống sẽ không tự xếp lại nó nữa, kể cả khi có người vào hoặc
-            rời cuộc.
-          </Card>
-        )}
-
         <div className="flex gap-2">
           <Button tone="ghost" full onClick={onClose}>
             Quay lại
@@ -203,15 +201,10 @@ function MoveDialog({
             full
             disabled={blocked}
             onClick={() =>
-              onConfirm({
-                type: "ReorderMatch",
-                matchId: move.match.id,
-                toRound: move.toRound,
-                toCourt: court,
-              })
+              onConfirm({ type: "SwapRounds", roundA: swap.from, roundB: swap.to })
             }
           >
-            Dời và ghim
+            Đổi chỗ
           </Button>
         </div>
       </div>

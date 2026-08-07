@@ -9,7 +9,7 @@
 
 import type { Command, CommandEnvelope, PlayerSeed } from "./commands";
 import { err, ok, type Result } from "./commands";
-import { firstOpenRound } from "./rounds";
+import { firstOpenRound, firstUnplayedRound, roundIsPlayed } from "./rounds";
 import type {
   EventState,
   Match,
@@ -109,6 +109,44 @@ function findMatch(state: EventState, id: MatchId): Match | undefined {
   return state.matches.find((m) => m.id === id);
 }
 
+/**
+ * Sau khi đổi chỗ hai trận, có ai phải đánh hai trận trong cùng một vòng không.
+ *
+ * Phải xét cả hai vòng chứ không riêng vòng đích: trận bị đẩy ngược về chỗ cũ
+ * cũng có thể đụng người đang đánh ở đó. Trả về câu giải thích kèm tên người bị
+ * trùng, `null` nếu đổi được.
+ */
+function doubleBooked(
+  state: EventState,
+  moving: Match,
+  swapped: Match | undefined,
+  toRound: number,
+): string | null {
+  const fromRound = moving.round;
+  const roundOf = (o: Match): number =>
+    o.id === moving.id
+      ? toRound
+      : swapped && o.id === swapped.id
+        ? fromRound
+        : o.round;
+
+  for (const round of new Set([toRound, fromRound])) {
+    const seen = new Set<PlayerId>();
+    for (const o of state.matches) {
+      if (o.status === "cancelled") continue;
+      if (roundOf(o) !== round) continue;
+      for (const id of [...o.teamA, ...o.teamB]) {
+        if (seen.has(id)) {
+          const name = state.players.find((p) => p.id === id)?.name ?? id;
+          return `${name} sẽ phải đánh hai trận trong vòng ${round}.`;
+        }
+        seen.add(id);
+      }
+    }
+  }
+  return null;
+}
+
 /** Số trận đã đánh xong của một người — mốc để tính khoản "nợ" đuổi kịp. */
 function gamesPlayed(state: EventState, id: PlayerId): number {
   return state.matches.filter(
@@ -158,6 +196,10 @@ function activate(state: EventState, player: Player): void {
     player.catchUpCredit = computeCatchUpCredit(state);
   }
   player.status = "active";
+  // Ngược lại với lúc rời cuộc, chỗ này cố ý dùng `firstOpenRound`: người mới
+  // chỉ có thể được xếp vào vòng thuật toán còn sửa được. Tính họ là có mặt từ
+  // sớm hơn sẽ sinh ra một khoản thiệt thòi ảo cho những vòng họ vốn không thể
+  // chen vào.
   openPresence(player, firstOpenRound(state));
 }
 
@@ -167,7 +209,11 @@ function deactivate(
   player: Player,
   status: PlayerStatus,
 ): void {
-  const open = firstOpenRound(state);
+  // "Đã đánh chưa", không phải "thuật toán còn xếp lại được". Trận bị ghim vẫn
+  // là trận chưa đánh, mà `firstOpenRound` lại bỏ qua nó — lấy nhầm hàm thì
+  // người vừa ra về vẫn còn tên trong những trận đã ghim, và cả sân đứng chờ
+  // một người không có mặt.
+  const open = firstUnplayedRound(state);
   closePresence(player, open - 1);
   player.status = status;
   dropFutureMatches(state, player.id, open);
@@ -430,30 +476,78 @@ function applyInPlace(
       const m = findMatch(state, c.matchId);
       if (!m) return err("Không tìm thấy trận.");
       if (m.status !== "scheduled") return err("Chỉ dời được trận chưa đánh.");
-      const clash = state.matches.find(
-        (o) =>
-          o.id !== m.id &&
-          o.round === c.toRound &&
-          o.status !== "cancelled" &&
-          [...o.teamA, ...o.teamB].some((id) =>
-            [...m.teamA, ...m.teamB].includes(id),
-          ),
-      );
-      if (clash) {
-        return err("Có người phải đánh hai trận cùng một vòng.");
+      if (c.toRound < 1) return err("Không có vòng nào trước vòng 1.");
+
+      if (roundIsPlayed(state, c.toRound)) {
+        return err(`Vòng ${c.toRound} đã đánh rồi, không dời vào đó được.`);
       }
-      const courtTaken = state.matches.find(
+
+      // Trận đang chiếm đúng ô sắp dời tới, nếu có, sẽ ĐỔI CHỖ với trận này chứ
+      // không chặn lệnh.
+      //
+      // Dời một chiều nghe thì đơn giản hơn, nhưng ở giải round robin mọi vòng
+      // đều kín sân: 9 người trên 2 sân thì vòng nào cũng đủ hai trận, nên chỗ
+      // trống chỉ tồn tại sau vòng cuối. Đo thử trên lịch thật thì nút "sớm hơn
+      // / muộn hơn" hỏng 22 trên 24 lần — tức là tính năng coi như không có.
+      // Người bấm nút cũng không hề muốn tạo ô trống: họ muốn cặp này đánh
+      // trước cặp kia. Đổi chỗ mới đúng là điều họ định làm.
+      const other = state.matches.find(
         (o) =>
           o.id !== m.id &&
           o.round === c.toRound &&
           o.court === c.toCourt &&
           o.status !== "cancelled",
       );
-      if (courtTaken) return err("Sân đó đã có trận trong vòng này.");
+      if (other && other.status !== "scheduled") {
+        return err("Trận ở chỗ đó đã bắt đầu hoặc đã có kết quả, không đổi chỗ được.");
+      }
 
+      const clash = doubleBooked(state, m, other, c.toRound);
+      if (clash) return err(clash);
+
+      const fromRound = m.round;
+      const fromCourt = m.court;
       m.round = c.toRound;
       m.court = c.toCourt;
       m.pinned = true;
+      if (other) {
+        other.round = fromRound;
+        other.court = fromCourt;
+        // Ghim cả trận bị đẩy sang: chủ sự kiện vừa cố ý xếp hai trận này cạnh
+        // nhau, để bộ xếp lịch trả nó về chỗ cũ thì công đổi chỗ thành vô nghĩa.
+        other.pinned = true;
+      }
+      state.matches.sort((a, b) => a.round - b.round || a.court - b.court);
+      state.lastRound = state.matches.reduce((n, x) => Math.max(n, x.round), 0);
+      return ok(null);
+    }
+
+    case "SwapRounds": {
+      if (c.roundA === c.roundB) return err("Hai vòng trùng nhau.");
+
+      const inA = state.matches.filter((m) => m.round === c.roundA);
+      const inB = state.matches.filter((m) => m.round === c.roundB);
+      if (inA.length === 0 && inB.length === 0) {
+        return err("Cả hai vòng đều chưa có trận nào.");
+      }
+      // Chỉ cần "đã đánh chưa", KHÔNG dùng `firstOpenRound`: hàm đó coi trận đã
+      // ghim là đông cứng, nên vòng vừa được đổi chỗ xong sẽ lập tức không đổi
+      // lại được nữa — chủ sự kiện bị khoá bởi chính thao tác mình vừa làm.
+      const busy = [...inA, ...inB].find(
+        (m) => m.status !== "scheduled" && m.status !== "cancelled",
+      );
+      if (busy) {
+        return err(`Vòng ${busy.round} đã đánh rồi, không đổi chỗ được.`);
+      }
+
+      // Không cần kiểm trùng người: hai vòng chỉ hoán vị cho nhau nên nội dung
+      // mỗi vòng vẫn y nguyên. Không ai thêm hay bớt trận, không ai đổi bạn đôi.
+      for (const m of inA) m.round = c.roundB;
+      for (const m of inB) m.round = c.roundA;
+      // Ghim lại, nếu không lần xếp lịch kế tiếp sẽ trả mọi thứ về chỗ cũ và
+      // công đổi chỗ thành vô nghĩa.
+      for (const m of [...inA, ...inB]) if (m.status === "scheduled") m.pinned = true;
+
       state.matches.sort((a, b) => a.round - b.round || a.court - b.court);
       state.lastRound = state.matches.reduce((n, x) => Math.max(n, x.round), 0);
       return ok(null);

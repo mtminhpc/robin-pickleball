@@ -76,6 +76,16 @@ export type Command =
   | { type: "SetSchedule"; fromRound: number; matches: MatchSeed[] }
   /** Admin dời một trận sang vòng/sân khác. Trận đó thành "ghim". */
   | { type: "ReorderMatch"; matchId: MatchId; toRound: number; toCourt: number }
+  /**
+   * Đổi chỗ toàn bộ hai vòng cho nhau.
+   *
+   * Đây mới là thứ nút "sớm hơn / muộn hơn" cần dùng. Dời riêng một trận sang
+   * vòng khác gần như luôn bất khả thi khi lịch kín sân: vòng đích đã đủ người,
+   * nên nhét thêm bốn người vào là có kẻ phải đánh hai trận. Đổi cả vòng thì
+   * không ai thêm bớt trận nào, không ai đổi bạn đôi — chỉ thứ tự trước sau
+   * thay đổi, đúng điều người bấm nút muốn.
+   */
+  | { type: "SwapRounds"; roundA: number; roundB: number }
   | { type: "PinMatch"; matchId: MatchId; pinned: boolean }
   | { type: "CancelMatch"; matchId: MatchId; reason: string }
   /**
@@ -140,6 +150,7 @@ export const ADMIN_ONLY: readonly CommandType[] = [
   "GrantCatchUp",
   "SetSchedule",
   "ReorderMatch",
+  "SwapRounds",
   "PinMatch",
   "CancelMatch",
   "AbandonMatch",
