@@ -4,14 +4,24 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Trạng thái: giai đoạn 0 (nền móng).** Thuật toán, tầng nghiệp vụ và tầng dữ liệu
-> đã xong và có kiểm thử. Chưa có giao diện — xem [lộ trình](#lộ-trình).
+> **Trạng thái: giai đoạn 1 — mang ra sân dùng được.** Ứng dụng chạy đầy đủ: tạo
+> buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả, bảng xếp hạng, huỷ
+> trận, kết thúc sớm. Xem [lộ trình](#lộ-trình).
 
 ## Chạy thử ngay
 
+Không cần tài khoản Google, không cần cấu hình gì:
+
 ```bash
 pnpm install
-pnpm test          # 95 bài kiểm thử
+pnpm dev           # mở http://localhost:3000
+```
+
+Dữ liệu lưu vào `.data/sheet.json`. Khi nào sẵn sàng dùng thật thì điền biến môi
+trường Google và ứng dụng tự chuyển sang Google Sheet — xem [docs/SETUP.md](docs/SETUP.md).
+
+```bash
+pnpm test          # 130 bài kiểm thử
 pnpm sim --matrix  # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
 
@@ -20,6 +30,17 @@ Mô phỏng một buổi cụ thể, kể cả có người vào giữa chừng 
 ```bash
 pnpm sim --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 ```
+
+## Dùng ở sân thế nào
+
+1. Chủ sân tạo buổi đánh, đặt hai mật khẩu: một cho người chơi (nhập điểm), một
+   cho mình (xếp lịch, duyệt người, mở khoá).
+2. Chiếu mã QR ở trang Quản lý. Mọi người quét, gõ tên, chọn ảnh đại diện.
+3. Bấm **Bắt đầu** → hệ thống xếp lịch. Từ lúc này ai vào thêm đều phải chờ duyệt.
+4. Đánh xong mỗi trận thì bấm nhập tỷ số. Có bước xác nhận hiện to tên bốn người
+   để không nhập nhầm trận. Lưu xong là khoá lại.
+5. Bấm nhầm thì tự sửa được trong 2 phút; sau đó cần mật khẩu chủ sân. Mọi lần
+   sửa hiện công khai trên thẻ trận.
 
 ## Công bằng được định nghĩa thế nào
 
@@ -96,15 +117,39 @@ dòng thì không mất**:
 Mỗi lệnh mang một `clientCommandId` sinh ở trình duyệt, nên hàng đợi ngoại tuyến gửi
 lại bao nhiêu lần cũng không nhân đôi kết quả.
 
+## Mất mạng thì sao
+
+Sân pickleball hay mất sóng, và người dùng sợ nhất là "tưởng đã lưu mà chưa lưu".
+Nên ba trạng thái lưu khác nhau rõ về màu và, quan trọng hơn, khác nhau về việc
+**có tự biến mất hay không**:
+
+| Trạng thái | Hiển thị |
+|---|---|
+| Đang lưu | Băng xám có vòng xoay |
+| Đã lưu | Băng xanh kèm giờ cụ thể, tự ẩn sau 3 giây |
+| Chưa lưu | Băng **đỏ, không tự ẩn**, kèm nút thử lại |
+
+Ứng dụng **chỉ báo "đã lưu" sau khi máy chủ xác nhận đã ghi xong**, không bao giờ
+báo lạc quan. Trong lúc chờ, tỷ số hiện mờ kèm chấm nhấp nháy — nhìn thẻ trận là
+biết cái nào chắc chắn.
+
+Lệnh chưa gửi được nằm trong IndexedDB nên đóng tab hay hết pin vẫn còn, tự gửi
+lại khi có sóng. Sửa lại tỷ số khi lệnh cũ chưa gửi thì lệnh mới **thay thế** lệnh
+cũ, không xếp thành hai — ý định mới nhất luôn thắng.
+
 ## Bố cục mã nguồn
 
 ```
+app/              Trang và API (Next.js App Router)
+components/       Mảnh giao diện dùng lại
+hooks/            Đồng bộ trạng thái, hàng đợi lưu
 lib/domain/       Kiểu dữ liệu, tập lệnh, hàm suy trạng thái, xếp hạng, luật
 lib/scheduler/    Thuật toán xếp lịch, hàm chi phí, đo công bằng
-lib/sheets/       Bố cục Google Sheet, lớp truy cập, client giả trong bộ nhớ
+lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bản in
+lib/auth/         Mật khẩu, cookie phiên, chặn dò
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
-scripts/sim.ts    Công cụ mô phỏng dòng lệnh
-tests/            95 bài kiểm thử
+scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
+tests/            130 bài kiểm thử
 ```
 
 Nguyên tắc: `lib/domain` và `lib/scheduler` là hàm thuần, không đọc đồng hồ, không gọi
@@ -114,21 +159,18 @@ Google Sheet.
 
 ## Lộ trình
 
-- [x] **GĐ0 — Nền móng.** Thuật toán, tầng nghiệp vụ, tầng dữ liệu, bộ kiểm thử, công
-      cụ mô phỏng.
-- [ ] **GĐ1 — Dùng được tại sân.** Tạo sự kiện, hai mật khẩu, mã QR, nhập điểm và khoá
-      kết quả, banner trạng thái lưu, hàng đợi ngoại tuyến, bảng xếp hạng, bảng Công
-      bằng, kéo thả lịch, huỷ trận, kết thúc sớm, nối Google Sheet thật, triển khai
-      Vercel.
-- [ ] **GĐ2 — Cá nhân hoá.** Ảnh đại diện, tự tham gia bằng QR, hồ sơ theo thiết bị,
-      hàng chờ duyệt cho người vào sau giờ bắt đầu.
-- [ ] **GĐ3 — Câu lạc bộ và tổng kết.** Danh bạ thành viên, mời nhanh, tổng kết tuần
-      và tháng.
-- [ ] **GĐ4 — Tài khoản Google.** Đăng nhập, đồng bộ đa thiết bị, thống kê xuyên sự kiện.
+- [x] **GĐ0 — Nền móng.** Thuật toán, tầng nghiệp vụ, tầng dữ liệu, bộ kiểm thử,
+      công cụ mô phỏng.
+- [x] **GĐ1 — Dùng được tại sân.** Tạo sự kiện, hai mật khẩu, mã QR tự tham gia,
+      ảnh đại diện, hàng chờ duyệt, nhập điểm và khoá kết quả, banner trạng thái
+      lưu, hàng đợi ngoại tuyến, bảng xếp hạng, bảng Công bằng, dời lịch, huỷ trận,
+      kết thúc sớm, Google Sheet thật, sẵn sàng triển khai Vercel.
+- [ ] **GĐ2 — Câu lạc bộ và tổng kết.** Danh bạ thành viên, mời nhanh, tổng kết
+      tuần và tháng, lịch sử theo thiết bị.
+- [ ] **GĐ3 — Tài khoản Google.** Đăng nhập, đồng bộ đa thiết bị, thống kê xuyên
+      sự kiện.
 
-## Cài đặt cho GĐ1 (chưa cần lúc này)
+## Nối Google Sheet thật
 
-1. Tạo Google Cloud project, bật Sheets API, tạo Service Account, tải khoá JSON
-2. Tạo một Google Sheet, chia sẻ quyền Editor cho email của service account
-3. Đặt biến môi trường: `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`,
-   `SHEET_ID`, `APP_SECRET`
+Xem [docs/SETUP.md](docs/SETUP.md) — hướng dẫn từng bước, kèm bảng khắc phục các
+sự cố hay gặp.

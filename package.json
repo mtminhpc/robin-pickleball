@@ -11,15 +11,20 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "sim": "tsx scripts/sim.ts"
+    "sim": "tsx scripts/sim.ts",
+    "bootstrap-sheet": "tsx scripts/bootstrap-sheet.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "idb-keyval": "^6.3.0",
     "next": "^15.5.4",
+    "qrcode": "^1.5.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "autoprefixer": "^10.4.21",

@@ -16,10 +16,17 @@ export interface CellRange {
   values: string[][];
 }
 
-/** Một thao tác ghi trong lô. */
+/**
+ * Một thao tác ghi trong lô.
+ *
+ * `typed` cho phép Sheets hiểu ô số là số thay vì chuỗi. Mặc định tắt: Sheets rất
+ * hay tự đoán kiểu, và với dữ liệu của ứng dụng thì đoán là hỏng — mã sự kiện
+ * `012345` mất số 0 đầu, chuỗi JSON dài có thể bị hiểu thành công thức. Chỉ tab
+ * bản in mới bật, để tỷ số cộng tay được ngay trong Google Sheet.
+ */
 export type WriteOp =
-  | { kind: "update"; range: string; values: string[][] }
-  | { kind: "append"; tab: string; values: string[][] };
+  | { kind: "update"; range: string; values: string[][]; typed?: boolean }
+  | { kind: "append"; tab: string; values: string[][]; typed?: boolean };
 
 export interface SheetsClient {
   /** Đọc nhiều dải ô trong một lời gọi. */
@@ -44,7 +51,8 @@ export interface SheetsClient {
  * bản giả dễ tính hơn hàng thật thì nó chẳng bảo vệ được gì.
  */
 export class FakeSheetsClient implements SheetsClient {
-  private readonly tabs = new Map<string, string[][]>();
+  /** `protected` để kho dữ liệu file cục bộ kế thừa lại được toàn bộ logic này. */
+  protected readonly tabs = new Map<string, string[][]>();
   /** Đếm số lời gọi, để kiểm thử khẳng định được là không phá hạn mức. */
   readonly calls = { batchGet: 0, batch: 0, ensureTab: 0 };
 

@@ -56,6 +56,16 @@ export type Command =
   /** Xoá hẳn khỏi sự kiện — chỉ dùng khi thêm nhầm, người chưa đánh trận nào. */
   | { type: "RemovePlayer"; playerId: PlayerId }
   | { type: "UpdateProfile"; playerId: PlayerId; name?: string; avatarId?: string }
+  /**
+   * Cấp thêm suất cho một người đang bị thiếu trận.
+   *
+   * Không phải là "chèn thêm mấy trận cho họ" mà là cộng vào khoản nợ mà thuật
+   * toán đang theo dõi — đúng cơ chế đã dùng cho người vào giữa chừng. Nhờ vậy
+   * người này được ưu tiên ở các vòng tới nhưng vẫn bị trần số vòng liên tiếp
+   * chặn, và mức ưu tiên hiện rõ ở cột Kỳ vọng trong bảng Công bằng thay vì là
+   * một ưu ái ngầm.
+   */
+  | { type: "GrantCatchUp"; playerId: PlayerId; games: number }
 
   // ---- lịch thi đấu ------------------------------------------------------
   /**
@@ -127,6 +137,7 @@ export const ADMIN_ONLY: readonly CommandType[] = [
   "PausePlayer",
   "ResumePlayer",
   "RemovePlayer",
+  "GrantCatchUp",
   "SetSchedule",
   "ReorderMatch",
   "PinMatch",

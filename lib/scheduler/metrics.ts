@@ -96,6 +96,13 @@ export function buildHistory(state: EventState, ids: PlayerId[]): History {
   for (let round = 1; round <= lastPast; round++) {
     const happened = state.matches.filter((m) => m.round === round && didHappen(m));
 
+    // Vòng không có trận nào diễn ra thì coi như không tồn tại.
+    //
+    // Sau khi kết thúc sớm, các vòng phía sau chỉ còn toàn trận đã huỷ. Nếu vẫn
+    // duyệt qua chúng thì ai cũng bị cộng thêm một lần nghỉ cho mỗi vòng đó, và
+    // bảng Công bằng sẽ báo "nghỉ 7 lần" trong một buổi mới đánh 4 vòng.
+    if (happened.length === 0) continue;
+
     // Ai có mặt ở vòng này (trong tập đang xét).
     const present: number[] = [];
     for (let i = 0; i < n; i++) {

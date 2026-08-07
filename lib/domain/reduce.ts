@@ -391,6 +391,16 @@ function applyInPlace(
       return ok(null);
     }
 
+    case "GrantCatchUp": {
+      const p = findPlayer(state, c.playerId);
+      if (!p) return err("Không tìm thấy người chơi.");
+      if (c.games <= 0 || c.games > 10) {
+        return err("Số trận cấp thêm phải từ 1 đến 10.");
+      }
+      p.catchUpCredit += c.games;
+      return ok(null);
+    }
+
     // ---- lịch thi đấu ----------------------------------------------------
     case "SetSchedule": {
       const known = new Set(state.players.map((p) => p.id));

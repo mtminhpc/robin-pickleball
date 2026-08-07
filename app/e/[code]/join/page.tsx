@@ -1,0 +1,201 @@
+"use client";
+
+/**
+ * Tự tham gia — đích của mã QR dán ở sân.
+ *
+ * Ba đường vào, xếp theo thứ tự người chơi hay gặp nhất:
+ *
+ *   1. Tên mình đã có sẵn trong danh sách (chủ sân gõ trước) → bấm "Đây là tôi"
+ *      để nhận, rồi đổi ảnh nếu muốn.
+ *   2. Chưa có tên → gõ tên, chọn ảnh, tham gia.
+ *   3. Đã tham gia rồi, quay lại từ máy cũ → nhận ra ngay và cho vào thẳng.
+ *
+ * Trước giờ bắt đầu thì vào thẳng. Sau khi chủ sân bấm Bắt đầu thì mọi người vào
+ * thêm đều rơi vào hàng chờ duyệt — đúng như đã chốt ở mục 20.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import type { PlayerSeed } from "@/lib/domain/commands";
+import { loadProfile, readDeviceId, saveProfile } from "@/lib/identity/device";
+import { useEvent } from "@/hooks/useEventState";
+import { useMutationQueue } from "@/hooks/useMutationQueue";
+import { Avatar } from "@/components/Avatar";
+import { AvatarPicker } from "@/components/AvatarPicker";
+import { PLAYER_STATUS_LABEL } from "@/lib/domain/labels";
+import { Button, Card, Field, inputClass } from "@/components/ui";
+
+export default function JoinPage() {
+  const { code } = useParams<{ code: string }>();
+  const router = useRouter();
+  const { data } = useEvent();
+  const queue = useMutationQueue();
+
+  const [name, setName] = useState("");
+  const [avatarId, setAvatarId] = useState<string | undefined>();
+  const [claiming, setClaiming] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  // Máy này đã dùng lần trước thì tự điền lại, khỏi gõ tên mỗi buổi.
+  useEffect(() => {
+    const profile = loadProfile();
+    if (profile) {
+      setName(profile.name);
+      setAvatarId(profile.avatarId);
+    }
+  }, []);
+
+  const deviceId = data?.deviceId || readDeviceId() || "";
+
+  const mine = useMemo(
+    () => data?.state.players.find((p) => p.deviceId && p.deviceId === deviceId),
+    [data, deviceId],
+  );
+
+  // Những người chủ sân đã gõ sẵn mà chưa gắn với máy nào — có thể là mình.
+  const unclaimed = useMemo(
+    () =>
+      (data?.state.players ?? []).filter(
+        (p) =>
+          !p.deviceId &&
+          p.status !== "left" &&
+          p.status !== "rejected" &&
+          p.status !== "declined",
+      ),
+    [data],
+  );
+
+  if (!data) return null;
+  const { state } = data;
+  const afterStart = state.status !== "draft";
+
+  if (mine) {
+    return (
+      <Card className="space-y-4 p-5 text-center">
+        <div className="flex justify-center">
+          <Avatar name={mine.name} avatarId={mine.avatarId} size="lg" />
+        </div>
+        <div>
+          <p className="text-lg font-semibold">{mine.name}</p>
+          <p className="text-sm text-slate-400">{PLAYER_STATUS_LABEL[mine.status]}</p>
+        </div>
+        <Button tone="primary" full onClick={() => router.push(`/e/${code}`)}>
+          Vào xem trận
+        </Button>
+      </Card>
+    );
+  }
+
+  if (sent) {
+    return (
+      <Card className="space-y-3 p-5 text-center">
+        <p className="text-lg font-semibold">
+          {afterStart ? "Đã gửi yêu cầu tham gia" : "Đã ghi tên bạn"}
+        </p>
+        <p className="text-sm text-slate-400">
+          {afterStart
+            ? "Buổi đánh đã bắt đầu nên chủ sân cần duyệt. Bạn sẽ được xếp vào vòng gần nhất sau khi được duyệt."
+            : "Chủ sân bấm Bắt đầu là hệ thống xếp lịch cho cả nhóm."}
+        </p>
+        <Button tone="primary" full onClick={() => router.push(`/e/${code}`)}>
+          Xem trận đang đánh
+        </Button>
+      </Card>
+    );
+  }
+
+  const submit = (claimId?: string) => {
+    const trimmed = name.trim();
+    if (trimmed.length < 1) return;
+
+    saveProfile({ name: trimmed, avatarId: avatarId ?? "" });
+
+    if (claimId) {
+      // Nhận ô tên chủ sân đã gõ sẵn: gắn máy này vào và cập nhật ảnh.
+      queue.send({
+        type: "UpdateProfile",
+        playerId: claimId,
+        name: trimmed,
+        avatarId: avatarId ?? "",
+      });
+      queue.send({ type: "MarkArrived", playerId: claimId });
+    } else {
+      const seed: PlayerSeed = {
+        id: `p-${crypto.randomUUID().slice(0, 8)}`,
+        name: trimmed,
+        avatarId: avatarId ?? "",
+        deviceId,
+      };
+      queue.send({ type: "RequestJoin", player: seed });
+    }
+    setSent(true);
+  };
+
+  return (
+    <div className="space-y-4">
+      {afterStart && (
+        <p className="rounded-xl bg-amber-500/15 p-3 text-sm text-amber-200">
+          Buổi đánh đã bắt đầu. Chủ sân sẽ cần duyệt trước khi bạn được xếp lịch.
+        </p>
+      )}
+
+      {unclaimed.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Tên bạn đã có sẵn?
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {unclaimed.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  setClaiming(p.id);
+                  setName(p.name);
+                }}
+                className={`flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm ${
+                  claiming === p.id ? "bg-court-500 text-white" : "bg-slate-900"
+                }`}
+              >
+                <Avatar name={p.name} avatarId={p.avatarId} size="sm" />
+                {p.name}
+              </button>
+            ))}
+          </div>
+          {claiming && (
+            <p className="text-xs text-slate-500">
+              Đang nhận tên này. Bấm lần nữa vào tên khác nếu chọn nhầm.
+            </p>
+          )}
+        </section>
+      )}
+
+      <Card className="space-y-4 p-5">
+        <Field label="Tên của bạn" hint="Tên gọi ở sân là được, không cần tên đầy đủ.">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nam"
+            className={inputClass}
+          />
+        </Field>
+
+        <div>
+          <span className="mb-2 block text-sm font-medium text-slate-300">
+            Ảnh đại diện
+          </span>
+          <AvatarPicker name={name} value={avatarId} onChange={setAvatarId} />
+        </div>
+
+        <Button
+          tone="primary"
+          full
+          disabled={name.trim().length < 1}
+          onClick={() => submit(claiming ?? undefined)}
+        >
+          {claiming ? "Đây là tôi" : afterStart ? "Xin tham gia" : "Tham gia"}
+        </Button>
+      </Card>
+    </div>
+  );
+}

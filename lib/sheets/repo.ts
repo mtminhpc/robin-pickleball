@@ -35,7 +35,9 @@ import {
   joinState,
   logTab,
   splitState,
+  viewTab,
 } from "./schema";
+import { renderView } from "./view";
 
 const EVENT_COLUMNS = HEADERS[TABS.events];
 const COL = Object.fromEntries(
@@ -154,37 +156,88 @@ export class EventRepo {
   }
 
   /**
-   * Áp một lệnh rồi ghi xuống: một lời gọi ghi duy nhất, gồm nối thêm nhật ký và
-   * cập nhật ảnh chụp.
-   *
-   * Lệnh được kiểm tra trên `loaded.state` trước khi ghi, nên lệnh sai bị chặn tại
-   * đây chứ không lọt vào nhật ký. Nếu trong lúc đó có người khác vừa ghi xen vào
-   * thì lệnh này vẫn được nối thêm an toàn, và lần phát lại tiếp theo sẽ quyết
-   * định ai thắng — không kết quả nào biến mất.
+   * Áp một lệnh rồi ghi xuống. Trường hợp riêng của `commitMany`.
    */
   async append(
     code: string,
     envelope: CommandEnvelope,
     loaded: LoadedEvent,
   ): Promise<CommitResult> {
-    const result = apply(loaded.state, envelope);
-    if (!result.ok) return { ok: false, error: result.error };
-    const next = result.value;
+    return this.commitMany(code, [envelope], loaded);
+  }
+
+  /**
+   * Áp một chuỗi lệnh rồi ghi tất cả trong MỘT lời gọi.
+   *
+   * Hầu hết thao tác của người dùng sinh ra hai lệnh chứ không phải một: nhập
+   * điểm xong thì phải xếp thêm vòng mới, duyệt người mới thì phải xếp lại phần
+   * chưa đánh. Ghi hai lần sẽ chia đôi hạn mức vốn đã chật, nên chúng đi chung
+   * một lô — nhật ký nhận nhiều dòng, ảnh chụp cập nhật một lần ở trạng thái cuối.
+   *
+   * Lệnh đầu tiên bị từ chối thì dừng và không ghi gì cả: nó là thao tác của
+   * người dùng. Lệnh sau bị từ chối thì bỏ qua và vẫn ghi phần trước — chúng là
+   * việc dọn dẹp tự động, hỏng thì lần sau xếp lại chứ không được kéo theo mất
+   * kết quả người ta vừa nhập.
+   */
+  async commitMany(
+    code: string,
+    envelopes: CommandEnvelope[],
+    loaded: LoadedEvent,
+  ): Promise<CommitResult> {
+    if (envelopes.length === 0) return { ok: false, error: "Không có lệnh nào." };
+
+    let state = loaded.state;
+    const accepted: Array<{ envelope: CommandEnvelope; seq: number }> = [];
+
+    for (const [i, envelope] of envelopes.entries()) {
+      const result = apply(state, envelope);
+      if (!result.ok) {
+        if (i === 0) return { ok: false, error: result.error };
+        break;
+      }
+      state = result.value;
+      // Ghi lại số thứ tự ngay tại đây thay vì tính lùi từ trạng thái cuối: lệnh
+      // gửi trùng được nhận nhưng không làm tăng số thứ tự, nên tính lùi sẽ lệch.
+      accepted.push({ envelope, seq: state.seq });
+    }
 
     await this.sheets.ensureTab(logTab(code), LOG_HEADERS);
+    await this.sheets.ensureTab(viewTab(code), []);
 
-    const record = { ...loaded.record, seq: next.seq, updatedAt: envelope.at };
-    const ops: WriteOp[] = [
-      { kind: "append", tab: logTab(code), values: [logRow(next.seq, envelope)] },
+    const record = {
+      ...loaded.record,
+      seq: state.seq,
+      updatedAt: accepted[accepted.length - 1]!.envelope.at,
+    };
+
+    await this.sheets.batch([
+      {
+        kind: "append",
+        tab: logTab(code),
+        values: accepted.map((a) => logRow(a.seq, a.envelope)),
+      },
       {
         kind: "update",
         range: rowRange(TABS.events, loaded.record.rowIndex, EVENT_COLUMNS.length),
-        values: [eventRow(record, next)],
+        values: [eventRow(record, state)],
+      },
+      ...this.viewOps(code, state),
+    ]);
+
+    return { ok: true, state, seq: state.seq };
+  }
+
+  /** Bản in dễ đọc trong Google Sheet. Ghi kèm cùng lô nên không tốn thêm lời gọi. */
+  private viewOps(code: string, state: EventState): WriteOp[] {
+    const rendered = renderView(state);
+    return [
+      {
+        kind: "update",
+        range: `${viewTab(code)}!A1:${indexToColumn(rendered.width - 1)}${rendered.rows.length}`,
+        values: rendered.rows,
+        typed: true,
       },
     ];
-
-    await this.sheets.batch(ops);
-    return { ok: true, state: next, seq: next.seq };
   }
 
   /**
@@ -219,6 +272,7 @@ export class EventRepo {
   ): Promise<EventRecord> {
     await this.bootstrap();
     await this.sheets.ensureTab(logTab(record.code), LOG_HEADERS);
+    await this.sheets.ensureTab(viewTab(record.code), []);
 
     const state = emptyState(record.code);
     const full: EventRecord = { ...record, seq: 0, updatedAt: createdAt, rowIndex: -1 };
