@@ -1,0 +1,134 @@
+/**
+ * Bố cục Google Sheet.
+ *
+ * Sheet vừa là kho dữ liệu vừa là thứ người dùng mở ra xem, nên bố cục phải đọc
+ * được bằng mắt: mỗi tab một mục đích rõ ràng, tên cột viết thường có gạch dưới,
+ * dòng đầu là tiêu đề.
+ *
+ * Mỗi sự kiện có tab nhật ký riêng thay vì chung một tab khổng lồ. Đọc một sự
+ * kiện khi đó chỉ cần lấy đúng một dải ô, không phải tải nhật ký của mọi sự kiện
+ * rồi lọc — điều này quyết định vì hạn mức của Sheets API rất chặt.
+ */
+
+export const TABS = {
+  clubs: "clubs",
+  clubMembers: "club_members",
+  events: "events",
+  accounts: "accounts",
+  devices: "devices",
+  rollups: "rollups",
+} as const;
+
+/** Tab nhật ký của một sự kiện: nguồn sự thật, chỉ ghi thêm không sửa. */
+export function logTab(code: string): string {
+  return `log__${code}`;
+}
+
+/** Tab hiển thị của một sự kiện: bản in cho người đọc, ghi đè sau mỗi lần lưu. */
+export function viewTab(code: string): string {
+  return `view__${code}`;
+}
+
+export const HEADERS = {
+  [TABS.clubs]: [
+    "club_id",
+    "name",
+    "owner_user_id",
+    "invite_code",
+    "created_at",
+    "settings_json",
+  ],
+  [TABS.clubMembers]: [
+    "club_id",
+    "member_id",
+    "display_name",
+    "avatar_id",
+    "user_id",
+    "device_id",
+    "joined_at",
+    "status",
+  ],
+  [TABS.events]: [
+    "code",
+    "club_id",
+    "name",
+    "starts_at",
+    "status",
+    "owner_user_id",
+    "player_pass_hash",
+    "admin_pass_hash",
+    "seq",
+    "updated_at",
+    // Ảnh chụp trạng thái, cắt thành nhiều ô vì mỗi ô Sheets chỉ chứa 50k ký tự.
+    "state_1",
+    "state_2",
+    "state_3",
+    "state_4",
+  ],
+  [TABS.accounts]: [
+    "user_id",
+    "email",
+    "display_name",
+    "avatar_id",
+    "created_at",
+    "prefs_json",
+  ],
+  [TABS.devices]: [
+    "device_id",
+    "user_id",
+    "display_name",
+    "avatar_id",
+    "last_seen",
+    "recent_events_json",
+  ],
+  [TABS.rollups]: [
+    "scope",
+    "period_type",
+    "period_key",
+    "computed_at",
+    "source_seq",
+    "data_json",
+  ],
+} as const;
+
+export const LOG_HEADERS = [
+  "seq",
+  "ts",
+  "actor_kind",
+  "actor_label",
+  "actor_ref",
+  "command_id",
+  "type",
+  "payload_json",
+] as const;
+
+/** Số ô dành cho ảnh chụp trạng thái, và sức chứa mỗi ô. */
+export const STATE_CELLS = 4;
+export const STATE_CELL_LIMIT = 45_000;
+
+/** Vị trí cột `state_1` trong tab events (đánh số từ 0). */
+export const STATE_COLUMN_START = HEADERS[TABS.events].indexOf("state_1");
+
+/**
+ * Cắt chuỗi JSON thành đúng `STATE_CELLS` ô.
+ *
+ * Ném lỗi khi vượt sức chứa thay vì cắt cụt âm thầm: mất một phần trạng thái sẽ
+ * hỏng theo kiểu rất khó truy, còn nhật ký thì vẫn nguyên nên dựng lại được.
+ */
+export function splitState(json: string): string[] {
+  const parts: string[] = [];
+  for (let i = 0; i < STATE_CELLS; i++) {
+    parts.push(json.slice(i * STATE_CELL_LIMIT, (i + 1) * STATE_CELL_LIMIT));
+  }
+  if (json.length > STATE_CELLS * STATE_CELL_LIMIT) {
+    throw new Error(
+      `Ảnh chụp trạng thái ${json.length} ký tự, vượt sức chứa ${STATE_CELLS * STATE_CELL_LIMIT}. ` +
+        "Cần nén bớt hoặc tăng STATE_CELLS.",
+    );
+  }
+  return parts;
+}
+
+export function joinState(cells: readonly (string | undefined)[]): string {
+  return cells.slice(0, STATE_CELLS).map((c) => c ?? "").join("");
+}
