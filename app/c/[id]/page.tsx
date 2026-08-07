@@ -95,9 +95,14 @@ export default function ClubPage() {
         ))}
       </section>
 
-      <Button tone="primary" full onClick={() => setCreating(true)}>
-        Tạo buổi đánh cho câu lạc bộ
-      </Button>
+      <div className="space-y-2">
+        <Button tone="primary" full onClick={() => setCreating(true)}>
+          Tạo buổi đánh cho câu lạc bộ
+        </Button>
+        <Link href={`/c/${club.id}/summary`} className="block">
+          <Button full>Tổng kết tuần / tháng</Button>
+        </Link>
+      </div>
 
       <InviteDialog
         open={showInvite}

@@ -4,9 +4,10 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Trạng thái: giai đoạn 1 — mang ra sân dùng được.** Ứng dụng chạy đầy đủ: tạo
+> **Trạng thái: giai đoạn 2 — dùng được cả mùa.** Ứng dụng chạy đầy đủ: tạo
 > buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả, bảng xếp hạng, huỷ
-> trận, kết thúc sớm. Xem [lộ trình](#lộ-trình).
+> trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết tuần và tháng.
+> Xem [lộ trình](#lộ-trình).
 
 ## Chạy thử ngay
 
@@ -21,7 +22,7 @@ Dữ liệu lưu vào `.data/sheet.json`. Khi nào sẵn sàng dùng thật thì
 trường Google và ứng dụng tự chuyển sang Google Sheet — xem [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
-pnpm test          # 140 bài kiểm thử
+pnpm test          # 172 bài kiểm thử
 pnpm sim --matrix  # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
 
@@ -162,13 +163,14 @@ cũ, không xếp thành hai — ý định mới nhất luôn thắng.
 app/              Trang và API (Next.js App Router)
 components/       Mảnh giao diện dùng lại
 hooks/            Đồng bộ trạng thái, hàng đợi lưu
-lib/domain/       Kiểu dữ liệu, tập lệnh, hàm suy trạng thái, xếp hạng, luật
+lib/domain/       Kiểu dữ liệu, tập lệnh, hàm suy trạng thái, xếp hạng, luật,
+                  câu lạc bộ, tổng kết tuần/tháng
 lib/scheduler/    Thuật toán xếp lịch, hàm chi phí, đo công bằng
-lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bản in
+lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bản in, câu lạc bộ
 lib/auth/         Mật khẩu, cookie phiên, chặn dò
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            140 bài kiểm thử
+tests/            172 bài kiểm thử
 ```
 
 Nguyên tắc: `lib/domain` và `lib/scheduler` là hàm thuần, không đọc đồng hồ, không gọi
@@ -184,10 +186,45 @@ Google Sheet.
       ảnh đại diện, hàng chờ duyệt, nhập điểm và khoá kết quả, banner trạng thái
       lưu, hàng đợi ngoại tuyến, bảng xếp hạng, bảng Công bằng, dời lịch, huỷ trận,
       kết thúc sớm, Google Sheet thật, sẵn sàng triển khai Vercel.
-- [ ] **GĐ2 — Câu lạc bộ và tổng kết.** Danh bạ thành viên, mời nhanh, tổng kết
-      tuần và tháng, lịch sử theo thiết bị.
+- [x] **GĐ2 — Câu lạc bộ và tổng kết.** Danh bạ thành viên, mã mời và QR, mời
+      nhanh cả danh bạ vào buổi đánh, xác nhận đi/không đi, tổng kết tuần và
+      tháng, trang `/me` theo thiết bị.
 - [ ] **GĐ3 — Tài khoản Google.** Đăng nhập, đồng bộ đa thiết bị, thống kê xuyên
-      sự kiện.
+      thiết bị.
+
+## Câu lạc bộ và tổng kết
+
+Nhóm chơi cố định mười lăm người thì tuần nào chủ sân cũng gõ lại mười lăm cái tên.
+Câu lạc bộ là cuốn danh bạ để khỏi phải làm việc đó: mọi người quét mã QR vào một
+lần, từ đó mỗi buổi mới chỉ là một cú bấm.
+
+| Việc | Ở đâu |
+|---|---|
+| Lập câu lạc bộ, vào bằng mã mời | Trang chủ → tab **Câu lạc bộ** |
+| Danh bạ, mã QR mời, sửa tên và ảnh | `/c/[mã]` |
+| Tạo buổi đánh với cả danh bạ điền sẵn | Nút trong trang câu lạc bộ |
+| Tổng kết tuần và tháng | `/c/[mã]/summary` |
+| Số liệu của riêng máy mình | `/me` |
+
+Người được mời vào buổi đánh ở trạng thái **đã mời**, không phải **đang chơi**:
+hôm nay ai đi ai không thì phải hỏi, đoán sai là xếp lịch cho người không có mặt và
+cả sân đứng chờ. Ai bấm xác nhận đi thì lúc chủ sự kiện bấm **Bắt đầu** là vào
+thẳng, không qua duyệt; ai tới sau vẫn phải chờ duyệt.
+
+Câu lạc bộ **không dùng nhật ký lệnh** như sự kiện, và đó là quyết định chứ không
+phải cắt xén. Sự kiện cần nhật ký vì hai mươi người cùng nhập điểm giữa sân, mất
+một dòng là mất một kết quả có thật. Danh bạ thì mỗi tháng đổi vài lần. Điều duy
+nhất bắt buộc phải giữ là *thêm thành viên thì không được mất*, và cái đó có sẵn
+nhờ nối thêm dòng.
+
+Tổng kết chia kỳ theo **giờ Việt Nam**, tuần bắt đầu từ thứ hai. Nghe vụn vặt
+nhưng đây là chỗ dễ sai nhất: máy chủ Vercel chạy giờ UTC, nên buổi đánh 6 giờ
+sáng thứ hai sẽ rơi nhầm về tuần trước nếu để nó tự đoán — và người dùng chỉ phát
+hiện ra khi hỏi "sao tuần này tôi đi hai buổi mà chỉ hiện một".
+
+Trang `/me` chạy được mà không cần tài khoản: máy nhớ mã các buổi đã mở, máy chủ
+tính số liệu rồi trả về. Nói thẳng ngay trên trang rằng dữ liệu bám theo máy —
+xoá dữ liệu trình duyệt hay đổi điện thoại là mất.
 
 ## Nối Google Sheet thật
 

@@ -32,11 +32,19 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto min-h-dvh max-w-md space-y-6 px-4 py-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">Robin Pickleball</h1>
-        <p className="text-sm text-slate-400">
-          Xếp lịch xoay đôi công bằng, tính điểm theo hiệu số.
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold">Robin Pickleball</h1>
+          <p className="text-sm text-slate-400">
+            Xếp lịch xoay đôi công bằng, tính điểm theo hiệu số.
+          </p>
+        </div>
+        <Link
+          href="/me"
+          className="shrink-0 rounded-xl bg-slate-900 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+        >
+          Của tôi
+        </Link>
       </header>
 
       {recent.length > 0 && (

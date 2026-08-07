@@ -266,6 +266,68 @@ export class EventRepo {
   }
 
   /** Tạo sự kiện mới: một dòng trong tab events và một tab nhật ký riêng. */
+  /**
+   * Mọi buổi đánh của một câu lạc bộ, kèm trạng thái đọc từ ảnh chụp.
+   *
+   * Dùng **một** lời gọi đọc cho cả danh sách, kể cả khi câu lạc bộ có ba mươi
+   * buổi. Đọc lại nhật ký từng buổi sẽ đúng hơn một chút nhưng tốn ba mươi lời
+   * gọi — quá hạn mức Sheets ngay lập tức, và tổng kết tháng không đáng giá bằng
+   * việc ứng dụng còn chạy được.
+   *
+   * Đổi lại, số liệu của buổi ĐANG đánh có thể chậm vài lệnh so với thực tế. Với
+   * buổi đã kết thúc thì ảnh chụp là chính xác, và tổng kết chủ yếu nói về những
+   * buổi đã xong. Giao diện đánh dấu buổi chưa kết thúc để người đọc biết.
+   */
+  async listByClub(clubId: string): Promise<
+    Array<{ record: EventRecord; state: EventState }>
+  > {
+    const [index] = await this.sheets.batchGet([
+      `${TABS.events}!A:${indexToColumn(EVENT_COLUMNS.length - 1)}`,
+    ]);
+    const rows = index?.values ?? [];
+
+    const out: Array<{ record: EventRecord; state: EventState }> = [];
+    rows.forEach((row, i) => {
+      if (i === 0 || row[COL.club_id] !== clubId) return;
+      const state = parseSnapshot(
+        joinState(row.slice(STATE_COLUMN_START, STATE_COLUMN_START + STATE_CELLS)),
+      );
+      // Ảnh chụp hỏng thì bỏ buổi đó ra khỏi tổng kết chứ không làm hỏng cả
+      // trang. Mở thẳng buổi đó vẫn dựng lại được từ nhật ký.
+      if (state) out.push({ record: toRecord(row, i), state });
+    });
+    return out;
+  }
+
+  /**
+   * Nhiều buổi đánh cùng lúc theo mã, trong một lời gọi đọc.
+   *
+   * Dùng cho trang `/me`: máy nhớ mã các buổi đã mở, còn số liệu thì lấy từ đây.
+   * Mã không tồn tại thì lặng lẽ bỏ qua — người dùng có thể còn giữ mã của một
+   * buổi đã bị xoá, và đó không phải lý do để cả trang báo lỗi.
+   */
+  async listByCodes(
+    codes: readonly string[],
+  ): Promise<Array<{ record: EventRecord; state: EventState }>> {
+    if (codes.length === 0) return [];
+    const wanted = new Set(codes.map((c) => c.toUpperCase()));
+
+    const [index] = await this.sheets.batchGet([
+      `${TABS.events}!A:${indexToColumn(EVENT_COLUMNS.length - 1)}`,
+    ]);
+    const rows = index?.values ?? [];
+
+    const out: Array<{ record: EventRecord; state: EventState }> = [];
+    rows.forEach((row, i) => {
+      if (i === 0 || !wanted.has((row[COL.code] ?? "").toUpperCase())) return;
+      const state = parseSnapshot(
+        joinState(row.slice(STATE_COLUMN_START, STATE_COLUMN_START + STATE_CELLS)),
+      );
+      if (state) out.push({ record: toRecord(row, i), state });
+    });
+    return out;
+  }
+
   async create(
     record: Omit<EventRecord, "rowIndex" | "seq" | "updatedAt">,
     createdAt: number,
