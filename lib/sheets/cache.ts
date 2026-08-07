@@ -11,10 +11,13 @@
 import { revalidateTag, unstable_cache } from "next/cache";
 import type { EventState } from "../domain/types";
 import { getSheetsClient } from "./factory";
+import { ClubRepo, type LoadedClub } from "./clubs";
 import { EventRepo, type EventRecord } from "./repo";
 
 /** Bao lâu thì chấp nhận dữ liệu cũ. Ghi thì xoá đệm ngay nên không ai phải chờ. */
 const TTL_SECONDS = 5;
+/** Danh bạ câu lạc bộ đổi rất thưa nên giữ lâu hơn nhiều. */
+const CLUB_TTL_SECONDS = 60;
 
 export interface CachedEvent {
   record: EventRecord;
@@ -92,4 +95,36 @@ export async function withEventLock<T>(
     // Chỉ dọn khi mình là lệnh cuối, để không xoá mất hàng đợi của lệnh đến sau.
     if (inFlight.get(code) === queued) inFlight.delete(code);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Câu lạc bộ
+// ---------------------------------------------------------------------------
+
+export function clubTag(clubId: string): string {
+  return `club:${clubId}`;
+}
+
+export function getClubRepo(): ClubRepo {
+  return new ClubRepo(getSheetsClient());
+}
+
+/**
+ * Đọc câu lạc bộ qua bộ nhớ đệm.
+ *
+ * Thời hạn dài hơn sự kiện rất nhiều (60 giây so với 5): danh bạ mỗi tháng đổi
+ * vài lần, còn tỷ số thì đổi từng phút. Đọc lại danh bạ mỗi 5 giây cho hai mươi
+ * người là đốt hạn mức vào thứ gần như không bao giờ thay đổi.
+ */
+export async function readClub(clubId: string): Promise<LoadedClub | null> {
+  const load = unstable_cache(
+    async (id: string) => getClubRepo().load(id),
+    ["club"],
+    { tags: [clubTag(clubId)], revalidate: CLUB_TTL_SECONDS },
+  );
+  return load(clubId);
+}
+
+export function invalidateClub(clubId: string): void {
+  revalidateTag(clubTag(clubId));
 }

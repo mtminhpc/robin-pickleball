@@ -16,6 +16,7 @@
 export const DEVICE_COOKIE = "rp_device";
 const PROFILE_KEY = "rp_profile";
 const RECENT_KEY = "rp_recent_events";
+const CLUBS_KEY = "rp_recent_clubs";
 const MAX_RECENT = 12;
 
 export interface DeviceProfile {
@@ -60,6 +61,27 @@ export function rememberEvent(code: string, name: string): void {
   const now = Date.now();
   const rest = loadRecentEvents().filter((e) => e.code !== code);
   writeJson(RECENT_KEY, [{ code, name, lastOpenedAt: now }, ...rest].slice(0, MAX_RECENT));
+}
+
+export interface RecentClub {
+  id: string;
+  name: string;
+  lastOpenedAt: number;
+}
+
+export function loadRecentClubs(): RecentClub[] {
+  return readJson<RecentClub[]>(CLUBS_KEY) ?? [];
+}
+
+/**
+ * Ghi nhớ câu lạc bộ vừa mở.
+ *
+ * Máy chủ cũng biết được điều này qua cookie thiết bị, nhưng đọc từ đây thì trang
+ * chủ hiện ra ngay không phải chờ mạng — và vẫn đúng trong đại đa số trường hợp.
+ */
+export function rememberClub(id: string, name: string): void {
+  const rest = loadRecentClubs().filter((c) => c.id !== id);
+  writeJson(CLUBS_KEY, [{ id, name, lastOpenedAt: Date.now() }, ...rest].slice(0, MAX_RECENT));
 }
 
 export function forgetEvent(code: string): void {

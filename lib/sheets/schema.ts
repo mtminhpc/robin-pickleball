@@ -33,7 +33,9 @@ export const HEADERS = {
   [TABS.clubs]: [
     "club_id",
     "name",
-    "owner_user_id",
+    // Thiết bị của người tạo ở giai đoạn này, tài khoản Google ở giai đoạn sau.
+    // Đặt tên chung để lúc có tài khoản không phải đổi bố cục Sheet.
+    "owner_ref",
     "invite_code",
     "created_at",
     "settings_json",

@@ -11,14 +11,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { loadRecentEvents, type RecentEvent } from "@/lib/identity/device";
+import {
+  loadRecentClubs,
+  loadRecentEvents,
+  type RecentClub,
+  type RecentEvent,
+  loadProfile,
+} from "@/lib/identity/device";
 import { Button, Card, Field, inputClass } from "@/components/ui";
 
 export default function HomePage() {
   const [recent, setRecent] = useState<RecentEvent[]>([]);
-  const [tab, setTab] = useState<"join" | "create">("join");
+  const [clubs, setClubs] = useState<RecentClub[]>([]);
+  const [tab, setTab] = useState<"join" | "create" | "club">("join");
 
-  useEffect(() => setRecent(loadRecentEvents()), []);
+  useEffect(() => {
+    setRecent(loadRecentEvents());
+    setClubs(loadRecentClubs());
+  }, []);
 
   return (
     <main className="mx-auto min-h-dvh max-w-md space-y-6 px-4 py-8">
@@ -47,6 +57,22 @@ export default function HomePage() {
         </section>
       )}
 
+      {clubs.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Câu lạc bộ của bạn
+          </h2>
+          {clubs.slice(0, 5).map((c) => (
+            <Link key={c.id} href={`/c/${c.id}`} className="block">
+              <Card className="flex items-center justify-between p-4">
+                <span className="truncate font-medium">{c.name}</span>
+                <span className="ml-3 shrink-0 text-xs text-slate-500">danh bạ →</span>
+              </Card>
+            </Link>
+          ))}
+        </section>
+      )}
+
       <div className="flex gap-2 rounded-xl bg-slate-900 p-1">
         <TabButton active={tab === "join"} onClick={() => setTab("join")}>
           Vào bằng mã
@@ -54,9 +80,12 @@ export default function HomePage() {
         <TabButton active={tab === "create"} onClick={() => setTab("create")}>
           Tạo buổi mới
         </TabButton>
+        <TabButton active={tab === "club"} onClick={() => setTab("club")}>
+          Câu lạc bộ
+        </TabButton>
       </div>
 
-      {tab === "join" ? <JoinByCode /> : <CreateEvent />}
+      {tab === "join" ? <JoinByCode /> : tab === "create" ? <CreateEvent /> : <ClubEntry />}
     </main>
   );
 }
@@ -239,5 +268,109 @@ function CreateEvent() {
         </Button>
       </form>
     </Card>
+  );
+}
+
+/**
+ * Vào câu lạc bộ bằng mã mời, hoặc lập câu lạc bộ mới.
+ *
+ * Câu lạc bộ chỉ là cuốn danh bạ những người hay đánh cùng nhau. Giá trị nằm ở
+ * chỗ tuần sau khỏi gõ lại mười lăm cái tên.
+ */
+function ClubEntry() {
+  const router = useRouter();
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [myName, setMyName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const profile = loadProfile();
+    if (profile) setMyName(profile.name);
+  }, []);
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/clubs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, ownerName: myName }),
+      });
+      const body = (await res.json()) as { club?: { id: string }; error?: string };
+      if (!res.ok || !body.club) throw new Error(body.error ?? "Không tạo được câu lạc bộ.");
+      router.push(`/c/${body.club.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tạo được câu lạc bộ.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (code.trim()) router.push(`/c/${code.trim().toUpperCase()}/join`);
+          }}
+          className="space-y-4"
+        >
+          <Field label="Mã mời câu lạc bộ" hint="Sáu ký tự, hoặc quét mã QR của nhóm.">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="ABC123"
+              autoCapitalize="characters"
+              autoComplete="off"
+              maxLength={6}
+              className={`${inputClass} text-center font-mono text-2xl tracking-[0.3em]`}
+            />
+          </Field>
+          <Button full type="submit" disabled={code.trim().length < 4}>
+            Vào câu lạc bộ
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="p-5">
+        <form onSubmit={create} className="space-y-4">
+          <Field label="Lập câu lạc bộ mới" hint="Danh bạ dùng lại cho mọi buổi đánh sau.">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Pickleball tối thứ ba"
+              maxLength={60}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Tên của bạn">
+            <input
+              value={myName}
+              onChange={(e) => setMyName(e.target.value)}
+              placeholder="Nguyễn Văn Nam"
+              maxLength={40}
+              className={inputClass}
+            />
+          </Field>
+
+          {error && (
+            <p className="rounded-xl bg-red-500/15 p-3 text-sm text-red-200">{error}</p>
+          )}
+
+          <Button
+            tone="primary"
+            full
+            type="submit"
+            disabled={busy || name.trim().length < 2 || myName.trim().length < 1}
+          >
+            {busy ? "Đang tạo…" : "Lập câu lạc bộ"}
+          </Button>
+        </form>
+      </Card>
+    </div>
   );
 }

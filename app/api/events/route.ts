@@ -19,9 +19,14 @@ import { emptyState } from "@/lib/domain/reduce";
 import { DEFAULT_CONFIG, type EventConfig } from "@/lib/domain/types";
 import { getRepo, invalidateEvent } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
+import { activeMembers, memberForDevice } from "@/lib/domain/club";
+import { DEVICE_COOKIE } from "@/lib/identity/device";
+import { getClubRepo, readClub } from "@/lib/sheets/cache";
 
 interface CreateBody {
   name?: string;
+  /** Tạo từ một câu lạc bộ: cả danh bạ được thêm sẵn vào buổi này. */
+  clubId?: string;
   courts?: number;
   pointsTo?: number;
   winBy2?: boolean;
@@ -58,6 +63,28 @@ export async function POST(request: NextRequest) {
     scoring: { pointsTo, winBy2: body.winBy2 ?? DEFAULT_CONFIG.scoring.winBy2 },
   };
 
+  // Tạo từ câu lạc bộ: kéo cả danh bạ vào. Chỉ người trong câu lạc bộ mới làm
+  // được, nếu không thì ai biết mã cũng lôi được danh sách tên của nhóm khác ra.
+  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  let roster: Array<{ id: string; name: string; avatarId: string; memberId: string }> = [];
+  let clubId: string | null = null;
+
+  if (body.clubId) {
+    const club = await readClub(body.clubId);
+    if (!club) return fail(404, "Không tìm thấy câu lạc bộ này.");
+    const isOwner = deviceId !== "" && club.club.ownerRef === deviceId;
+    if (!isOwner && !memberForDevice(club.members, deviceId)) {
+      return fail(403, "Chỉ người trong câu lạc bộ mới tạo buổi đánh cho câu lạc bộ.");
+    }
+    clubId = club.club.id;
+    roster = activeMembers(club.members).map((m) => ({
+      id: m.memberId,
+      name: m.displayName,
+      avatarId: m.avatarId,
+      memberId: m.memberId,
+    }));
+  }
+
   const repo = getRepo();
   const code = await pickUnusedCode(repo);
   const now = Date.now();
@@ -65,7 +92,7 @@ export async function POST(request: NextRequest) {
   const record = await repo.create(
     {
       code,
-      clubId: null,
+      clubId,
       name,
       status: "draft",
       ownerUserId: "",
@@ -75,16 +102,32 @@ export async function POST(request: NextRequest) {
     now,
   );
 
-  const envelope: CommandEnvelope = {
-    id: `create-${code}`,
-    at: now,
-    actor: { kind: "admin", label: "chủ sự kiện" },
-    command: { type: "CreateEvent", code, clubId: null, config },
-  };
+  const actor = { kind: "admin", label: "chủ sự kiện" } as const;
+  const envelopes: CommandEnvelope[] = [
+    {
+      id: `create-${code}`,
+      at: now,
+      actor,
+      command: { type: "CreateEvent", code, clubId, config },
+    },
+    // Cả danh bạ vào ở trạng thái "đã mời", KHÔNG phải "đang chơi". Hôm nay ai đi
+    // ai không thì phải hỏi, không được đoán — đoán sai là xếp lịch cho người
+    // không có mặt, cả sân đứng chờ.
+    ...roster.map((m, i) => ({
+      id: `create-${code}-p${i}`,
+      at: now + 1 + i,
+      actor,
+      command: {
+        type: "AddPlayer" as const,
+        player: { id: m.id, name: m.name, avatarId: m.avatarId, memberId: m.memberId },
+        asActive: false,
+      },
+    })),
+  ];
 
   // Dùng thẳng trạng thái rỗng thay vì đọc lại từ kho: sự kiện vừa được tạo nên
   // chắc chắn nhật ký còn trống, và một lần đọc thừa là một phần hạn mức bị phí.
-  const committed = await repo.append(code, envelope, {
+  const committed = await repo.commitMany(code, envelopes, {
     record,
     state: emptyState(code),
     repaired: false,
@@ -94,7 +137,7 @@ export async function POST(request: NextRequest) {
 
   invalidateEvent(code);
 
-  const response = NextResponse.json({ code, name });
+  const response = NextResponse.json({ code, name, invited: roster.length });
   response.cookies.set(
     cookieName(code),
     signSession(newSession(code, "admin", now), sessionSecret()),
