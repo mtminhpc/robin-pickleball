@@ -23,14 +23,11 @@
  * lần gọi hàm, nên dữ liệu sẽ biến mất. `factory.ts` chặn chuyện đó.
  */
 
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { FakeSheetsClient, type CellRange, type WriteOp } from "./client";
 
 export class LocalFileSheetsClient extends FakeSheetsClient {
-  /** Thời điểm sửa của tệp ứng với những gì đang nằm trong bộ nhớ. */
-  private lastMtimeMs = -1;
-
   constructor(private readonly filePath: string) {
     super();
     this.syncFromDisk();
@@ -64,34 +61,41 @@ export class LocalFileSheetsClient extends FakeSheetsClient {
   // -- nội bộ ---------------------------------------------------------------
 
   /**
-   * Nạp lại nếu tệp trên đĩa đã đổi kể từ lần cuối ta đụng vào.
+   * Nạp lại nội dung tệp trước mỗi thao tác.
    *
    * Tệp biến mất thì xoá luôn bộ nhớ: người dùng vừa xoá `.data` để làm lại từ
    * đầu, và giữ lại dữ liệu cũ trong RAM là không nghe lời họ.
+   *
+   * **Cố ý đọc thẳng chứ không so mốc thời gian sửa tệp.** Bản trước có một
+   * đường tắt: `stat` lấy `mtimeMs`, trùng với lần trước thì bỏ qua không đọc.
+   * Nghe hợp lý, nhưng Windows cập nhật mốc ghi tệp theo bước khoảng 15 mili
+   * giây, nên hai lần ghi rơi vào cùng một nhịp mang **đúng một mốc** — và lần
+   * sửa thứ hai bị bỏ qua im lặng. Đó chính là lời hứa "sửa tay tệp thì không bị
+   * đè" của kho này, hỏng đúng lúc người ta sửa nhanh tay.
+   *
+   * Đo được: bài kiểm thử canh đúng chỗ đó hỏng 16 trên 25 lượt khi chạy riêng.
+   * Nó lâu nay xanh là nhờ chạy chung với các tệp kiểm thử khác nên nhịp lệch đi.
+   *
+   * Cái giá là đọc và phân tích lại một tệp JSON cho mỗi thao tác. Với kho chạy
+   * thử một người trên máy mình thì không đáng kể, và đổi lại tệp trên đĩa luôn
+   * đúng là thứ đang được dùng — vốn là toàn bộ lý do kho này tồn tại.
    */
   private syncFromDisk(): void {
-    let mtimeMs: number;
+    let raw: string;
     try {
-      mtimeMs = statSync(this.filePath).mtimeMs;
+      raw = readFileSync(this.filePath, "utf8");
     } catch {
-      if (this.lastMtimeMs !== -1) this.tabs.clear();
-      this.lastMtimeMs = -1;
+      this.tabs.clear();
       return;
     }
 
-    if (mtimeMs === this.lastMtimeMs) return;
-
     try {
-      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Record<
-        string,
-        string[][]
-      >;
+      const parsed = JSON.parse(raw) as Record<string, string[][]>;
       this.tabs.clear();
       for (const [tab, rows] of Object.entries(parsed)) this.tabs.set(tab, rows);
-      this.lastMtimeMs = mtimeMs;
     } catch {
       // Tệp đang được ghi dở hoặc JSON hỏng. Giữ nguyên bộ nhớ và thử lại ở lần
-      // sau — `lastMtimeMs` không đổi nên lần sau chắc chắn thử lại.
+      // sau, chứ đừng vứt dữ liệu đi vì đọc trúng lúc ai đó đang ghi.
     }
   }
 
@@ -106,12 +110,5 @@ export class LocalFileSheetsClient extends FakeSheetsClient {
     for (const [tab, rows] of this.tabs) snapshot[tab] = rows;
     mkdirSync(dirname(this.filePath), { recursive: true });
     writeFileSync(this.filePath, JSON.stringify(snapshot, null, 2), "utf8");
-    // Nhớ dấu thời gian của chính mình, nếu không lần đọc kế tiếp sẽ nạp lại
-    // đúng thứ mình vừa ghi ra.
-    try {
-      this.lastMtimeMs = statSync(this.filePath).mtimeMs;
-    } catch {
-      this.lastMtimeMs = -1;
-    }
   }
 }
