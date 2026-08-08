@@ -1,6 +1,7 @@
 # Tiến độ dự án
 
 Cập nhật: 08/08/2026 · nhánh `claude/pickleball-round-robin-app-fq8sja` · sau GĐ3
+và một phiên dọn nốt phần còn lại
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
 chạy thế nào, và việc gì còn dang dở. Hướng dẫn nối Google Sheet thật nằm riêng ở
@@ -14,9 +15,12 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-Mã nguồn **xong và đã kiểm chứng** tới hết GĐ3: xếp lịch, buổi đánh, câu lạc bộ,
-tổng kết, đăng nhập Google, đổi mã mời. `npm test` 207 bài xanh, `npm run build`
-sạch. Không có việc nào đang dở dang giữa chừng trong mã.
+Mã nguồn **xong và đã kiểm chứng** tới hết GĐ3, cộng thêm bỏ gộp máy khỏi tài
+khoản và đệm tổng kết. `npm test` 212 bài xanh, `npm run build` sạch. Không có
+việc nào đang dở dang giữa chừng trong mã.
+
+Bản nâng lên Next.js 16.3.0 nằm sẵn ở nhánh `claude/nang-next-16`, cố ý chưa gộp
+— xem [mục dưới](#nhánh-claudenang-next-16--làm-xong-chờ-gộp).
 
 Việc còn lại **không phải viết mã**, mà là **triển khai** — và nó đang chờ ba
 thứ chỉ chủ dự án làm được, vì đều cần đăng nhập vào tài khoản riêng:
@@ -34,7 +38,7 @@ sau lần deploy đầu.
 
 ```powershell
 npm install        # BẮT BUỘC chạy lại — xem lưu ý OneDrive bên dưới
-npm test           # 207 bài, xác nhận máy mới chạy đúng
+npm test           # 212 bài, xác nhận máy mới chạy đúng
 npm run dev
 ```
 
@@ -111,7 +115,7 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
-| Chạy bộ kiểm thử | `npm test` (207 bài, ~50 giây) |
+| Chạy bộ kiểm thử | `npm test` (212 bài, ~15 giây) |
 | Soát cấu hình trước khi triển khai | `npm run check-env` |
 | Sinh `APP_SECRET` mới | `npm run new-secret` |
 | Quét công bằng 42 cấu hình | `npm run sim -- --matrix` |
@@ -332,7 +336,7 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **207 bài xanh** (`npm test`), trong đó **35 bài mới** cho tài khoản, `ClaimPlayer`, đổi mã mời và kho chạy thử |
+| Kiểm thử tự động | **212 bài xanh** (`npm test`), trong đó **5 bài mới** cho việc gỡ máy khỏi tài khoản |
 | Kiểm tra kiểu | `npm run typecheck` sạch |
 | Quét ma trận công bằng | **42 cấu hình, 0 cấu hình bị đánh dấu** |
 | Chạy thử thật qua HTTP | **66 phép kiểm, 0 hỏng** — buổi đánh, câu lạc bộ, tổng kết, trang của tôi |
@@ -361,6 +365,29 @@ tới đúng giờ chỉ còn 4–5).
   bạn nên tôi không làm hộ được. Mã đã sẵn sàng: điền hai biến trong
   [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) là nút hiện ra.
 
+### Nhánh `claude/nang-next-16` — làm xong, chờ gộp
+
+Bản nâng lên **Next.js 16.3.0** đã làm xong và kiểm chứng, nhưng **cố ý chưa gộp**
+vào nhánh chính. Lý do là thứ tự: nên deploy một bản Next 15 chạy thật trước, để
+có mốc so sánh. Sau khi nâng, lỗi nào lộ ra trên Vercel cũng không biết quy cho
+Next 16 hay cho lần đầu chạy thật — nhất là khi phần chưa kiểm được ở máy nhà
+chính là hành vi lớp đệm của nền Vercel.
+
+```powershell
+git checkout claude/nang-next-16
+```
+
+Nội dung: `npm audit` về 0 lỗ hổng, `revalidateTag` sửa theo chữ ký mới của Next
+16, `middleware.ts` đổi thành `proxy.ts`, gỡ script `next lint` đã chết. Chi tiết
+và những cái bẫy ở mục [Nâng lên Next.js 16.3.0](#nâng-lên-nextjs-1630) trên
+nhánh đó.
+
+Sau khi deploy xong và chạy thật vài buổi thì gộp:
+
+```powershell
+git merge claude/nang-next-16
+```
+
 ### Cảnh báo bảo mật
 
 `npm audit` báo **3 lỗ hổng mức cao**, tất cả nằm trong thư viện `postcss` và
@@ -371,9 +398,12 @@ tới đúng giờ chỉ còn 4–5).
 - `sharp`/`libvips` — chỉ dùng khi có `next/image` xử lý ảnh người dùng tải lên.
   App này không dùng `next/image`.
 
-Nên **không chặn việc chạy thử hay dùng ở sân**. Muốn dọn sạch thì phải nâng lên
-Next.js 16, là thay đổi phá vỡ tương thích — làm được, nhưng nên làm riêng một
-lần rồi chạy lại toàn bộ kiểm thử, không gộp vào phiên đang thêm tính năng.
+Nên **không chặn việc chạy thử hay dùng ở sân**.
+
+**Đã dọn xong ở nhánh `claude/nang-next-16`** — gộp nhánh đó là `npm audit` về 0.
+Một chỗ tài liệu này từng nói chưa đúng: bản vá là **≥ 16.3.0** chứ không phải
+"Next 16" chung chung. Cả ba khuyến cáo đều trả `fixAvailable: next@16.3.0`, tức
+16.0 tới 16.2 vẫn bị đánh dấu.
 
 ---
 
@@ -395,7 +425,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            207 bài kiểm thử
+tests/            212 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —
