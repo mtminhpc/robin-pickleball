@@ -48,6 +48,26 @@ export type Command =
   | { type: "MarkArrived"; playerId: PlayerId }
   /** Ai đó quét mã xin vào sau khi sự kiện đã bắt đầu → chờ duyệt. */
   | { type: "RequestJoin"; player: PlayerSeed }
+  /**
+   * Nhận một ô tên chủ sân đã gõ sẵn: "Đây là tôi".
+   *
+   * Tách khỏi `UpdateProfile` + `MarkArrived` vì hai lệnh đó không làm được việc
+   * này. `MarkArrived` chỉ chủ sự kiện gọi được, còn `UpdateProfile` thì đổi tên
+   * mà **không gắn máy vào ô tên** — nên người vừa nhận xong, mở lại app là app
+   * quên mất họ và bắt gõ tên lần nữa.
+   *
+   * `deviceId` và `userId` do **máy chủ điền** từ cookie, không lấy từ thân yêu
+   * cầu: đây là lệnh công khai, mà một lệnh công khai để trình duyệt tự khai
+   * mình là ai thì bất kỳ ai cũng nhận được ô tên của người khác.
+   */
+  | {
+      type: "ClaimPlayer";
+      playerId: PlayerId;
+      name?: string;
+      avatarId?: string;
+      deviceId?: string;
+      userId?: string;
+    }
   | { type: "ApproveJoin"; playerId: PlayerId }
   | { type: "RejectJoin"; playerId: PlayerId }
   | { type: "PausePlayer"; playerId: PlayerId }
@@ -157,7 +177,15 @@ export const ADMIN_ONLY: readonly CommandType[] = [
 ];
 
 /** Các lệnh người chưa có mật khẩu nào cũng gửi được (tự phục vụ). */
-export const PUBLIC_COMMANDS: readonly CommandType[] = ["Rsvp", "RequestJoin"];
+export const PUBLIC_COMMANDS: readonly CommandType[] = [
+  "Rsvp",
+  "RequestJoin",
+  // Người quét mã QR ở sân là `viewer` cho tới khi họ gõ mật khẩu. Bắt gõ mật
+  // khẩu chỉ để nhận cái tên chủ sân vừa gõ hộ mình là dựng thêm một cửa ải
+  // đúng vào chỗ cần nhanh nhất. `ClaimPlayer` tự bảo vệ bằng cách từ chối ô
+  // tên đã có chủ.
+  "ClaimPlayer",
+];
 
 export type Role = "viewer" | "player" | "admin";
 

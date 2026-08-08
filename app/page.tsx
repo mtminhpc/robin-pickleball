@@ -18,6 +18,7 @@ import {
   type RecentEvent,
   loadProfile,
 } from "@/lib/identity/device";
+import { AccountBar } from "@/components/AccountBar";
 import { Button, Card, Field, inputClass } from "@/components/ui";
 
 export default function HomePage() {
@@ -94,6 +95,10 @@ export default function HomePage() {
       </div>
 
       {tab === "join" ? <JoinByCode /> : tab === "create" ? <CreateEvent /> : <ClubEntry />}
+
+      {/* Cuối trang chứ không phải đầu: người mở app ra là để vào buổi đánh, và
+          không ai bị bắt đăng nhập mới dùng được. */}
+      <AccountBar next="/" />
     </main>
   );
 }

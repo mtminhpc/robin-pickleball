@@ -7,11 +7,12 @@
  *
  * Không dùng thư viện JWT: nội dung chỉ có ba trường và tất cả đều do máy chủ
  * sinh ra, nên ký HMAC-SHA256 rồi so bằng `timingSafeEqual` là đủ và không phải
- * gánh thêm phụ thuộc nào.
+ * gánh thêm phụ thuộc nào. Phần ký nằm ở `hmac.ts`, dùng chung với phiên tài
+ * khoản.
  */
 
-import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Role } from "../domain/commands";
+import { readPayload, signPayload } from "./hmac";
 
 export interface SessionPayload {
   code: string;
@@ -28,8 +29,7 @@ export function cookieName(code: string): string {
 }
 
 export function signSession(payload: SessionPayload, secret: string): string {
-  const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-  return `${body}.${sign(body, secret)}`;
+  return signPayload(payload, secret);
 }
 
 /**
@@ -45,27 +45,13 @@ export function verifySession(
   secret: string,
   now = Date.now(),
 ): SessionPayload | null {
-  if (!token) return null;
+  const payload = readPayload<SessionPayload>(token, secret);
+  if (!payload) return null;
 
-  const dot = token.lastIndexOf(".");
-  if (dot === -1) return null;
-
-  const body = token.slice(0, dot);
-  const signature = token.slice(dot + 1);
-  if (!constantTimeEqual(signature, sign(body, secret))) return null;
-
-  try {
-    const payload = JSON.parse(
-      Buffer.from(body, "base64url").toString("utf8"),
-    ) as SessionPayload;
-
-    if (payload.code !== code) return null;
-    if (payload.exp * 1000 <= now) return null;
-    if (payload.role !== "player" && payload.role !== "admin") return null;
-    return payload;
-  } catch {
-    return null;
-  }
+  if (payload.code !== code) return null;
+  if (payload.exp * 1000 <= now) return null;
+  if (payload.role !== "player" && payload.role !== "admin") return null;
+  return payload;
 }
 
 export function newSession(code: string, role: Role, now = Date.now()): SessionPayload {
@@ -94,17 +80,4 @@ export function sessionSecret(): string {
     );
   }
   return "khoa-chi-dung-khi-phat-trien-tren-may";
-}
-
-// ---------------------------------------------------------------------------
-
-function sign(body: string, secret: string): string {
-  return createHmac("sha256", secret).update(body).digest("base64url");
-}
-
-function constantTimeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, "utf8");
-  const bufB = Buffer.from(b, "utf8");
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
 }

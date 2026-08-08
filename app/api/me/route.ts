@@ -1,9 +1,14 @@
 /**
- * Thống kê của chính thiết bị này, không cần tài khoản.
+ * Thống kê của chính người đang xem.
  *
- * Mục 13 trong yêu cầu: lưu lại mọi thứ kể cả khi không tạo tài khoản, miễn là
- * người chơi vẫn dùng đúng máy đó. Máy nhớ mã các buổi đã mở (trong localStorage),
- * còn số liệu thì tính ở đây.
+ * Chạy được ở hai chế độ, và cả hai đều là chế độ chính:
+ *
+ * - **Chưa đăng nhập** — số liệu của đúng cái máy này. Mục 13 trong yêu cầu: giữ
+ *   lại mọi thứ kể cả khi người chơi không tạo tài khoản. Danh sách buổi nằm
+ *   trong `localStorage`, gửi lên đây để tính.
+ * - **Đã đăng nhập** — gộp thêm các buổi từ mọi máy khác của cùng tài khoản, và
+ *   nhận ra người chơi qua danh bạ câu lạc bộ đã gắn về tài khoản đó. Đây là
+ *   điều duy nhất mà việc đăng nhập mua được ở trang này, nên nó phải đúng.
  *
  * Nhận mã buổi từ phía trình duyệt chứ không tự dò trong kho, và đó là chủ ý:
  * quét cả bảng sự kiện của mọi người để tìm một thiết bị vừa tốn hạn mức vừa cho
@@ -13,8 +18,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { rollupEvents } from "@/lib/domain/rollup";
 import { DEVICE_COOKIE } from "@/lib/identity/device";
-import { getClubRepo, getRepo } from "@/lib/sheets/cache";
-import { fail, readJson } from "@/lib/api/context";
+import { getAccountRepo, getClubRepo, getRepo } from "@/lib/sheets/cache";
+import { readJson } from "@/lib/api/context";
+import { currentUser } from "@/lib/api/user";
 
 /** Chặn danh sách quá dài: một người không mở nổi vài trăm buổi đánh. */
 const MAX_CODES = 60;
@@ -29,26 +35,59 @@ export async function POST(request: NextRequest) {
   const parsed = await readJson<Body>(request);
   if (!parsed.ok) return parsed.response;
 
-  const codes = (parsed.body.codes ?? []).slice(0, MAX_CODES);
   const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
   const name = (parsed.body.name ?? "").trim().toLowerCase();
+  const fromBrowser = parsed.body.codes ?? [];
 
-  if (codes.length === 0) {
-    return NextResponse.json({ events: [], totals: emptyTotals(), periods: [] });
+  const me = await currentUser(request);
+  const userId = me?.account.userId ?? "";
+
+  // Máy nào của tài khoản này cũng tính là "máy của tôi": người chơi có thể đã
+  // nhập điểm từ điện thoại cũ, và kết quả đó vẫn là của họ.
+  const myDeviceIds = new Set(
+    [deviceId, ...(me?.devices.map((d) => d.deviceId) ?? [])].filter(Boolean),
+  );
+
+  // Câu lạc bộ của tôi, gộp qua tài khoản lẫn từng máy. Cần cho hai việc: lấy mã
+  // thành viên, và tìm ra những buổi mà cái máy này chưa bao giờ mở.
+  const myClubs = await clubsOf(myDeviceIds, userId);
+
+  // Chép danh sách của trình duyệt lên Sheet để máy khác của cùng tài khoản đọc
+  // được. Chỉ ghi khi thật sự có gì mới — trang này mở ra là gọi tới đây.
+  if (userId && deviceId && fromBrowser.length > 0) {
+    await rememberQuietly(deviceId, fromBrowser);
   }
 
-  // Mã thành viên của thiết bị này ở mọi câu lạc bộ: buổi tạo từ câu lạc bộ dùng
-  // memberId làm mã người chơi, nên không có bước này thì chúng không khớp được.
-  const myMemberIds = await memberIdsOf(deviceId);
+  const repo = getRepo();
+  const codes = dedupe([
+    ...fromBrowser,
+    ...(me?.devices.flatMap((d) => d.recentEvents) ?? []),
+    // Buổi đánh của câu lạc bộ mình. Vẫn không quét cả bảng sự kiện của mọi
+    // người — chỉ những nhóm mình thật sự là thành viên.
+    ...(myClubs.length > 0 ? await repo.codesByClubs(myClubs.map((c) => c.id)) : []),
+  ]).slice(0, MAX_CODES);
 
-  const loaded = await getRepo().listByCodes(codes);
+  if (codes.length === 0) {
+    return NextResponse.json({
+      events: [],
+      totals: emptyTotals(),
+      periods: [],
+      account: accountInfo(me),
+    });
+  }
+
+  // Mã thành viên của tôi ở mọi câu lạc bộ: buổi tạo từ câu lạc bộ dùng memberId
+  // làm mã người chơi, nên không có bước này thì chúng không khớp được.
+  const myMemberIds = await memberIdsOf(myClubs, myDeviceIds, userId);
+
+  const loaded = await repo.listByCodes(codes);
 
   const events = [];
   const totals = emptyTotals();
   const sources = [];
 
   for (const { record, state } of loaded) {
-    const me = findMe(state, deviceId, myMemberIds, name);
+    const me = findMe(state, userId, myDeviceIds, myMemberIds, name);
     if (!me) continue;
 
     const stats = statsFor(state, me.id);
@@ -81,7 +120,7 @@ export async function POST(request: NextRequest) {
     const mine = p.players.find(
       (row) =>
         myMemberIds.has(row.key.replace(/^m:/, "")) ||
-        row.key === `d:${deviceId}` ||
+        (row.key.startsWith("d:") && myDeviceIds.has(row.key.slice(2))) ||
         (name !== "" && row.key === `n:${name}`),
     );
     return {
@@ -95,19 +134,48 @@ export async function POST(request: NextRequest) {
     };
   });
 
-  return NextResponse.json({ events, totals, periods });
+  return NextResponse.json({ events, totals, periods, account: accountInfo(me) });
 }
 
-/** Mọi mã thành viên mà thiết bị này mang, gộp từ các câu lạc bộ nó đã vào. */
-async function memberIdsOf(deviceId: string): Promise<Set<string>> {
-  if (!deviceId) return new Set();
+/**
+ * Câu lạc bộ của tôi, tìm qua cả tài khoản lẫn từng thiết bị.
+ *
+ * Phải đi cả hai đường: dòng danh bạ tạo trước khi đăng nhập chỉ mang `deviceId`
+ * cho tới lần đăng nhập kế tiếp gắn nó lại.
+ */
+async function clubsOf(
+  deviceIds: Set<string>,
+  userId: string,
+): Promise<Array<{ id: string }>> {
   const repo = getClubRepo();
-  const clubs = await repo.forDevice(deviceId);
+  const clubs = [
+    ...(userId ? await repo.forUser(userId) : []),
+    ...(await Promise.all([...deviceIds].map((id) => repo.forDevice(id)))).flat(),
+  ];
+  return [...new Map(clubs.map((c) => [c.id, c])).values()];
+}
+
+/**
+ * Mọi mã thành viên của tôi trong các câu lạc bộ đó.
+ *
+ * Buổi tạo từ câu lạc bộ dùng `memberId` làm mã người chơi, nên không có bước
+ * này thì số liệu của chính mình không khớp được vào đâu cả.
+ */
+async function memberIdsOf(
+  clubs: Array<{ id: string }>,
+  deviceIds: Set<string>,
+  userId: string,
+): Promise<Set<string>> {
+  const repo = getClubRepo();
   const ids = await Promise.all(
     clubs.map(async (c) => {
       const loaded = await repo.load(c.id);
       return (loaded?.members ?? [])
-        .filter((m) => m.deviceId === deviceId && m.status === "active")
+        .filter(
+          (m) =>
+            m.status === "active" &&
+            ((userId !== "" && m.userId === userId) || deviceIds.has(m.deviceId)),
+        )
         .map((m) => m.memberId);
     }),
   );
@@ -117,26 +185,72 @@ async function memberIdsOf(deviceId: string): Promise<Set<string>> {
 /**
  * Tìm chính mình trong một buổi đánh.
  *
- * Ba đường, theo thứ tự chắc chắn giảm dần. Tên là đường cuối vì nó có thể trùng,
- * nhưng bỏ nó đi thì mọi buổi mà chủ sân gõ tên hộ sẽ biến mất khỏi trang này —
- * và đó là phần lớn các buổi.
+ * Bốn đường, theo thứ tự chắc chắn giảm dần. Tài khoản đứng đầu vì nó đúng trên
+ * mọi máy. Tên là đường cuối vì nó có thể trùng, nhưng bỏ nó đi thì mọi buổi mà
+ * chủ sân gõ tên hộ sẽ biến mất khỏi trang này — và đó là phần lớn các buổi.
  */
 function findMe(
-  state: { players: Array<{ id: string; name: string; memberId?: string; deviceId?: string }> },
-  deviceId: string,
+  state: {
+    players: Array<{
+      id: string;
+      name: string;
+      memberId?: string;
+      userId?: string;
+      deviceId?: string;
+    }>;
+  },
+  userId: string,
+  deviceIds: Set<string>,
   memberIds: Set<string>,
   lowerName: string,
 ) {
-  if (deviceId) {
-    const byDevice = state.players.find((p) => p.deviceId === deviceId);
-    if (byDevice) return byDevice;
+  if (userId) {
+    const byUser = state.players.find((p) => p.userId === userId);
+    if (byUser) return byUser;
   }
+  const byDevice = state.players.find((p) => p.deviceId && deviceIds.has(p.deviceId));
+  if (byDevice) return byDevice;
   const byMember = state.players.find((p) => p.memberId && memberIds.has(p.memberId));
   if (byMember) return byMember;
   if (lowerName) {
     return state.players.find((p) => p.name.trim().toLowerCase() === lowerName) ?? null;
   }
   return null;
+}
+
+/** Cho giao diện biết đang gộp số liệu của mấy máy, để nói thật về phạm vi. */
+function accountInfo(me: Awaited<ReturnType<typeof currentUser>>) {
+  if (!me) return null;
+  return {
+    email: me.account.email,
+    displayName: me.account.displayName,
+    devices: me.devices.length,
+  };
+}
+
+function dedupe(codes: string[]): string[] {
+  const seen = new Set<string>();
+  return codes.filter((code) => {
+    const trimmed = code.trim();
+    if (trimmed === "" || seen.has(trimmed)) return false;
+    seen.add(trimmed);
+    return true;
+  });
+}
+
+/**
+ * Ghi danh sách buổi lên Sheet, nuốt lỗi.
+ *
+ * Đây là việc phụ. Hạn mức Sheets hết hay mạng chập thì người dùng vẫn phải xem
+ * được số liệu của mình — không có lý do gì để cả trang hỏng vì một bước đồng bộ
+ * mà lần mở sau sẽ tự chạy lại.
+ */
+async function rememberQuietly(deviceId: string, codes: string[]): Promise<void> {
+  try {
+    await getAccountRepo().rememberEvents(deviceId, codes, Date.now());
+  } catch (error) {
+    console.error("[robin-pickleball] không chép được danh sách buổi lên Sheet:", error);
+  }
 }
 
 function statsFor(

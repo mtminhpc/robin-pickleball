@@ -1,21 +1,23 @@
 "use client";
 
 /**
- * Trang của tôi — không cần tài khoản.
+ * Trang của tôi — chạy được cả khi không có tài khoản.
  *
  * Mục 13 trong yêu cầu: giữ lại mọi thứ kể cả khi người chơi không tạo tài khoản,
  * miễn là họ vẫn dùng đúng cái điện thoại đó. Danh sách buổi đã mở nằm trong
  * `localStorage` của chính máy, số liệu thì máy chủ tính rồi trả về.
  *
- * Nói thẳng ngay trên trang rằng dữ liệu bám theo máy: xoá dữ liệu trình duyệt
- * hay đổi điện thoại là mất. Để người dùng tự phát hiện ra điều đó sau sáu tháng
- * sẽ tệ hơn nhiều so với nói trước một câu.
+ * Đăng nhập rồi thì máy chủ gộp thêm các buổi từ những máy khác của cùng tài
+ * khoản. Dòng chữ cuối trang **đổi theo trạng thái đó**, vì nó là lời hứa về
+ * việc dữ liệu có mất hay không — hứa sai ở đây thì người dùng chỉ phát hiện ra
+ * đúng lúc họ đã mất.
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { loadProfile, loadRecentEvents } from "@/lib/identity/device";
+import { AccountBar } from "@/components/AccountBar";
 import { Avatar } from "@/components/Avatar";
 import { Card, Empty } from "@/components/ui";
 
@@ -49,6 +51,8 @@ interface MeResponse {
     rank: number;
     of: number;
   }>;
+  /** `null` khi chưa đăng nhập — số liệu khi đó chỉ của riêng máy này. */
+  account: { email: string; displayName: string; devices: number } | null;
 }
 
 export default function MePage() {
@@ -88,8 +92,16 @@ export default function MePage() {
         <div className="flex items-center gap-3 pt-1">
           {profile && <Avatar name={profile.name} avatarId={profile.avatarId} size="lg" />}
           <div>
-            <h1 className="text-2xl font-bold">{profile?.name || "Máy này"}</h1>
-            <p className="text-sm text-slate-400">Số liệu lưu trên máy, không cần tài khoản</p>
+            <h1 className="text-2xl font-bold">
+              {data?.account?.displayName || profile?.name || "Máy này"}
+            </h1>
+            <p className="text-sm text-slate-400">
+              {data?.account
+                ? data.account.devices > 1
+                  ? `Gộp số liệu từ ${data.account.devices} máy`
+                  : "Số liệu theo tài khoản"
+                : "Số liệu lưu trên máy, không cần tài khoản"}
+            </p>
           </div>
         </div>
       </header>
@@ -173,10 +185,12 @@ export default function MePage() {
         </>
       )}
 
+      <AccountBar next="/me" />
+
       <p className="pb-4 text-xs text-slate-600">
-        Số liệu này bám theo máy bạn đang dùng. Xoá dữ liệu trình duyệt hoặc đổi
-        điện thoại là mất. Đăng nhập bằng tài khoản Google để giữ lại xuyên thiết
-        bị sẽ có ở bản sau.
+        {data?.account
+          ? "Số liệu này bám theo tài khoản của bạn. Đăng nhập trên điện thoại mới là thấy lại đủ."
+          : "Số liệu này bám theo máy bạn đang dùng. Xoá dữ liệu trình duyệt hoặc đổi điện thoại là mất."}
       </p>
     </main>
   );

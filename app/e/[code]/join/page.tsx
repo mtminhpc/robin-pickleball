@@ -8,7 +8,12 @@
  *   1. Tên mình đã có sẵn trong danh sách (chủ sân gõ trước) → bấm "Đây là tôi"
  *      để nhận, rồi đổi ảnh nếu muốn.
  *   2. Chưa có tên → gõ tên, chọn ảnh, tham gia.
- *   3. Đã tham gia rồi, quay lại từ máy cũ → nhận ra ngay và cho vào thẳng.
+ *   3. Đã tham gia rồi, quay lại → nhận ra ngay và cho vào thẳng. Từ cùng máy
+ *      thì nhận ra qua máy; đã đăng nhập thì nhận ra trên máy nào cũng được.
+ *
+ * Câu hỏi "ai trong danh sách này là tôi" do **máy chủ** trả lời chứ không phải
+ * trang này tự dò: cookie tài khoản là `httpOnly` nên trình duyệt không đọc
+ * được, và người vừa đổi điện thoại thì cũng chẳng có mã máy nào để dò.
  *
  * Trước giờ bắt đầu thì vào thẳng. Sau khi chủ sân bấm Bắt đầu thì mọi người vào
  * thêm đều rơi vào hàng chờ duyệt — đúng như đã chốt ở mục 20.
@@ -48,16 +53,17 @@ export default function JoinPage() {
   const deviceId = data?.deviceId || readDeviceId() || "";
 
   const mine = useMemo(
-    () => data?.state.players.find((p) => p.deviceId && p.deviceId === deviceId),
-    [data, deviceId],
+    () => data?.state.players.find((p) => p.id === data.myPlayerId),
+    [data],
   );
 
-  // Những người chủ sân đã gõ sẵn mà chưa gắn với máy nào — có thể là mình.
+  // Những người chủ sân đã gõ sẵn mà chưa máy nào nhận — có thể là mình.
   const unclaimed = useMemo(
     () =>
       (data?.state.players ?? []).filter(
         (p) =>
           !p.deviceId &&
+          p.id !== data?.myPlayerId &&
           p.status !== "left" &&
           p.status !== "rejected" &&
           p.status !== "declined",
@@ -111,14 +117,15 @@ export default function JoinPage() {
     saveProfile({ name: trimmed, avatarId: avatarId ?? "" });
 
     if (claimId) {
-      // Nhận ô tên chủ sân đã gõ sẵn: gắn máy này vào và cập nhật ảnh.
+      // Một lệnh, không phải hai: `ClaimPlayer` vừa đổi tên/ảnh vừa gắn máy này
+      // vào ô tên. Máy chủ tự điền mã máy và mã tài khoản, trang này không gửi
+      // lên — và cũng không được phép gửi.
       queue.send({
-        type: "UpdateProfile",
+        type: "ClaimPlayer",
         playerId: claimId,
         name: trimmed,
         avatarId: avatarId ?? "",
       });
-      queue.send({ type: "MarkArrived", playerId: claimId });
     } else {
       const seed: PlayerSeed = {
         id: `p-${crypto.randomUUID().slice(0, 8)}`,

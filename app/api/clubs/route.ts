@@ -10,6 +10,7 @@ import { checkClubName, checkMemberName } from "@/lib/domain/club";
 import { DEVICE_COOKIE } from "@/lib/identity/device";
 import { getClubRepo, invalidateClub } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
+import { currentUserId } from "@/lib/api/user";
 
 interface CreateBody {
   name?: string;
@@ -19,9 +20,29 @@ interface CreateBody {
   defaultPointsTo?: number;
 }
 
+/**
+ * Câu lạc bộ của người gửi yêu cầu.
+ *
+ * Gộp hai đường: câu lạc bộ mà cái máy này đã vào, và câu lạc bộ mà tài khoản
+ * này đã vào từ máy khác. Người vừa đăng nhập trên điện thoại mới phải thấy đủ
+ * cả hai — đó chính là điều họ đăng nhập để có.
+ */
 export async function GET(request: NextRequest) {
   const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
-  const clubs = await getClubRepo().forDevice(deviceId);
+  const userId = currentUserId(request);
+
+  const repo = getClubRepo();
+  const [byDevice, byUser] = await Promise.all([
+    repo.forDevice(deviceId),
+    userId ? repo.forUser(userId) : Promise.resolve([]),
+  ]);
+
+  const seen = new Set<string>();
+  const clubs = [...byDevice, ...byUser].filter((club) => {
+    if (seen.has(club.id)) return false;
+    seen.add(club.id);
+    return true;
+  });
   return NextResponse.json({ clubs });
 }
 
@@ -45,9 +66,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const userId = currentUserId(request);
   const created = await getClubRepo().create({
     name: body.name!,
-    ownerRef: deviceId,
+    ownerDeviceId: deviceId,
+    ...(userId ? { ownerUserId: userId } : {}),
     ownerName,
     ownerAvatarId: body.ownerAvatarId ?? "e01-c01",
     settings: {

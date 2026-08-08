@@ -38,6 +38,9 @@ export async function POST(
       displayName,
       avatarId: parsed.body.avatarId ?? "e01-c01",
       deviceId: ctx.deviceId,
+      // Ghi luôn mã tài khoản nếu đang đăng nhập, để cái máy thứ hai của cùng
+      // người đó rơi vào đúng dòng này thay vì tạo dòng mới.
+      ...(ctx.userId ? { userId: ctx.userId } : {}),
     },
     Date.now(),
   );

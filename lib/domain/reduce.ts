@@ -380,6 +380,38 @@ function applyInPlace(
       return ok(null);
     }
 
+    case "ClaimPlayer": {
+      const p = findPlayer(state, c.playerId);
+      if (!p) return err("Không tìm thấy người chơi.");
+
+      // Ô tên đã có chủ thì không ai nhận đè lên được. Không có luật này thì
+      // người quét mã sau cùng chiếm được tên của người đang chơi, và mọi kết
+      // quả từ đó rơi vào nhầm người.
+      if (p.deviceId && c.deviceId && p.deviceId !== c.deviceId) {
+        return err("Tên này đã có người nhận rồi.");
+      }
+      if (p.userId && c.userId && p.userId !== c.userId) {
+        return err("Tên này thuộc về tài khoản khác.");
+      }
+
+      if (c.name !== undefined && c.name.trim() !== "") p.name = c.name.trim();
+      if (c.avatarId !== undefined && c.avatarId !== "") p.avatarId = c.avatarId;
+      if (c.deviceId) p.deviceId = c.deviceId;
+      if (c.userId) p.userId = c.userId;
+
+      if (p.status === "active") return ok(null);
+      if (state.status === "draft") {
+        p.status = "confirmed";
+        return ok(null);
+      }
+      // Sau giờ bắt đầu thì vẫn phải chờ duyệt, hệt như `RequestJoin`. Chủ sân
+      // gõ sẵn cái tên không có nghĩa là đồng ý cho người vừa quét mã vào sân
+      // giữa buổi — hai việc đó khác nhau, và trộn vào nhau thì lịch bị xếp cho
+      // một người không ai biết là ai.
+      p.status = "pendingApproval";
+      return ok(null);
+    }
+
     case "ApproveJoin": {
       const p = findPlayer(state, c.playerId);
       if (!p) return err("Không tìm thấy người chơi.");

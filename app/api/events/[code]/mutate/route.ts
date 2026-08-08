@@ -11,7 +11,11 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { isAllowedForRole, type Command, type CommandEnvelope } from "@/lib/domain/commands";
+import {
+  isAllowedForRole,
+  type Command,
+  type CommandEnvelope,
+} from "@/lib/domain/commands";
 import { nextScheduleCommand } from "@/lib/domain/autoplan";
 import { apply } from "@/lib/domain/reduce";
 import { canEditResult } from "@/lib/domain/rules";
@@ -53,6 +57,8 @@ export async function POST(
   const denied = checkPermission(command, ctx);
   if (denied) return fail(403, denied);
 
+  const stamped = stampIdentity(command, ctx);
+
   // Xếp hàng theo mã sự kiện: hai người trong cùng một thực thể hàm không chen
   // nhau. Không chặn được hai thực thể khác nhau, nhưng chỗ đó đã có nhật ký
   // chỉ-ghi-thêm lo.
@@ -66,7 +72,7 @@ export async function POST(
 
     const now = Date.now();
     const envelopes: CommandEnvelope[] = [
-      { id: commandId, at: now, actor: ctx.actor, command },
+      { id: commandId, at: now, actor: ctx.actor, command: stamped },
     ];
 
     // Xếp lịch phải nhìn trạng thái SAU khi áp lệnh, không phải trước.
@@ -93,6 +99,30 @@ export async function POST(
 
   invalidateEvent(code);
   return NextResponse.json({ state: result.state, seq: result.seq });
+}
+
+/**
+ * Đóng dấu danh tính của người gửi lên những lệnh cần nó.
+ *
+ * Danh tính lấy từ cookie đã ký, **ghi đè** thứ trình duyệt gửi lên. Cả hai lệnh
+ * dưới đây đều công khai — ai quét được mã QR là gọi được — nên để trình duyệt
+ * tự khai mình là ai thì bất kỳ ai cũng nhận được ô tên của người khác, hoặc
+ * ghi kết quả dưới danh nghĩa tài khoản người khác.
+ */
+function stampIdentity(
+  command: Command,
+  ctx: Extract<Awaited<ReturnType<typeof resolveContext>>, { role: string }>,
+): Command {
+  const identity = {
+    ...(ctx.deviceId ? { deviceId: ctx.deviceId } : {}),
+    ...(ctx.userId ? { userId: ctx.userId } : {}),
+  };
+
+  if (command.type === "ClaimPlayer") return { ...command, ...identity };
+  if (command.type === "RequestJoin") {
+    return { ...command, player: { ...command.player, ...identity } };
+  }
+  return command;
 }
 
 /**

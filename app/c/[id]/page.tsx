@@ -11,6 +11,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { isClubOwner } from "@/lib/domain/club";
 import { rememberClub } from "@/lib/identity/device";
 import { useClub, useClubMutation } from "@/hooks/useClub";
 import { Avatar } from "@/components/Avatar";
@@ -82,7 +83,9 @@ export default function ClubPage() {
             <Avatar name={m.displayName} avatarId={m.avatarId} />
             <span className="min-w-0 flex-1 truncate font-medium">{m.displayName}</span>
             {m.memberId === me?.memberId && <Tag tone="ok">bạn</Tag>}
-            {club.ownerRef === m.deviceId && <Tag>người tạo</Tag>}
+            {isClubOwner(club, { deviceId: m.deviceId, userId: m.userId }) && (
+              <Tag>người tạo</Tag>
+            )}
             {(isOwner || m.memberId === me?.memberId) && (
               <button
                 className="shrink-0 px-2 text-sm text-slate-400 hover:text-slate-100"
@@ -108,6 +111,9 @@ export default function ClubPage() {
         open={showInvite}
         clubId={club.id}
         inviteCode={club.inviteCode}
+        canRotate={isOwner}
+        rotating={mutate.isPending}
+        onRotate={() => mutate.mutate({ body: { rotateInvite: true } })}
         onClose={() => setShowInvite(false)}
       />
       <EditMemberDialog
@@ -137,18 +143,35 @@ export default function ClubPage() {
   );
 }
 
+/**
+ * Mã QR và mã mời, kèm nút đổi mã cho chủ câu lạc bộ.
+ *
+ * Mã mời không hết hạn và dùng được vô số lần — chiếu lên tường sân cho hai mươi
+ * người cùng quét thì buộc phải như vậy. Cái giá là nó sống mãi: ai chụp màn
+ * hình gửi lung tung, hay người đã rời nhóm, đều còn đường quay lại. Nút đổi mã
+ * là cách khoá cửa lại, và có hỏi lại một câu vì mã cũ chết ngay lập tức — kể cả
+ * tờ giấy đang dán ở sân.
+ */
 function InviteDialog({
   open,
   clubId,
   inviteCode,
+  canRotate,
+  rotating,
+  onRotate,
   onClose,
 }: {
   open: boolean;
   clubId: string;
   inviteCode: string;
+  canRotate: boolean;
+  rotating: boolean;
+  onRotate: () => void;
   onClose: () => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
   if (!open) return null;
+
   return (
     <Dialog open onClose={onClose} title="Mời vào câu lạc bộ">
       <div className="space-y-4">
@@ -157,11 +180,50 @@ function InviteDialog({
         </p>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`/api/clubs/${encodeURIComponent(clubId)}/qr`}
+          // `inviteCode` trong đường dẫn không phải để máy chủ đọc mà để trình
+          // duyệt biết đây là ảnh khác sau khi đổi mã — thiếu nó thì ảnh cũ nằm
+          // lại trong bộ đệm và người ta quét phải mã vừa bị khai tử.
+          src={`/api/clubs/${encodeURIComponent(clubId)}/qr?v=${inviteCode}`}
           alt="Mã QR mời vào câu lạc bộ"
           className="mx-auto w-56 rounded-xl bg-white p-3"
         />
         <p className="text-center font-mono text-2xl tracking-[0.3em]">{inviteCode}</p>
+
+        {canRotate && !confirming && (
+          <button
+            className="w-full text-sm text-slate-400 hover:text-slate-100"
+            onClick={() => setConfirming(true)}
+          >
+            Đổi mã mời
+          </button>
+        )}
+
+        {confirming && (
+          <div className="space-y-3 rounded-xl bg-amber-500/10 p-3">
+            <p className="text-sm text-amber-200">
+              Mã <span className="font-mono">{inviteCode}</span> sẽ hết dùng được
+              ngay, kể cả mã QR đã in ra dán ở sân. Danh bạ giữ nguyên — đổi mã
+              chỉ chặn người mới vào, không đuổi ai đang ở trong.
+            </p>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => setConfirming(false)}>
+                Thôi
+              </Button>
+              <Button
+                tone="danger"
+                className="flex-1"
+                disabled={rotating}
+                onClick={() => {
+                  onRotate();
+                  setConfirming(false);
+                }}
+              >
+                {rotating ? "Đang đổi…" : "Đổi mã"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         <Button full onClick={onClose}>
           Xong
         </Button>

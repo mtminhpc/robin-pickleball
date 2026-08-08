@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",
-    "bootstrap-sheet": "tsx scripts/bootstrap-sheet.ts"
+    "bootstrap-sheet": "tsx scripts/bootstrap-sheet.ts",
+    "check-env": "tsx scripts/check-env.ts",
+    "new-secret": "tsx scripts/new-secret.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",

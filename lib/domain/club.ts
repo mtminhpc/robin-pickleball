@@ -11,8 +11,10 @@
  * nhật ký chỉ tổ nặng nề mà không mua thêm được gì. Điều duy nhất phải giữ là
  * *thêm thành viên thì không được mất* — và cái đó có sẵn nhờ nối thêm dòng.
  *
- * Danh tính thành viên bám theo `deviceId` cho tới khi có tài khoản Google ở giai
- * đoạn sau. Đủ dùng vì gần như ai cũng dùng đúng một điện thoại ra sân.
+ * Danh tính thành viên bám theo `deviceId`, và bám thêm `userId` khi người đó đã
+ * đăng nhập. Hai đường song song chứ không thay thế nhau: người ra sân không
+ * đăng nhập vẫn được nhận ra qua máy như cũ, người đã đăng nhập thì được nhận ra
+ * trên mọi máy.
  */
 
 export type ClubId = string;
@@ -48,7 +50,7 @@ export interface ClubMember {
   memberId: MemberId;
   displayName: string;
   avatarId: string;
-  /** Tài khoản Google, để trống cho tới giai đoạn sau. */
+  /** Tài khoản Google. Trống với người chưa đăng nhập bao giờ — phần lớn là vậy. */
   userId: string;
   /** Thiết bị đã nhận là mình — khoá chính trên thực tế ở giai đoạn này. */
   deviceId: string;
@@ -77,6 +79,47 @@ export function memberForDevice(
   return (
     members.find((m) => m.status === "active" && m.deviceId === deviceId) ?? null
   );
+}
+
+/**
+ * Thành viên ứng với một tài khoản.
+ *
+ * Đây là thứ khiến việc đăng nhập đáng bỏ công: mở câu lạc bộ trên cái điện
+ * thoại mới mua vẫn thấy tên mình sẵn đó, không phải xin mã mời lần nữa.
+ */
+export function memberForUser(
+  members: ClubMember[],
+  userId: string,
+): ClubMember | null {
+  if (!userId) return null;
+  return members.find((m) => m.status === "active" && m.userId === userId) ?? null;
+}
+
+/**
+ * `ownerRef` của một câu lạc bộ đã thuộc về tài khoản.
+ *
+ * Có tiền tố `u:` để phân biệt với mã thiết bị. Cả hai đều là UUID nên nhìn vào
+ * chuỗi trần không đoán ra được, mà đoán sai ở đây nghĩa là trao quyền chủ câu
+ * lạc bộ cho nhầm người.
+ */
+export function ownerRefForUser(userId: string): string {
+  return `u:${userId}`;
+}
+
+/**
+ * Ai là chủ câu lạc bộ.
+ *
+ * Nhận cả hai dạng `ownerRef` vì dữ liệu cũ mang mã thiết bị còn dữ liệu sau khi
+ * chủ câu lạc bộ đăng nhập thì mang mã tài khoản. Không có chỗ này thì đúng vào
+ * lúc đăng nhập, người ta mất quyền với câu lạc bộ của chính mình.
+ */
+export function isClubOwner(
+  club: Pick<Club, "ownerRef">,
+  who: { deviceId?: string; userId?: string | null },
+): boolean {
+  if (who.deviceId && club.ownerRef === who.deviceId) return true;
+  if (who.userId && club.ownerRef === ownerRefForUser(who.userId)) return true;
+  return false;
 }
 
 /** Kiểm tên câu lạc bộ. Trả câu giải thích nếu không dùng được, `null` nếu được. */

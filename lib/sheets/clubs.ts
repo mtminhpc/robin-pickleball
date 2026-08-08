@@ -19,6 +19,7 @@
 import { randomUUID } from "node:crypto";
 import {
   DEFAULT_CLUB_SETTINGS,
+  ownerRefForUser,
   type Club,
   type ClubId,
   type ClubMember,
@@ -107,7 +108,9 @@ export class ClubRepo {
    */
   async create(input: {
     name: string;
-    ownerRef: string;
+    ownerDeviceId: string;
+    /** Tài khoản của người tạo, nếu họ đã đăng nhập. */
+    ownerUserId?: string;
     ownerName: string;
     ownerAvatarId: string;
     settings?: Partial<ClubSettings>;
@@ -118,7 +121,11 @@ export class ClubRepo {
     const club: Club = {
       id: randomUUID(),
       name: input.name.trim(),
-      ownerRef: input.ownerRef,
+      // Người đã đăng nhập thì ghi thẳng quyền chủ về tài khoản. Đổi điện thoại
+      // là chuyện xảy ra hàng năm; câu lạc bộ thì sống lâu hơn thế.
+      ownerRef: input.ownerUserId
+        ? ownerRefForUser(input.ownerUserId)
+        : input.ownerDeviceId,
       inviteCode: await this.pickUnusedInviteCode(),
       createdAt: input.at,
       settings: { ...DEFAULT_CLUB_SETTINGS, ...input.settings },
@@ -128,8 +135,8 @@ export class ClubRepo {
       memberId: randomUUID(),
       displayName: input.ownerName.trim(),
       avatarId: input.ownerAvatarId,
-      userId: "",
-      deviceId: input.ownerRef,
+      userId: input.ownerUserId ?? "",
+      deviceId: input.ownerDeviceId,
       joinedAt: input.at,
       status: "active",
     };
@@ -147,6 +154,9 @@ export class ClubRepo {
    * Trả lại thành viên cũ nếu thiết bị đó đã ở trong câu lạc bộ, thay vì tạo bản
    * sao. Người ta bấm hai lần, mở lại đường dẫn cũ, quét lại mã QR — mà mỗi lần
    * lại mọc thêm một "Nam" nữa trong danh bạ thì danh bạ hỏng rất nhanh.
+   *
+   * Người đã đăng nhập còn được nhận ra qua tài khoản, nên quét mã trên máy thứ
+   * hai cũng rơi vào đúng dòng cũ chứ không tạo dòng mới.
    */
   async addMember(
     clubId: ClubId,
@@ -164,8 +174,8 @@ export class ClubRepo {
         i > 0 &&
         row[M.club_id] === clubId &&
         row[M.status] === "active" &&
-        seed.deviceId !== "" &&
-        row[M.device_id] === seed.deviceId,
+        ((seed.deviceId !== "" && row[M.device_id] === seed.deviceId) ||
+          (!!seed.userId && row[M.user_id] === seed.userId)),
     );
     if (existing) return toMember(existing);
 
@@ -212,10 +222,110 @@ export class ClubRepo {
     return updated;
   }
 
+  /**
+   * Gắn mọi thứ của một thiết bị về một tài khoản: dòng danh bạ, và quyền chủ.
+   *
+   * Chạy ngay sau khi đăng nhập. Đây là chỗ tài khoản trả công cho ba giây bấm
+   * nút: từ lúc này, mở câu lạc bộ trên **cái điện thoại mới** cũng nhận ra bạn
+   * — không phải xin lại mã mời, không phải gõ lại tên, và nhất là không mọc
+   * thêm một "Nam" thứ hai trong danh bạ.
+   *
+   * Hai việc đi chung một lô ghi, không phải để nhanh mà để đúng: chủ câu lạc bộ
+   * mà chỉ đổi được một nửa thì có lúc họ là chủ theo bảng này, không phải chủ
+   * theo bảng kia.
+   *
+   * Bỏ qua những dòng đã mang đúng tài khoản đó, nên đăng nhập lại lần nữa không
+   * tốn lời gọi ghi nào.
+   */
+  async claimForDevice(
+    deviceId: string,
+    userId: string,
+  ): Promise<{ members: number; clubs: number }> {
+    if (!deviceId || !userId) return { members: 0, clubs: 0 };
+
+    const ownerRef = ownerRefForUser(userId);
+    const [clubRows, memberRows] = await this.readAll();
+
+    const memberOps = memberRows.flatMap((row, i) => {
+      if (i === 0 || row[M.device_id] !== deviceId) return [];
+      if (row[M.user_id] === userId) return [];
+      return [
+        {
+          kind: "update" as const,
+          range: rowRange(TABS.clubMembers, i, MEMBER_COLUMNS.length),
+          values: [memberRow({ ...toMember(row), userId })],
+        },
+      ];
+    });
+
+    const clubOps = clubRows.flatMap((row, i) => {
+      if (i === 0 || row[C.owner_ref] !== deviceId) return [];
+      return [
+        {
+          kind: "update" as const,
+          range: rowRange(TABS.clubs, i, CLUB_COLUMNS.length),
+          values: [clubRow({ ...toClub(row), ownerRef })],
+        },
+      ];
+    });
+
+    const ops = [...memberOps, ...clubOps];
+    if (ops.length > 0) await this.sheets.batch(ops);
+    return { members: memberOps.length, clubs: clubOps.length };
+  }
+
+  /** Câu lạc bộ mà một tài khoản là thành viên, gộp qua mọi thiết bị của họ. */
+  async forUser(userId: string): Promise<Club[]> {
+    if (!userId) return [];
+    const [clubRows, memberRows] = await this.readAll();
+    const mine = new Set(
+      memberRows
+        .filter(
+          (row, i) =>
+            i > 0 && row[M.user_id] === userId && row[M.status] === "active",
+        )
+        .map((row) => row[M.club_id]),
+    );
+    return clubRows
+      .filter((row, i) => i > 0 && mine.has(row[C.club_id]))
+      .map(toClub);
+  }
+
   /** Gỡ khỏi danh bạ. Giữ lại dòng để lịch sử các buổi cũ không bị mất tên. */
   async removeMember(clubId: ClubId, memberId: MemberId): Promise<boolean> {
     const out = await this.updateMember(clubId, memberId, { status: "removed" });
     return out !== null;
+  }
+
+  /**
+   * Đổi mã mời sang một mã mới, chưa ai dùng.
+   *
+   * Mã mời không hết hạn và không giới hạn số lần dùng — chiếu lên tường sân cho
+   * hai mươi người cùng quét thì nó phải như vậy. Cái giá là mã đó sống mãi:
+   * người vào nhầm nhóm, người đã rời nhóm, hay ai đó chụp màn hình gửi lung
+   * tung, đều còn đường quay lại vô thời hạn.
+   *
+   * Nút này là cách khoá cửa. Cố ý **không** động tới danh bạ: đổi mã là chặn
+   * người mới vào, không phải đuổi người đang ở trong — hai việc khác nhau, và
+   * gộp lại thì chủ sân bấm một nút mà mất cả nhóm.
+   */
+  async rotateInviteCode(clubId: ClubId): Promise<Club | null> {
+    const [clubRows] = await this.readAll();
+    const rowIndex = clubRows.findIndex((row, i) => i > 0 && row[C.club_id] === clubId);
+    if (rowIndex === -1) return null;
+
+    const updated: Club = {
+      ...toClub(clubRows[rowIndex]!),
+      inviteCode: await this.pickUnusedInviteCode(),
+    };
+    await this.sheets.batch([
+      {
+        kind: "update",
+        range: rowRange(TABS.clubs, rowIndex, CLUB_COLUMNS.length),
+        values: [clubRow(updated)],
+      },
+    ]);
+    return updated;
   }
 
   /** Đổi tên hoặc cấu hình mặc định. */

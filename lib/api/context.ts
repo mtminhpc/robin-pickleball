@@ -8,17 +8,22 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import type { Actor, EventState } from "../domain/types";
+import type { Actor, EventState, Player } from "../domain/types";
 import type { Role } from "../domain/commands";
 import { DEVICE_COOKIE } from "../identity/device";
 import { cookieName, sessionSecret, verifySession } from "../auth/session";
 import { readEvent, type CachedEvent } from "../sheets/cache";
+import { currentUserId } from "./user";
 
 export interface RequestContext {
   code: string;
   event: CachedEvent;
   role: Role;
   deviceId: string;
+  /** Tài khoản đang đăng nhập, `null` với phần lớn người ra sân. */
+  userId: string | null;
+  /** Người chơi ứng với người gửi yêu cầu, nếu tìm được. */
+  me: Player | null;
   actor: Actor;
 }
 
@@ -44,14 +49,43 @@ export async function resolveContext(
   );
   const role: Role = session?.role ?? "viewer";
   const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  // Chỉ đọc cookie đã ký, không đọc bảng tài khoản: đây là đường bị gọi nhiều
+  // nhất trong cả ứng dụng, mỗi điện thoại đang mở app hỏi lại vài giây một lần.
+  const userId = currentUserId(request);
+  const me = findMyPlayer(event.state, deviceId, userId);
 
   return {
     code,
     event,
     role,
     deviceId,
-    actor: buildActor(role, deviceId, event.state),
+    userId,
+    me,
+    actor: buildActor(role, deviceId, me),
   };
+}
+
+/**
+ * Người chơi ứng với người đang gửi yêu cầu.
+ *
+ * Tài khoản trước, máy sau. Thứ tự đó là toàn bộ điểm của việc đăng nhập: đổi
+ * điện thoại giữa mùa thì cái máy mới chưa có trong sự kiện nào cả, nhưng tài
+ * khoản thì có — và người dùng mong đợi mở app lên là thấy mình, không phải gõ
+ * lại tên rồi ngồi chờ duyệt.
+ */
+export function findMyPlayer(
+  state: EventState,
+  deviceId: string,
+  userId: string | null,
+): Player | null {
+  if (userId) {
+    const byUser = state.players.find((p) => p.userId && p.userId === userId);
+    if (byUser) return byUser;
+  }
+  if (deviceId) {
+    return state.players.find((p) => p.deviceId && p.deviceId === deviceId) ?? null;
+  }
+  return null;
 }
 
 /**
@@ -60,11 +94,10 @@ export async function resolveContext(
  * `ref` là mã thiết bị chứ không phải mã người chơi: khi ai đó nhập điểm thay
  * cho trận của người khác thì vẫn phải chính máy đó mới được sửa lại.
  */
-function buildActor(role: Role, deviceId: string, state: EventState): Actor {
-  const player = state.players.find((p) => p.deviceId && p.deviceId === deviceId);
+function buildActor(role: Role, deviceId: string, me: Player | null): Actor {
   return {
     kind: role === "admin" ? "admin" : "player",
-    label: player?.name ?? (role === "admin" ? "chủ sự kiện" : "người chơi"),
+    label: me?.name ?? (role === "admin" ? "chủ sự kiện" : "người chơi"),
     ref: deviceId || undefined,
   };
 }

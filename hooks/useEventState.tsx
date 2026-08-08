@@ -20,6 +20,13 @@ export interface EventSnapshot {
   state: EventState;
   role: Role;
   deviceId: string;
+  /**
+   * Người chơi nào là người đang xem, do máy chủ trả lời.
+   *
+   * Trình duyệt không tự dò được: cookie tài khoản là `httpOnly` nên chỉ máy chủ
+   * đọc nổi, và người vừa đổi điện thoại thì không có mã máy nào để dò cả.
+   */
+  myPlayerId: string | null;
   requiresPlayerPassword: boolean;
   repaired: boolean;
 }

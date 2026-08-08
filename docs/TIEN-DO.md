@@ -1,10 +1,69 @@
 # Tiến độ dự án
 
-Cập nhật: 08/08/2026 · nhánh `claude/pickleball-round-robin-app-fq8sja` · commit `75c088b`
+Cập nhật: 08/08/2026 · nhánh `claude/pickleball-round-robin-app-fq8sja` · sau GĐ3
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
 chạy thế nào, và việc gì còn dang dở. Hướng dẫn nối Google Sheet thật nằm riêng ở
 [SETUP.md](SETUP.md).
+
+---
+
+## Bàn giao — đọc mục này trước
+
+Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
+
+### Đang ở đâu
+
+Mã nguồn **xong và đã kiểm chứng** tới hết GĐ3: xếp lịch, buổi đánh, câu lạc bộ,
+tổng kết, đăng nhập Google, đổi mã mời. `npm test` 207 bài xanh, `npm run build`
+sạch. Không có việc nào đang dở dang giữa chừng trong mã.
+
+Việc còn lại **không phải viết mã**, mà là **triển khai** — và nó đang chờ ba
+thứ chỉ chủ dự án làm được, vì đều cần đăng nhập vào tài khoản riêng:
+
+1. Tạo service account Google + chia sẻ một Google Sheet (**bắt buộc**, thiếu là
+   bản thật từ chối khởi động)
+2. Tạo OAuth client để bật đăng nhập (tuỳ chọn)
+3. Đăng nhập Vercel
+
+Từng bước ở [SETUP.md](SETUP.md), kèm mục *Thứ tự phụ thuộc* giải quyết cái vòng
+lặp dễ vướng: redirect URI cần địa chỉ thật của bản deploy, mà địa chỉ đó chỉ có
+sau lần deploy đầu.
+
+### Bắt đầu lại trên máy mới
+
+```powershell
+npm install        # BẮT BUỘC chạy lại — xem lưu ý OneDrive bên dưới
+npm test           # 207 bài, xác nhận máy mới chạy đúng
+npm run dev
+```
+
+Ba thứ **không nằm trong git** nên máy mới sẽ không có, và đó là đúng:
+
+| Thiếu gì | Hậu quả | Cách xử lý |
+|---|---|---|
+| `.env.local` | Chạy ở kho thử, không nối Google Sheet | Tạo lại theo [SETUP.md](SETUP.md). Chạy thử ở nhà thì không cần |
+| `.data\` | Không có dữ liệu buổi đánh cũ | Bình thường — nó chỉ là dữ liệu bấm thử |
+| `node_modules\` | Chưa cài | `npm install` |
+
+### Bốn cái bẫy đã mất thời gian, đừng vấp lại
+
+| Bẫy | Triệu chứng | Cách tránh |
+|---|---|---|
+| **Sửa tệp tiếng Việt bằng PowerShell** (`Get-Content -Raw` + `-replace` + ghi lại) | Toàn bộ dấu tiếng Việt biến thành `Tiáº¿n Ä‘á»™` | Chỉ dùng công cụ soạn thảo. PowerShell 5.1 đọc mặc định theo bảng mã ANSI nên hỏng mã hoá UTF-8 |
+| **`npm run build` khi `npm run dev` đang chạy** | Trang mất sạch định dạng, chữ đen nền trắng | Dừng dev trước. Hai lệnh cùng ghi vào `.next` |
+| **Ghi thẳng vào `.data\sheet.json` từ tiến trình khác** trong lúc máy chủ chạy | Kết quả lúc đạt lúc hỏng với cùng một đoạn mã | Đã sửa: kho nay nạp lại khi tệp đổi. Nhưng vẫn còn lớp đệm 60 giây của Next cho câu lạc bộ và tài khoản |
+| **`node_modules` nằm trong OneDrive** | Đồng bộ rất chậm, thỉnh thoảng hỏng tệp giữa chừng | Đừng chờ OneDrive đồng bộ `node_modules`. Máy mới cứ `npm install` lại từ đầu |
+
+### Một quyết định còn treo
+
+Repo có **cả `pnpm-lock.yaml` lẫn `package-lock.json`**. Hai tệp khoá cho cùng
+một dự án thì sớm muộn cũng lệch nhau. Nên chọn một:
+
+- Bỏ `pnpm-lock.yaml`, dùng hẳn npm — hợp với thực tế đang chạy trên Windows
+- Hoặc thêm `package-lock.json` vào `.gitignore` và quay lại pnpm
+
+Chưa chọn thì chưa hỏng gì, nhưng đừng để lâu.
 
 ---
 
@@ -62,7 +121,9 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
-| Chạy bộ kiểm thử | `npm test` (172 bài, ~20 giây) |
+| Chạy bộ kiểm thử | `npm test` (207 bài, ~50 giây) |
+| Soát cấu hình trước khi triển khai | `npm run check-env` |
+| Sinh `APP_SECRET` mới | `npm run new-secret` |
 | Quét công bằng 42 cấu hình | `npm run sim -- --matrix` |
 | Mô phỏng một buổi cụ thể | `npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9` |
 | Mở bằng điện thoại cùng wifi | `npm run dev -- -H 0.0.0.0`, lấy IP bằng `ipconfig`, vào `http://192.168.x.x:3000` |
@@ -129,6 +190,19 @@ Tạo thêm một buổi nữa cho cùng câu lạc bộ, chơi vài trận, r�
 Trang chủ → nút **Của tôi** góc trên phải. Số liệu cộng dồn của chính máy bạn,
 không cần tài khoản.
 
+**12 · Đăng nhập Google** *(mới ở phiên này — cần cấu hình trước)*
+Chưa điền `GOOGLE_OAUTH_CLIENT_ID` và `GOOGLE_OAUTH_CLIENT_SECRET` thì **không có
+nút nào hiện ra**, và đó là đúng — bỏ qua bước này cũng được. Cách lấy hai biến
+đó: [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn).
+
+Điền rồi thì cuối trang chủ có nút **Đăng nhập bằng Google**. Bấm, chọn tài
+khoản, quay về là thấy email của mình.
+
+Phép thử đáng giá nhất nằm ở đây: mở **cửa sổ ẩn danh** — tức một "điện thoại"
+hoàn toàn mới — đăng nhập cùng tài khoản đó, rồi vào trang câu lạc bộ. Phải thấy
+tên mình sẵn trong danh bạ và vẫn là **người tạo**, không phải xin lại mã mời.
+Đó là toàn bộ lý do giai đoạn này tồn tại.
+
 ---
 
 ## Đã làm xong
@@ -147,7 +221,62 @@ IndexedDB, bảng xếp hạng, bảng Công bằng, dời lịch, huỷ trận,
 Danh bạ thành viên, mã mời + QR, mời nhanh cả danh bạ vào buổi đánh, xác nhận
 đi/không đi, tổng kết tuần và tháng, trang `/me` theo thiết bị.
 
-### Sửa lỗi ở phiên gần nhất
+### GĐ3 — Tài khoản Google *(phiên này)*
+
+Đăng nhập bằng Google viết tay theo luồng authorization code + PKCE, không thêm
+thư viện xác thực nào. Cái máy đang cầm được gắn về tài khoản, kéo theo danh bạ
+câu lạc bộ và quyền chủ câu lạc bộ. Trang `/me` gộp số liệu từ mọi máy.
+
+Nguyên tắc giữ suốt: **tài khoản không thay thế thiết bị, nó gom các thiết bị
+lại.** Người ra sân vẫn quét mã QR rồi gõ tên như cũ, không ai bị bắt đăng nhập.
+
+Ba quyết định đáng ghi lại:
+
+| Quyết định | Vì sao |
+|---|---|
+| Chưa cấu hình OAuth thì **ẩn hẳn nút đăng nhập** | Giống hệt cách thiếu biến Sheet thì tự chuyển sang kho chạy thử. Nút bấm vào ra trang lỗi tệ hơn không có nút |
+| Đăng nhập gắn **cả danh bạ lẫn quyền chủ** trong một lô ghi | Làm nửa vời thì có lúc bạn là chủ theo bảng này mà không phải chủ theo bảng kia — và cách nhận ra thường là mất quyền với câu lạc bộ của chính mình |
+| **Không kiểm chữ ký `id_token`** | Token nhận thẳng từ Google qua HTTPS kèm `client_secret`; kênh đó đã xác thực nguồn gốc. Vẫn kiểm `aud`, `iss`, `exp`, `email_verified` |
+
+Cookie tài khoản `rp_user` là `httpOnly` (khác cookie thiết bị, cố ý để đọc được)
+và sống 30 ngày — bắt đăng nhập lại mỗi buổi thì tài khoản thành phiền toái chứ
+không phải tiện ích.
+
+Đăng xuất **không xoá cookie thiết bị**: xoá là mất luôn quyền tự sửa tỷ số vừa
+nhập và cả tên đang hiện trong buổi đang diễn ra giữa sân.
+
+### Sáu lỗi tìm ra khi chạy thử GĐ3
+
+Tất cả đều lộ ra từ một kịch bản chạy thật — *một tài khoản, hai điện thoại, một
+buổi đánh có tỷ số* — chứ không phải từ đọc lại mã. Bốn cái đầu là lỗ hổng của
+chính GĐ3, hai cái sau có sẵn từ trước và chỉ lộ ra khi bị đẩy tới.
+
+| Lỗi | Ảnh hưởng |
+|---|---|
+| Người chơi kéo từ danh bạ **không mang `userId`** | Toàn bộ GĐ3 dừng ở cổng câu lạc bộ. Vào tới buổi đánh là tài khoản hết tác dụng |
+| Trang tham gia **tự dò theo mã máy** | Đổi điện thoại giữa mùa thì mở buổi đánh lên không thấy mình đâu, phải gõ lại tên và ngồi chờ duyệt. Nay máy chủ trả lời bằng `myPlayerId` — trình duyệt không đọc nổi cookie tài khoản vì nó `httpOnly` |
+| Nút **"Đây là tôi" hỏng hoàn toàn** | Gửi `UpdateProfile` + `MarkArrived`, mà `MarkArrived` chỉ chủ sự kiện gọi được → 403. Một trong ba đường vào của trang tham gia coi như không dùng được |
+| Nhận ô tên xong **không gắn máy vào** | Kể cả qua được quyền, người vừa nhận mở lại app là app quên mất họ. Nay có lệnh `ClaimPlayer` làm gọn một lượt, và máy chủ tự điền danh tính chứ không tin trình duyệt |
+| Trang **Của tôi trống trơn** trên máy mới | Danh sách mã buổi nằm ở `localStorage` của máy cũ. Nay người đã đăng nhập còn tìm được buổi qua câu lạc bộ mình là thành viên — vẫn không quét cả bảng sự kiện của mọi người |
+| Kho chạy thử **đọc tệp đúng một lần** rồi giữ hết trong RAM | Phản bội hai câu trong chính tài liệu này: sửa tay `.data\sheet.json` thì bị đè im lặng, và xoá `.data` lúc máy chủ đang chạy thì **không có tác dụng gì** |
+
+Lỗi cuối đáng nói thêm: nó chính là thứ làm bộ kiểm thử đầu tiên của tôi cho ra
+kết quả lúc đạt lúc hỏng với cùng một đoạn mã. Kho giữ dữ liệu trong bộ nhớ nên
+tiến trình khác ghi vào tệp là bị nuốt mất. Nay mỗi lần đọc hay ghi đều liếc qua
+thời điểm sửa tệp, lệch thì nạp lại.
+
+### Đổi mã mời câu lạc bộ
+
+Mã mời không hết hạn và dùng được vô số lần — chiếu lên tường sân cho hai mươi
+người cùng quét thì buộc phải như vậy. Cái giá là nó sống mãi: ai chụp màn hình
+gửi lung tung, hay người đã rời nhóm, đều còn đường quay lại vô thời hạn.
+
+Nay chủ câu lạc bộ có nút **Đổi mã mời** trong hộp thoại mời. Có bước xác nhận
+nói rõ mã cũ chết ngay lập tức, kể cả tờ giấy đang dán ở sân. **Danh bạ giữ
+nguyên** — đổi mã là chặn người mới vào, không phải đuổi người đang ở trong; gộp
+hai việc lại thì chủ sân bấm một nút mà mất cả nhóm.
+
+### Sửa lỗi ở phiên trước đó
 
 Bốn lỗi thật tìm ra khi chạy thử end-to-end, không phải từ đọc mã:
 
@@ -173,19 +302,23 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **172 bài xanh** (`npm test`) |
+| Kiểm thử tự động | **207 bài xanh** (`npm test`), trong đó **35 bài mới** cho tài khoản, `ClaimPlayer`, đổi mã mời và kho chạy thử |
+| Kiểm tra kiểu | `npm run typecheck` sạch |
 | Quét ma trận công bằng | **42 cấu hình, 0 cấu hình bị đánh dấu** |
 | Chạy thử thật qua HTTP | **66 phép kiểm, 0 hỏng** — buổi đánh, câu lạc bộ, tổng kết, trang của tôi |
+| Kịch bản một tài khoản hai điện thoại | **23 phép kiểm, 0 hỏng** — lập câu lạc bộ, đăng nhập, tạo buổi, nhận ô tên, đánh một trận, rồi mở tất cả từ máy mới |
+| Bấm thử trên trình duyệt | Máy hoàn toàn mới chỉ có cookie tài khoản: mở `/e/<mã>/join` hiện thẳng "Minh · Đang chơi", không có form gõ tên |
 | Biên dịch bản thật | `npm run build` sạch |
 | Tải mới hoàn toàn | `git clone` → `npm install` → `npm run dev` chạy được, tạo được sự kiện và câu lạc bộ |
+
+> Phần **duy nhất chưa chạy thử với hàng thật** là bước đổi mã với Google, vì nó
+> cần OAuth client trong tài khoản Google Cloud của bạn. Mọi thứ hai bên bước đó
+> đều đã kiểm: route `start` dựng đúng URL kèm PKCE và `state`, và toàn bộ đường
+> đi sau khi có danh tính đã chạy thật qua HTTP.
 
 ---
 
 ## Còn lại
-
-### GĐ3 — Tài khoản Google (chưa bắt đầu)
-Đăng nhập, đồng bộ đa thiết bị, thống kê xuyên thiết bị. Tab `accounts` trong
-Sheet đã có sẵn bố cục, chỉ chờ nối.
 
 ### Việc nhỏ chưa làm
 
@@ -194,11 +327,14 @@ Sheet đã có sẵn bố cục, chỉ chờ nối.
   [SETUP.md](SETUP.md) là chạy. **Bắt buộc phải có biến Google** — kho tệp cục bộ
   không sống được trên Vercel, và ứng dụng cố ý báo lỗi ngay lúc khởi động thay vì
   âm thầm mất dữ liệu.
-- **Đổi mã mời câu lạc bộ.** Hiện mã mời cố định. Muốn "khoá cửa" lại khi có người
-  lạ vào thì cần nút đổi mã.
-- **Tab `devices` và `rollups`** đã có trong bố cục Sheet nhưng chưa dùng. Tổng
-  kết đang tính lại mỗi lần đọc; khi nào câu lạc bộ có vài trăm buổi mới cần đệm
-  vào `rollups`.
+- **Bật đăng nhập Google.** Cần OAuth client trong tài khoản Google Cloud của
+  bạn nên tôi không làm hộ được. Mã đã sẵn sàng: điền hai biến trong
+  [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) là nút hiện ra.
+- **Tab `rollups`** đã có trong bố cục Sheet nhưng chưa dùng. Tổng kết đang tính
+  lại mỗi lần đọc; khi nào câu lạc bộ có vài trăm buổi mới cần đệm vào đó.
+- **Gỡ một thiết bị khỏi tài khoản.** Hiện đăng nhập là gắn, đăng xuất chỉ xoá
+  cookie chứ không gỡ dòng trong sổ thiết bị. Cần khi ai đó bán mất điện thoại
+  cũ — chưa gấp, vì dòng đó chỉ mang danh sách mã buổi đánh.
 
 ### Cảnh báo bảo mật
 
@@ -222,17 +358,19 @@ lần rồi chạy lại toàn bộ kiểm thử, không gộp vào phiên đang
 app/              Trang và API (Next.js App Router)
   e/[code]/       Buổi đánh: đang đánh, lịch, xếp hạng, người chơi, quản lý, tham gia
   c/[id]/         Câu lạc bộ: danh bạ, tham gia, tổng kết
-  me/             Số liệu của riêng máy này
+  me/             Số liệu của tôi
+  api/auth/       Đăng nhập Google, phiên tài khoản
 components/       Mảnh giao diện dùng lại
-hooks/            Đồng bộ trạng thái, hàng đợi lưu, câu lạc bộ
+hooks/            Đồng bộ trạng thái, hàng đợi lưu, câu lạc bộ, tài khoản
 lib/domain/       Kiểu dữ liệu, tập lệnh, suy trạng thái, xếp hạng, luật,
-                  câu lạc bộ, tổng kết tuần/tháng
+                  câu lạc bộ, tài khoản, tổng kết tuần/tháng
 lib/scheduler/    Thuật toán xếp lịch, hàm chi phí, đo công bằng, kiểm tra dời lịch
-lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bản in, câu lạc bộ
-lib/auth/         Mật khẩu, cookie phiên, chặn dò
+lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bản in, câu lạc bộ,
+                  tài khoản và sổ thiết bị
+lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            172 bài kiểm thử
+tests/            207 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —
@@ -250,7 +388,9 @@ nghiệp vụ kiểm thử được mà không cần dựng Google Sheet.
 | `npm install` lỗi mạng | Chạy lại; nếu vẫn lỗi thì `npm cache clean --force` rồi thử lại |
 | Cổng 3000 đã bị chiếm | `npm run dev -- -p 3001` |
 | Trang trắng, lỗi lạ | Xoá thư mục `.next` rồi `npm run dev` lại |
+| Mất hết định dạng, chữ đen trên nền trắng | Đã chạy `npm run build` trong lúc `npm run dev` đang chạy — hai lệnh cùng ghi vào `.next`. Dừng cả hai, xoá `.next`, chạy lại |
 | Dữ liệu rối, muốn làm lại | Xoá thư mục `.data` |
 | Không lập được câu lạc bộ | Trình duyệt đang chặn cookie — app cần cookie thiết bị để biết máy nào là ai |
+| Không thấy nút đăng nhập Google | Chưa cấu hình OAuth. Cố ý ẩn nút chứ không phải lỗi — xem [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) |
 
 Vướng ở đâu thì chụp màn hình hoặc chép nguyên dòng lỗi trong PowerShell gửi tôi.

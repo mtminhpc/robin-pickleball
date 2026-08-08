@@ -6,7 +6,7 @@
  * đúng lúc tệ nhất.
  */
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -63,6 +63,33 @@ describe("kho dữ liệu trên đĩa", () => {
     const reopened = new EventRepo(new LocalFileSheetsClient(path));
     const loaded = await reopened.load("LOCAL1");
     expect(loaded?.state.players.map((p) => p.name)).toEqual(["Nam"]);
+  });
+
+  it("nạp lại khi tệp bị đổi từ bên ngoài", async () => {
+    // Tài liệu nói "mở tệp đó ra xem được". Trước đây sửa nó thì lần ghi kế
+    // tiếp của máy chủ đè sạch, im lặng — kho giữ hết trong RAM và không bao
+    // giờ ngó lại đĩa sau lần khởi tạo.
+    const { path, client } = tempStore();
+    await new EventRepo(client).bootstrap();
+
+    const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, string[][]>;
+    raw.events!.push(["NGOAI1", "", "Buổi thêm bằng tay"]);
+    writeFileSync(path, JSON.stringify(raw), "utf8");
+
+    const [range] = await client.batchGet(["events!A:A"]);
+    expect(range?.values?.flat()).toContain("NGOAI1");
+  });
+
+  it("xoá tệp là chơi lại từ đầu, không phải tắt máy chủ đi mới được", async () => {
+    // `docs/TIEN-DO.md` bảo người dùng xoá thư mục `.data` để làm lại. Với máy
+    // chủ đang chạy thì việc đó vốn không có tác dụng gì, rồi lần ghi sau dựng
+    // lại y nguyên dữ liệu cũ từ bộ nhớ.
+    const { path, client } = tempStore();
+    await new EventRepo(client).bootstrap();
+    expect(await client.listTabs()).toContain("events");
+
+    rmSync(path);
+    expect(await client.listTabs()).toEqual([]);
   });
 
   it("ghi ra JSON đọc được bằng mắt", async () => {

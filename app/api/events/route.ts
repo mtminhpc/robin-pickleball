@@ -19,9 +19,15 @@ import { emptyState } from "@/lib/domain/reduce";
 import { DEFAULT_CONFIG, type EventConfig } from "@/lib/domain/types";
 import { getRepo, invalidateEvent } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
-import { activeMembers, memberForDevice } from "@/lib/domain/club";
+import {
+  activeMembers,
+  isClubOwner,
+  memberForDevice,
+  memberForUser,
+} from "@/lib/domain/club";
 import { DEVICE_COOKIE } from "@/lib/identity/device";
 import { getClubRepo, readClub } from "@/lib/sheets/cache";
+import { currentUserId } from "@/lib/api/user";
 
 interface CreateBody {
   name?: string;
@@ -66,22 +72,36 @@ export async function POST(request: NextRequest) {
   // Tạo từ câu lạc bộ: kéo cả danh bạ vào. Chỉ người trong câu lạc bộ mới làm
   // được, nếu không thì ai biết mã cũng lôi được danh sách tên của nhóm khác ra.
   const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
-  let roster: Array<{ id: string; name: string; avatarId: string; memberId: string }> = [];
+  const userId = currentUserId(request);
+  let roster: Array<{
+    id: string;
+    name: string;
+    avatarId: string;
+    memberId: string;
+    userId?: string;
+  }> = [];
   let clubId: string | null = null;
 
   if (body.clubId) {
     const club = await readClub(body.clubId);
     if (!club) return fail(404, "Không tìm thấy câu lạc bộ này.");
-    const isOwner = deviceId !== "" && club.club.ownerRef === deviceId;
-    if (!isOwner && !memberForDevice(club.members, deviceId)) {
+    const inClub =
+      isClubOwner(club.club, { deviceId, userId }) ||
+      memberForUser(club.members, userId ?? "") !== null ||
+      memberForDevice(club.members, deviceId) !== null;
+    if (!inClub) {
       return fail(403, "Chỉ người trong câu lạc bộ mới tạo buổi đánh cho câu lạc bộ.");
     }
     clubId = club.club.id;
+    // Chép luôn `userId` của những người đã đăng nhập. Miễn phí — danh bạ đang
+    // nằm sẵn trong tay — mà không có nó thì người đổi điện thoại giữa mùa mở
+    // buổi đánh lên sẽ không thấy mình đâu trong danh sách.
     roster = activeMembers(club.members).map((m) => ({
       id: m.memberId,
       name: m.displayName,
       avatarId: m.avatarId,
       memberId: m.memberId,
+      ...(m.userId ? { userId: m.userId } : {}),
     }));
   }
 
@@ -95,7 +115,9 @@ export async function POST(request: NextRequest) {
       clubId,
       name,
       status: "draft",
-      ownerUserId: "",
+      // Chủ sự kiện vẫn xác thực bằng mật khẩu như cũ; ghi mã tài khoản ở đây
+      // chỉ để sau này trả lời được "những buổi nào do tôi tạo".
+      ownerUserId: userId ?? "",
       playerPassHash: playerPassword ? await hashPassword(playerPassword) : "",
       adminPassHash: await hashPassword(adminPassword),
     },
@@ -119,7 +141,15 @@ export async function POST(request: NextRequest) {
       actor,
       command: {
         type: "AddPlayer" as const,
-        player: { id: m.id, name: m.name, avatarId: m.avatarId, memberId: m.memberId },
+        player: {
+          id: m.id,
+          name: m.name,
+          avatarId: m.avatarId,
+          memberId: m.memberId,
+          // Người đã đăng nhập thì mang theo mã tài khoản, để họ đổi điện thoại
+          // giữa mùa vẫn được nhận ra trong chính buổi đánh này.
+          ...(m.userId ? { userId: m.userId } : {}),
+        },
         asActive: false,
       },
     })),

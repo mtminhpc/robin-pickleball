@@ -7,6 +7,10 @@ Hai chế độ, chuyển qua lại chỉ bằng biến môi trường:
 | **Chạy thử trên máy** | Bấm thử, xem giao diện, tập dùng trước buổi đánh | Không cần gì |
 | **Google Sheet thật** | Mang ra sân dùng | Google Cloud + một bảng tính |
 
+Và một phần **tuỳ chọn, độc lập hẳn**: [đăng nhập bằng tài khoản
+Google](#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn). Không cấu hình thì nút đăng
+nhập không xuất hiện và mọi thứ khác chạy y nguyên.
+
 ---
 
 ## Chạy thử trên máy (2 phút)
@@ -124,12 +128,100 @@ bảng xếp hạng, bảng công bằng).
 
 ---
 
+## Đăng nhập bằng tài khoản Google (tuỳ chọn)
+
+Phần này **không liên quan gì** tới service account ở trên, dù cùng nằm trên
+Google Cloud. Service account là để ứng dụng ghi vào bảng tính; phần dưới đây là
+để **người chơi** đăng nhập, nhằm giữ số liệu khi họ đổi điện thoại.
+
+Bỏ qua hẳn cũng được: thiếu hai biến này thì nút đăng nhập không hiện ra, không
+ai bị bắt tạo tài khoản, và toàn bộ ứng dụng chạy đúng như trước.
+
+### 1. Màn hình đồng ý (OAuth consent screen)
+
+1. **APIs & Services** → **OAuth consent screen**
+2. Chọn **External** → **Create**
+3. Điền tên ứng dụng, email hỗ trợ, email liên hệ. Không cần logo.
+4. Phần **Scopes** để nguyên — ứng dụng chỉ xin `openid`, `email`, `profile`,
+   đều là mặc định.
+5. Phần **Test users**: thêm chính email của bạn.
+
+> Để ở chế độ **Testing** thì chỉ những email trong danh sách test user đăng nhập
+> được, và chỉ trong 7 ngày mỗi lần. Nhóm chơi cố định thì thêm hết vào là xong.
+> Muốn mở cho mọi người thì bấm **Publish app**; Google chỉ bắt xét duyệt khi
+> ứng dụng xin những quyền nhạy cảm — ba quyền ở trên thì không.
+
+### 2. Tạo OAuth client
+
+1. **Credentials** → **Create credentials** → **OAuth client ID**
+2. Chọn **Web application**
+3. **Authorized redirect URIs** — thêm đúng những dòng sau, **từng ký tự một**:
+
+```
+http://localhost:3000/api/auth/google/callback
+https://<tên-miền-của-bạn>/api/auth/google/callback
+```
+
+4. **Create**. Google hiện ra **Client ID** và **Client secret**.
+
+**Sai một ký tự ở redirect URI là lỗi hay gặp nhất** của cả mục này. Triệu chứng
+rất rõ: Google hiện `Error 400: redirect_uri_mismatch` ngay trước khi bạn kịp
+chọn tài khoản. Chép nguyên văn, kể cả dấu `/` cuối (không có).
+
+### 3. Điền biến môi trường
+
+Thêm vào `.env.local`:
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID="....apps.googleusercontent.com"
+GOOGLE_OAUTH_CLIENT_SECRET="GOCSPX-...."
+```
+
+Chạy sau proxy hoặc tên miền riêng thì thêm cả:
+
+```bash
+APP_URL="https://tên-miền-của-bạn"
+```
+
+Không có `APP_URL` thì ứng dụng tự suy địa chỉ từ yêu cầu, và đằng sau proxy nó
+sẽ suy ra địa chỉ nội bộ — `redirect_uri` khi đó không khớp với khai báo trên
+Google.
+
+`APP_SECRET` cũng được dùng để ký cookie đăng nhập, nên nếu chưa đặt thì đặt luôn
+(xem bước 5 ở mục trên).
+
+### 4. Thử
+
+Mở trang chủ. Cuối trang phải có nút **Đăng nhập bằng Google**. Bấm vào, chọn tài
+khoản, quay về là xong — email của bạn hiện ở chỗ nút vừa bấm.
+
+Kiểm thứ đáng kiểm nhất: mở **cửa sổ ẩn danh** (một "điện thoại" khác), đăng nhập
+cùng tài khoản đó, rồi vào trang câu lạc bộ. Phải thấy tên mình sẵn trong danh bạ
+mà không phải quét lại mã mời.
+
+### Nó thay đổi những gì
+
+| | Chưa đăng nhập | Đã đăng nhập |
+|---|---|---|
+| Nhận ra bạn bằng | Cookie thiết bị | Tài khoản, gộp mọi thiết bị |
+| Đổi điện thoại | Mất lịch sử | Đăng nhập là thấy lại đủ |
+| Vào lại câu lạc bộ trên máy mới | Phải xin mã mời, gõ lại tên | Tên đã sẵn trong danh bạ |
+| Trang **Của tôi** | Số liệu của riêng máy này | Gộp số liệu mọi máy |
+| Nhập điểm ở sân | Như nhau | Như nhau |
+
+Hàng cuối là quan trọng nhất: **người ra sân không phải đăng nhập**. Quét mã QR
+rồi gõ tên vẫn là đường chính, và nó không đổi.
+
+---
+
 ## Triển khai lên Vercel
 
 1. Đẩy mã lên GitHub
 2. Vào <https://vercel.com/new>, chọn repo. Vercel tự nhận ra Next.js.
 3. Mở **Environment Variables**, dán đúng bốn biến ở bước 5 vào
-   (chọn cả ba môi trường Production, Preview, Development)
+   (chọn cả ba môi trường Production, Preview, Development). Muốn bật đăng nhập
+   thì dán thêm `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` và
+   `APP_URL`.
 4. **Deploy**
 
 Nếu quên biến nào, bản triển khai sẽ báo lỗi rõ ràng lúc khởi động thay vì chạy
@@ -137,6 +229,48 @@ rồi mất dữ liệu.
 
 **Múi giờ:** máy chủ Vercel chạy theo UTC, còn giao diện đã cố định hiển thị theo
 giờ Việt Nam. Không cần cấu hình gì thêm.
+
+### Soát lại trước khi bấm Deploy
+
+```bash
+npm run check-env
+```
+
+Lệnh này đọc `.env.local` và nói ra từng chỗ sai bằng tiếng Việt: thiếu biến nào,
+`SHEET_ID` có bị dán cả đường dẫn không, `APP_SECRET` đã đủ dài chưa, và in ra
+đúng dòng redirect URI cần khai trên Google Cloud. **Không in ra giá trị của biến
+nào** — chép khoá riêng ra màn hình là cách làm lộ nó nhanh nhất.
+
+Sinh `APP_SECRET` mới:
+
+```bash
+npm run new-secret
+```
+
+### Thứ tự phụ thuộc
+
+Ba việc dưới đây phải làm đúng thứ tự, vì việc sau cần kết quả của việc trước.
+Bỏ qua thứ tự là chỗ mất thời gian nhất.
+
+| # | Việc | Bắt buộc? | Không có thì sao |
+|---|---|---|---|
+| 1 | Service account + Google Sheet | **Bắt buộc** | Bản thật không khởi động được. Cố ý — kho tệp cục bộ không sống nổi trên Vercel |
+| 2 | `APP_SECRET` | **Bắt buộc** | Bản thật không khởi động được |
+| 3 | OAuth client | Tuỳ chọn | Nút đăng nhập không hiện, mọi thứ khác chạy y nguyên |
+
+Riêng bước 3 có một vòng lặp nhỏ dễ vướng: redirect URI cần địa chỉ thật của bản
+triển khai, mà địa chỉ đó chỉ có sau lần deploy đầu. Nên làm thế này:
+
+1. Deploy với bước 1 và 2 thôi. Vercel cấp cho bạn một địa chỉ dạng
+   `https://<tên-dự-án>.vercel.app`.
+2. Quay lại Google Cloud, khai redirect URI theo đúng địa chỉ đó.
+3. Thêm `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` và `APP_URL` vào
+   Environment Variables.
+4. **Redeploy** — biến môi trường mới chỉ có hiệu lực ở lần dựng sau, không áp
+   vào bản đang chạy.
+
+Bước 4 là chỗ hay quên nhất: thêm biến xong, mở trang, vẫn không thấy nút đăng
+nhập, và tưởng mình làm sai ở đâu đó.
 
 ---
 
@@ -171,3 +305,7 @@ sửa một dòng nào — ranh giới đó được giữ sạch từ đầu ch
 | `429` lúc đông người | Chạm hạn mức. Ứng dụng tự thử lại; nếu thường xuyên thì xem mục hạn mức ở trên |
 | Thiếu APP_SECRET | Chỉ báo lỗi ở môi trường thật. Ở máy cá nhân dùng khoá mặc định để đỡ phải cấu hình |
 | Dữ liệu mất sau khi deploy | Đang chạy ở kho thử. Kiểm tra lại ba biến Google trên Vercel |
+| Không thấy nút đăng nhập Google | Thiếu `GOOGLE_OAUTH_CLIENT_ID` hoặc `GOOGLE_OAUTH_CLIENT_SECRET`. Cố ý ẩn nút thay vì để bấm vào rồi ra trang lỗi |
+| `Error 400: redirect_uri_mismatch` | Redirect URI khai trên Google chưa khớp từng ký tự. Đằng sau proxy thì đặt thêm `APP_URL` |
+| `Error 403: access_denied` khi đăng nhập | Màn hình đồng ý đang ở chế độ Testing mà email đó chưa nằm trong danh sách test user |
+| Đăng nhập xong vẫn phải gõ lại tên trong câu lạc bộ | Dòng danh bạ cũ tạo từ máy khác. Đăng nhập một lần trên **đúng cái máy cũ** là nó tự gắn về tài khoản |

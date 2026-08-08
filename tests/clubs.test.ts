@@ -22,7 +22,7 @@ async function freshClub() {
   const repo = new ClubRepo(sheets);
   const created = await repo.create({
     name: "Pickleball Tối Thứ Ba",
-    ownerRef: "dev-owner",
+    ownerDeviceId: "dev-owner",
     ownerName: "Chủ sân",
     ownerAvatarId: "e01-c01",
     at: 1000,
@@ -83,7 +83,7 @@ describe("kho câu lạc bộ", () => {
     const before = sheets.calls.batch;
     await repo.create({
       name: "CLB",
-      ownerRef: "d",
+      ownerDeviceId: "d",
       ownerName: "Tôi",
       ownerAvatarId: "e01-c01",
       at: 1,
@@ -214,14 +214,14 @@ describe("kho câu lạc bộ", () => {
     const { repo, created } = await freshClub();
     const second = await repo.create({
       name: "CLB Sáng Chủ Nhật",
-      ownerRef: "dev-owner",
+      ownerDeviceId: "dev-owner",
       ownerName: "Chủ sân",
       ownerAvatarId: "e01-c01",
       at: 5000,
     });
     await repo.create({
       name: "CLB người khác",
-      ownerRef: "dev-la",
+      ownerDeviceId: "dev-la",
       ownerName: "Ai đó",
       ownerAvatarId: "e01-c01",
       at: 6000,
@@ -239,7 +239,7 @@ describe("kho câu lạc bộ", () => {
     for (let i = 0; i < 8; i++) {
       const c = await repo.create({
         name: `CLB ${i}`,
-        ownerRef: `d${i}`,
+        ownerDeviceId: `d${i}`,
         ownerName: "x",
         ownerAvatarId: "a",
         at: i,
@@ -247,6 +247,34 @@ describe("kho câu lạc bộ", () => {
       codes.add(c.club.inviteCode);
     }
     expect(codes.size).toBe(8);
+  });
+
+  it("đổi mã mời thì mã cũ hết dùng được, danh bạ giữ nguyên", async () => {
+    // Đổi mã là chặn người mới vào, KHÔNG phải đuổi người đang ở trong. Gộp hai
+    // việc lại thì chủ sân bấm một nút mà mất cả nhóm.
+    const { repo, created } = await freshClub();
+    await repo.addMember(
+      created.club.id,
+      { displayName: "Lan", avatarId: "e02-c02", deviceId: "dev-lan" },
+      2000,
+    );
+    const cu = created.club.inviteCode;
+
+    const rotated = await repo.rotateInviteCode(created.club.id);
+    expect(rotated!.inviteCode).not.toBe(cu);
+    expect(rotated!.id).toBe(created.club.id);
+    expect(rotated!.name).toBe(created.club.name);
+
+    expect(await repo.byInviteCode(cu)).toBeNull();
+    expect((await repo.byInviteCode(rotated!.inviteCode))?.club.id).toBe(created.club.id);
+
+    const loaded = await repo.load(created.club.id);
+    expect(loaded!.members.map((m) => m.displayName).sort()).toEqual(["Chủ sân", "Lan"]);
+  });
+
+  it("đổi mã của câu lạc bộ không tồn tại thì trả null", async () => {
+    const { repo } = await freshClub();
+    expect(await repo.rotateInviteCode("khong-co-that")).toBeNull();
   });
 
   it("trả về null cho câu lạc bộ không tồn tại", async () => {

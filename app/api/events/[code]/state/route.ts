@@ -21,6 +21,14 @@ export async function GET(
     state: ctx.event.state,
     role: ctx.role,
     deviceId: ctx.deviceId,
+    /**
+     * Người chơi nào là người đang xem.
+     *
+     * Máy chủ trả lời thay vì để trình duyệt tự dò, vì chỉ máy chủ mới đọc được
+     * cookie tài khoản (`httpOnly`). Không có nó thì người vừa đổi điện thoại mở
+     * app lên sẽ không thấy mình đâu cả dù đã đăng nhập.
+     */
+    myPlayerId: ctx.me?.id ?? null,
     /** Sự kiện có đặt mật khẩu người chơi hay không, để giao diện biết có cần hỏi. */
     requiresPlayerPassword: ctx.event.record.playerPassHash !== "",
     /**

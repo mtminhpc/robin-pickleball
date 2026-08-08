@@ -300,6 +300,31 @@ export class EventRepo {
   }
 
   /**
+   * Chỉ MÃ của các buổi thuộc một nhóm câu lạc bộ, không kèm trạng thái.
+   *
+   * Đọc đúng hai cột đầu thay vì cả dòng, và khác biệt không nhỏ: mỗi dòng sự
+   * kiện mang theo ảnh chụp trạng thái tới 180 nghìn ký tự. Trang "Của tôi" chỉ
+   * cần biết *có những buổi nào* rồi mới lọc, nên kéo cả ảnh chụp về để vứt đi
+   * là tốn băng thông cho không.
+   *
+   * Đây là cách người vừa đăng nhập trên điện thoại mới tìm lại được các buổi
+   * đã đánh: danh sách mã nằm ở `localStorage` của cái máy cũ, nhưng câu lạc bộ
+   * thì máy chủ biết.
+   */
+  async codesByClubs(clubIds: readonly string[]): Promise<string[]> {
+    if (clubIds.length === 0) return [];
+    const wanted = new Set(clubIds);
+
+    const [index] = await this.sheets.batchGet([
+      `${TABS.events}!A:${indexToColumn(COL.club_id)}`,
+    ]);
+    return (index?.values ?? [])
+      .filter((row, i) => i > 0 && wanted.has(row[COL.club_id] ?? ""))
+      .map((row) => row[COL.code] ?? "")
+      .filter((code) => code !== "");
+  }
+
+  /**
    * Nhiều buổi đánh cùng lúc theo mã, trong một lời gọi đọc.
    *
    * Dùng cho trang `/me`: máy nhớ mã các buổi đã mở, còn số liệu thì lấy từ đây.

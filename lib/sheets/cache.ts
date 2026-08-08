@@ -9,8 +9,10 @@
  */
 
 import { revalidateTag, unstable_cache } from "next/cache";
+import type { Account, DeviceLink } from "../domain/account";
 import type { EventState } from "../domain/types";
 import { getSheetsClient } from "./factory";
+import { AccountRepo } from "./accounts";
 import { ClubRepo, type LoadedClub } from "./clubs";
 import { EventRepo, type EventRecord } from "./repo";
 
@@ -127,4 +129,47 @@ export async function readClub(clubId: string): Promise<LoadedClub | null> {
 
 export function invalidateClub(clubId: string): void {
   revalidateTag(clubTag(clubId));
+}
+
+// ---------------------------------------------------------------------------
+// Tài khoản
+// ---------------------------------------------------------------------------
+
+/** Bảng tài khoản gần như không đổi, nên giữ lâu như danh bạ câu lạc bộ. */
+const ACCOUNT_TTL_SECONDS = 60;
+
+export function accountTag(userId: string): string {
+  return `account:${userId}`;
+}
+
+export function getAccountRepo(): AccountRepo {
+  return new AccountRepo(getSheetsClient());
+}
+
+/**
+ * Đọc tài khoản kèm danh sách thiết bị của nó, qua bộ nhớ đệm.
+ *
+ * Gộp hai thứ vào một hàm vì mọi chỗ cần cái này đều cần cả cái kia: biết người
+ * dùng là ai thì câu hỏi tiếp theo luôn là "những máy nào là của họ". Tách ra
+ * chỉ tổ thành hai lần đọc Sheet cho cùng một câu trả lời.
+ */
+export async function readAccount(
+  userId: string,
+): Promise<{ account: Account; devices: DeviceLink[] } | null> {
+  if (!userId) return null;
+  const load = unstable_cache(
+    async (id: string) => {
+      const repo = getAccountRepo();
+      const account = await repo.byId(id);
+      if (!account) return null;
+      return { account, devices: await repo.devicesOf(id) };
+    },
+    ["account"],
+    { tags: [accountTag(userId)], revalidate: ACCOUNT_TTL_SECONDS },
+  );
+  return load(userId);
+}
+
+export function invalidateAccount(userId: string): void {
+  revalidateTag(accountTag(userId));
 }

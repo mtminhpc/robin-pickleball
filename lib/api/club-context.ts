@@ -9,19 +9,22 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { ClubMember } from "../domain/club";
-import { memberForDevice } from "../domain/club";
+import { isClubOwner, memberForDevice, memberForUser } from "../domain/club";
 import { DEVICE_COOKIE } from "../identity/device";
 import { readClub } from "../sheets/cache";
 import type { LoadedClub } from "../sheets/clubs";
 import { fail } from "./context";
+import { currentUserId } from "./user";
 
 export type ClubRole = "owner" | "member" | "guest";
 
 export interface ClubContext {
   loaded: LoadedClub;
   deviceId: string;
+  /** Tài khoản đang đăng nhập, `null` với phần lớn người ra sân. */
+  userId: string | null;
   role: ClubRole;
-  /** Dòng danh bạ của chính thiết bị này, nếu đã vào câu lạc bộ. */
+  /** Dòng danh bạ của người gửi yêu cầu, tìm qua tài khoản trước rồi tới máy. */
   me: ClubMember | null;
 }
 
@@ -33,15 +36,23 @@ export async function resolveClub(
   if (!loaded) return fail(404, "Không tìm thấy câu lạc bộ này.");
 
   const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
-  const me = memberForDevice(loaded.members, deviceId);
-  const role: ClubRole =
-    deviceId !== "" && loaded.club.ownerRef === deviceId
-      ? "owner"
-      : me
-        ? "member"
-        : "guest";
+  // Chỉ đọc cookie, không đọc bảng tài khoản: mã tài khoản đã nằm sẵn trong
+  // cookie đã ký, mà route này chạy ở mọi lượt mở trang câu lạc bộ.
+  const userId = currentUserId(request);
 
-  return { loaded, deviceId, role, me };
+  // Tài khoản trước, vì nó đúng trên mọi máy; thiết bị là đường lui cho người
+  // chưa đăng nhập bao giờ — phần lớn người ra sân.
+  const me =
+    memberForUser(loaded.members, userId ?? "") ??
+    memberForDevice(loaded.members, deviceId);
+
+  const role: ClubRole = isClubOwner(loaded.club, { deviceId, userId })
+    ? "owner"
+    : me
+      ? "member"
+      : "guest";
+
+  return { loaded, deviceId, userId, role, me };
 }
 
 /**

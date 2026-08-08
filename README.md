@@ -4,10 +4,10 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Trạng thái: giai đoạn 2 — dùng được cả mùa.** Ứng dụng chạy đầy đủ: tạo
-> buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả, bảng xếp hạng, huỷ
-> trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết tuần và tháng.
-> Xem [lộ trình](#lộ-trình).
+> **Trạng thái: giai đoạn 3 — dùng được cả mùa, trên nhiều thiết bị.** Ứng dụng
+> chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
+> bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
+> tuần và tháng, đăng nhập bằng tài khoản Google. Xem [lộ trình](#lộ-trình).
 
 ## Chạy thử ngay
 
@@ -23,7 +23,7 @@ sàng dùng thật thì điền biến môi trường Google và ứng dụng t�
 Sheet — xem [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
-npm test                  # 172 bài kiểm thử
+npm test                  # 207 bài kiểm thử
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
 
@@ -171,13 +171,14 @@ app/              Trang và API (Next.js App Router)
 components/       Mảnh giao diện dùng lại
 hooks/            Đồng bộ trạng thái, hàng đợi lưu
 lib/domain/       Kiểu dữ liệu, tập lệnh, hàm suy trạng thái, xếp hạng, luật,
-                  câu lạc bộ, tổng kết tuần/tháng
+                  câu lạc bộ, tài khoản, tổng kết tuần/tháng
 lib/scheduler/    Thuật toán xếp lịch, hàm chi phí, đo công bằng
-lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bản in, câu lạc bộ
-lib/auth/         Mật khẩu, cookie phiên, chặn dò
+lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bản in, câu lạc bộ,
+                  tài khoản và sổ thiết bị
+lib/auth/         Mật khẩu, cookie phiên, chặn dò, đăng nhập Google
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            172 bài kiểm thử
+tests/            207 bài kiểm thử
 ```
 
 Nguyên tắc: `lib/domain` và `lib/scheduler` là hàm thuần, không đọc đồng hồ, không gọi
@@ -196,8 +197,9 @@ Google Sheet.
 - [x] **GĐ2 — Câu lạc bộ và tổng kết.** Danh bạ thành viên, mã mời và QR, mời
       nhanh cả danh bạ vào buổi đánh, xác nhận đi/không đi, tổng kết tuần và
       tháng, trang `/me` theo thiết bị.
-- [ ] **GĐ3 — Tài khoản Google.** Đăng nhập, đồng bộ đa thiết bị, thống kê xuyên
-      thiết bị.
+- [x] **GĐ3 — Tài khoản Google.** Đăng nhập, gộp nhiều thiết bị về một tài
+      khoản, danh bạ và quyền chủ câu lạc bộ theo tài khoản, thống kê xuyên
+      thiết bị ở trang `/me`.
 
 ## Câu lạc bộ và tổng kết
 
@@ -209,6 +211,7 @@ lần, từ đó mỗi buổi mới chỉ là một cú bấm.
 |---|---|
 | Lập câu lạc bộ, vào bằng mã mời | Trang chủ → tab **Câu lạc bộ** |
 | Danh bạ, mã QR mời, sửa tên và ảnh | `/c/[mã]` |
+| Đổi mã mời khi cần khoá cửa lại | `/c/[mã]` → Mời thêm người → Đổi mã mời |
 | Tạo buổi đánh với cả danh bạ điền sẵn | Nút trong trang câu lạc bộ |
 | Tổng kết tuần và tháng | `/c/[mã]/summary` |
 | Số liệu của riêng máy mình | `/me` |
@@ -232,6 +235,45 @@ hiện ra khi hỏi "sao tuần này tôi đi hai buổi mà chỉ hiện một"
 Trang `/me` chạy được mà không cần tài khoản: máy nhớ mã các buổi đã mở, máy chủ
 tính số liệu rồi trả về. Nói thẳng ngay trên trang rằng dữ liệu bám theo máy —
 xoá dữ liệu trình duyệt hay đổi điện thoại là mất.
+
+## Tài khoản Google
+
+Chính vì câu cuối ở trên mà có mục này. Danh tính theo thiết bị đủ dùng ở sân
+nhưng thua ở một chỗ: đổi điện thoại là mất sạch, và người dùng chỉ phát hiện ra
+đúng lúc họ đã mất.
+
+Nguyên tắc: **tài khoản không thay thế thiết bị, nó gom các thiết bị lại.** Không
+ai bị bắt đăng nhập. Quét mã QR rồi gõ tên vẫn là đường chính ở sân và không đổi
+một ly. Ai đăng nhập thì cái máy đang cầm được gắn về tài khoản, và từ đó:
+
+| | Chưa đăng nhập | Đã đăng nhập |
+|---|---|---|
+| Đổi điện thoại | Mất lịch sử | Đăng nhập là thấy lại đủ |
+| Vào lại câu lạc bộ trên máy mới | Xin mã mời, gõ lại tên | Tên đã sẵn trong danh bạ |
+| Mở buổi đang đánh trên máy mới | Không thấy mình đâu, gõ lại tên rồi chờ duyệt | Vào thẳng, đúng chỗ của mình |
+| Trang `/me` | Số liệu của riêng máy này | Gộp số liệu mọi máy |
+
+Hàng thứ ba là hàng khó nhất, và cũng là hàng dễ bỏ sót nhất: **trình duyệt không
+tự trả lời được câu "ai trong danh sách này là tôi"**. Cookie tài khoản là
+`httpOnly` nên mã trên trang không đọc nổi, mà cái máy mới thì cũng chẳng có mã
+máy nào từng xuất hiện trong buổi đánh để dò. Nên máy chủ trả lời hộ, bằng
+`myPlayerId` kèm trong mỗi lần đọc trạng thái.
+
+Ba quyết định đáng nói:
+
+- **Chưa cấu hình OAuth thì nút đăng nhập không xuất hiện**, y như cách thiếu
+  biến Google Sheet thì tự chuyển sang kho chạy thử. Hiện một nút bấm vào là ra
+  trang lỗi thì tệ hơn hẳn không hiện nút nào.
+- **Đăng nhập gắn luôn cả quyền chủ câu lạc bộ về tài khoản**, trong cùng một lô
+  ghi với danh bạ. Làm nửa vời thì có lúc bạn là chủ theo bảng này mà không phải
+  chủ theo bảng kia — và cách nhận biết thường là mất quyền với câu lạc bộ của
+  chính mình đúng vào lúc vừa đăng nhập.
+- **Không kiểm chữ ký `id_token`.** Token nhận thẳng từ điểm cuối token của Google
+  qua HTTPS trong lời gọi máy-chủ-tới-máy-chủ có kèm `client_secret`; kênh đó đã
+  xác thực nguồn gốc, và tài liệu của Google nói rõ trường hợp này không cần. Vẫn
+  kiểm `aud`, `iss`, `exp`, `email_verified` vì chúng rẻ và bắt được cấu hình sai.
+
+Cách bật: [docs/SETUP.md](docs/SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn).
 
 ## Nối Google Sheet thật
 
