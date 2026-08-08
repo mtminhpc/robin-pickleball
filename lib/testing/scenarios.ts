@@ -88,7 +88,14 @@ function fresh(setup: ScenarioSetup): EventSim {
   const sim = new EventSim({
     seed: setup.seed ?? 4242,
     config: { courts: setup.courts, name: "Mẫu thử" },
-    planning: { iterations: 6_000, timeBudgetMs: 120 },
+    // Cố ý KHÔNG bóp ngân sách tối ưu, dù chạy chậm hơn.
+    //
+    // Trước đây chỗ này đặt 6.000 lượt / 120ms cho nhanh, trong khi ứng dụng thật
+    // chạy tới 40.000 lượt / 400ms. Hậu quả không phải là chậm hay nhanh mà là bộ
+    // mẫu thử đi chấm một thuật toán YẾU HƠN thuật toán người dùng nhận — và nó
+    // đã báo sai một lần: một kịch bản báo thiếu 1,07 suất, nhưng dò kỹ thì với
+    // ngân sách thật con số ấy là 0,60. Bảng số nói về phần mềm không tồn tại thì
+    // xanh hay đỏ đều vô nghĩa.
   });
   sim.addPlayers(Array.from({ length: setup.players }, (_, i) => nameFor(i)));
   sim.start();

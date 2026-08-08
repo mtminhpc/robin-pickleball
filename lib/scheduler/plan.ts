@@ -16,12 +16,13 @@
 
 import type { MatchSeed } from "../domain/commands";
 import { firstOpenRound } from "../domain/rounds";
-import { isAvailableAt, type EventState, type Match, type PlayerId } from "../domain/types";
+import { isAvailableAt, wasPresentAt, type EventState, type Match, type PlayerId } from "../domain/types";
 import { DEFAULT_WEIGHTS, type CostContext, type Plan, type Slot, type Weights } from "./cost";
 import { generate } from "./generate";
 import { achievableStreakCap, buildHistory, type History } from "./metrics";
 import { optimize, type OptimizeResult } from "./optimize";
 import { makeRng, seedFrom } from "./rng";
+import { hasWhistDesign, whistRound } from "./whist";
 
 export type PlanMode = "extend" | "rebuild";
 
@@ -97,6 +98,16 @@ export function planSchedule(
   const keptByReduce = new Set<string>();
   /** Sân bị trận đã đánh chiếm mà không dựng được `Slot`. Xem `blockedByRound`. */
   const blockedByRound = new Map<number, { courts: Set<number>; busy: Set<number> }>();
+  /**
+   * Vòng (theo vị trí trong cửa sổ) đã có trận không thể dời đi đâu được.
+   *
+   * Gộp cả ba nguồn: trận đông cứng, trận chiếm sân mà không dựng được `Slot`,
+   * và trận `reduce` tự giữ lại. Nguồn thứ ba là nguồn dễ quên nhất — ở chế độ
+   * `rebuild`, một trận đã đánh xong KHÔNG bị đánh dấu đông cứng, nhưng `reduce`
+   * vẫn giữ nó. Chỉ dùng những vòng ngoài tập này thì mới chắc không đặt hai
+   * trận lên cùng một sân.
+   */
+  const roundsToKeep = new Set<number>();
 
   const byId = new Map(state.players.map((p) => [p.id, p] as const));
   /** Trận này có xếp ai vào vòng họ đã báo trước là không có mặt không. */
@@ -130,6 +141,7 @@ export function planSchedule(
         }
         blockedByRound.set(offsetOf, entry);
         keptByReduce.add(m.id);
+        roundsToKeep.add(offsetOf);
       }
       continue;
     }
@@ -137,7 +149,10 @@ export function planSchedule(
     const offset = offsetOf;
     if (offset < 0 || offset >= lookahead) continue;
 
-    if (m.status !== "scheduled" || m.pinned) keptByReduce.add(m.id);
+    if (m.status !== "scheduled" || m.pinned) {
+      keptByReduce.add(m.id);
+      roundsToKeep.add(offset);
+    }
 
     // Ở chế độ `extend`, chỉ mấy vòng sát nút mới bị đông cứng. Nếu đông cứng tất
     // thì mỗi lần chỉ còn đúng một vòng mới để tối ưu, và thuật toán mất hẳn khả
@@ -156,6 +171,8 @@ export function planSchedule(
     // ràng buộc cứng — đo được: còn sót 2 trên 4 vòng. Bỏ hẳn trận vi phạm ra
     // thì bước sinh xếp lại vòng đó từ đầu, và nó vốn đã lọc theo lời khai.
     if (!immovable && viPhamKhaiBao(m)) continue;
+
+    if (immovable) roundsToKeep.add(offset);
 
     const bucket = immovable ? frozenByRound : warmByRound;
     const list = bucket.get(offset) ?? [];
@@ -224,7 +241,145 @@ export function planSchedule(
   // KHÔNG bị đông cứng, nên thuật toán sửa được nếu cần mà vẫn bám sát lịch cũ.
   const start = unfreezeWarmStart(seeded, warmByRound);
 
-  const result = optimize(start, {
+  /**
+   * Cả nhóm có mặt từ vòng đầu, và không ai đang bị thiệt hay được ưu tiên.
+   *
+   * Thiết kế Whist chia đều cho một nhóm CỐ ĐỊNH: ai cũng đánh mọi vòng, hoặc
+   * suất nghỉ xoay đúng một lượt cho mỗi người. Nó không biết gì về khoản nợ của
+   * người vào giữa chừng — mà `credit` sinh ra chính là để trả khoản nợ đó.
+   *
+   * Các trận Whist bị đông cứng nên bộ tìm kiếm không còn đường bù. Buổi nào có
+   * người tới trễ là phải trả quyền lại cho nó ngay, vì trả nợ cho người vào
+   * giữa chừng là việc chỉ nó làm được.
+   *
+   * Nói thẳng: **chưa bài kiểm thử nào chạm tới được lớp chặn này** — xoá nó đi
+   * thì cả 342 bài vẫn xanh. Lý do là `followingDesign` gần như luôn chặn trước:
+   * hễ danh sách người chơi đổi thì cách đánh số đổi theo, và những trận đã đánh
+   * lập tức không khớp thiết kế nữa. Giữ lại vì hai lẽ: nó rẻ, và thứ nó canh —
+   * người tới trễ không bao giờ được trả nợ — là loại lỗi im lặng, người dùng
+   * chỉ phát hiện sau khi đã chịu thiệt cả buổi. Đừng xoá vì thấy nó "thừa".
+   */
+  function nhomCoDinhTuDau(): boolean {
+    for (let i = 0; i < history.n; i++) {
+      if (history.credit[i] !== 0) return false;
+    }
+    return activeIds.every((id) => {
+      const p = byId.get(id);
+      return p ? wasPresentAt(p, 1) : false;
+    });
+  }
+
+  /**
+   * Mọi trận không sửa được nữa có khớp với lịch Whist không.
+   *
+   * Chỉ so cặp đôi chứ không so sân hay bên nào là đội A: thiết kế Whist không
+   * nói gì về hai thứ đó, mà lời hứa "bắt cặp mỗi người đúng một lần" thì nằm
+   * trọn ở cặp đôi.
+   *
+   * Trận nhắc tới người không còn trong danh sách xếp lịch cũng bị coi là lệch —
+   * lúc ấy cách đánh số người chơi đã đổi và cả thiết kế mất nghĩa.
+   */
+  function followingDesign(people: number): boolean {
+    for (const m of state.matches) {
+      if (m.status === "cancelled") continue;
+      // Trận sắp được xếp lại thì không cần khớp — nó chưa xảy ra. Chỉ những
+      // trận sẽ còn nguyên sau lệnh này mới quyết định thiết kế còn sống hay không.
+      const seRoiDi =
+        m.round >= fromRound &&
+        m.round < fromRound + lookahead &&
+        !roundsToKeep.has(m.round - fromRound);
+      if (seRoiDi) continue;
+
+      const quads = whistRound(people, m.round - 1);
+      if (!quads) return false;
+      const pairs = new Set(
+        quads.flatMap((q) => [
+          [q[0], q[1]].sort((a, b) => a - b).join(","),
+          [q[2], q[3]].sort((a, b) => a - b).join(","),
+        ]),
+      );
+      for (const team of [m.teamA, m.teamB]) {
+        const a = index.get(team[0]);
+        const b = index.get(team[1]);
+        if (a === undefined || b === undefined) return false;
+        if (!pairs.has([a, b].sort((x, y) => x - y).join(","))) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Dựng phương án từ lịch Whist, hoặc `null` nếu hoàn cảnh không cho phép.
+   *
+   * Năm điều kiện, và điều nào hụt thì bỏ hẳn lịch Whist chứ không dùng một nửa:
+   *
+   *   • **Số sân phải đủ kín** — thiết kế xếp đúng `⌊người/4⌋` trận mỗi vòng, ít
+   *     sân hơn thì không đặt hết, mà cắt bớt là hỏng cả thiết kế.
+   *   • **Không ai khai vắng mặt** — thiết kế cố định ai đánh vòng nào, không
+   *     chừa chỗ cho lời khai. Có người khai thì trả quyền lại cho bộ tìm kiếm,
+   *     vì lời khai là ràng buộc cứng còn đa dạng bạn đôi chỉ là mong muốn.
+   *   • **Cả nhóm có mặt từ vòng đầu và không ai đang mang nợ** — xem
+   *     `nhomCoDinhTuDau`.
+   *   • **Buổi đánh từ đầu tới giờ vẫn đang đi đúng thiết kế** — xem
+   *     `followingDesign`.
+   *   • **Vòng nào nằm trong `roundsToKeep` thì để nguyên vòng đó** — ở đó có
+   *     trận `reduce` sẽ giữ lại dù lệnh mới không nhắc tới, nên đặt trận khác
+   *     lên đúng cái sân ấy là thành hai trận cùng chỗ và ba người bị gọi ra hai
+   *     trận cùng lúc.
+   *
+   * Các trận sinh ra ở đây được đánh dấu **đông cứng**, tức bước tinh chỉnh không
+   * được đụng vào. Đó là chỗ khác biệt so với mọi phương án khởi đầu khác, và nó
+   * cố ý:
+   *
+   * Hàm chi phí chỉ nhìn được `lookaheadRounds` vòng phía trước, còn lịch Whist
+   * tối ưu trên trọn chu kỳ 11 hay 15 vòng. Cắt sáu vòng đầu của thiết kế ra so
+   * riêng thì nó THUA — bộ tìm kiếm trải đối thủ đều hơn trong sáu vòng ấy, đúng
+   * trong cửa sổ và sai cho cả buổi. Đo được: để hai bên thi nhau bằng chi phí
+   * thì 12 và 16 người không bao giờ dùng tới thiết kế, kể cả vòng đầu.
+   *
+   * Ghi đè hàm chi phí là chuyện lớn, nên nói rõ vì sao ở đây là đúng: trong
+   * phạm vi các điều kiện trên, thiết kế Whist **không đánh đổi công bằng để lấy
+   * đa dạng**. Ai cũng đánh mọi vòng (hoặc nghỉ đúng một lần mỗi chu kỳ), nên
+   * `deficit` và `bye` bằng đúng phương án tốt nhất bộ tìm kiếm dò ra — đã đo,
+   * bằng nhau tới từng đơn vị. Cái nó đổi được là chuỗi vòng đánh liên tiếp đạt
+   * đúng mức `achievableStreakCap`, tức mức tốt nhất có thể.
+   */
+  function whistStart(base: Plan): Plan | null {
+    const people = activeIds.length;
+    if (!hasWhistDesign(people)) return null;
+    if (Math.floor(people / 4) > courts) return null;
+    if (unavailable) return null;
+    if (!nhomCoDinhTuDau()) return null;
+    if (!followingDesign(people)) return null;
+
+    let used = false;
+    const plan: Plan = [];
+    for (let offset = 0; offset < lookahead; offset++) {
+      if (roundsToKeep.has(offset)) {
+        plan.push(base[offset] ?? []);
+        continue;
+      }
+      // Vòng đánh đếm từ 1, lịch Whist đếm từ 0.
+      const quads = whistRound(people, fromRound + offset - 1);
+      if (!quads) return null;
+      used = true;
+      plan.push(
+        quads.map((quad, i) => ({
+          // Xoay sân theo vòng: thiết kế Whist không nói gì về sân, mà đặt cố
+          // định thì có người mắc kẹt ở một sân suốt buổi.
+          court: ((i + offset) % quads.length) + 1,
+          quad,
+          frozen: true,
+        })),
+      );
+    }
+    return used ? plan : null;
+  }
+
+  // Cỡ nhóm nào có lời giải Whist sẵn thì dùng nó, còn lại để bộ tìm kiếm lo.
+  const chosen = whistStart(start) ?? start;
+
+  const result = optimize(chosen, {
     ctx,
     rng,
     iterations: options.iterations,

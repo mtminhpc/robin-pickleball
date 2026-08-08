@@ -375,6 +375,66 @@ tới đúng giờ chỉ còn 4–5).
 
 ---
 
+## Lịch Whist — cặp lặp về 0 ở những cỡ nhóm kín sân
+
+Với vài cỡ nhóm, bài toán "chia đôi sao cho ai cũng gặp nhiều người" có lời giải
+hoàn hảo đã biết trong toán tổ hợp: **bắt cặp mỗi người đúng một lần, gặp mỗi
+người đúng hai lần**. Điều kiện là mọi sân đều kín — `4×sân` người (ai cũng đánh
+mọi vòng) hoặc `4×sân + 1` (mỗi vòng đúng một người nghỉ, xoay đủ vòng).
+
+Bảng lịch nằm ở [lib/scheduler/whist.ts](../lib/scheduler/whist.ts), do
+[scripts/whist-tables.mjs](../scripts/whist-tables.mjs) sinh ra và được
+[tests/whist.test.ts](../tests/whist.test.ts) dựng lại kiểm từ đầu.
+
+Đo trên 12 mã buổi mỗi cỡ, tính số lần một cặp phải đánh đôi lại với nhau:
+
+| Người / sân / vòng | Trước | Sau |
+|---|---|---|
+| 8 / 2 / 7 | 3,33 | **0** |
+| 9 / 2 / 9 | 3,00 | **0** |
+| 12 / 3 / 11 | 5,42 | **0** |
+| 13 / 3 / 13 | 6,08 | **0** |
+| 16 / 4 / 15 | 7,83 | **0** |
+| 6 / 1 và 7 / 1 | 0,50 | 0,50 (không có thiết kế cho cỡ này) |
+
+Lệch suất kỳ vọng giữ nguyên 0,00 ở mọi cỡ — nó mua đa dạng chứ không đổi công
+bằng lấy đa dạng.
+
+### Ba cái bẫy đã sập trong lúc làm
+
+1. **Để thiết kế đi thi với hàm chi phí thì nó luôn thua.** Hàm chi phí chỉ nhìn
+   `lookaheadRounds` vòng, còn thiết kế tối ưu trên trọn chu kỳ 11–15 vòng. Cắt
+   sáu vòng đầu ra so riêng thì bộ tìm kiếm trải đối thủ đều hơn — đúng trong cửa
+   sổ, sai cho cả buổi. Đo được: 12 và 16 người **không bao giờ** dùng tới thiết
+   kế, kể cả vòng đầu. Nên các trận Whist được đánh dấu **đông cứng**.
+2. **Áp nửa vời còn tệ hơn không áp.** Nếu phần đầu buổi đã lệch khỏi thiết kế mà
+   vẫn lấy phần đuôi của nó, thì cái đuôi chọn đúng những cặp mà thiết kế giả
+   định là chưa dùng. Đo được: 16 người xấu đi từ 7,8 lên 9,6. Vì vậy có
+   `followingDesign` — hễ một trận không sửa được nữa mà không khớp thiết kế thì
+   bỏ hẳn.
+3. **"Đông cứng" không phải điều kiện đúng.** Ở chế độ `rebuild`, một trận đã
+   đánh xong KHÔNG bị đánh dấu đông cứng, nhưng `reduce` vẫn giữ nó lại. Lấy
+   nhầm điều kiện thì đặt trận Whist chồng lên đúng cái sân ấy — bộ mẫu thử bắt
+   được "vòng 4 xếp trùng sân 1, bốn người bị gọi ra hai trận". Điều kiện đúng là
+   `roundsToKeep`: mọi vòng có trận mà `reduce` sẽ giữ lại.
+
+### Bộ mẫu thử từng chấm một thuật toán yếu hơn thuật toán thật
+
+Trong lúc làm việc này lộ ra một chuyện đáng kể hơn: `lib/testing/scenarios.ts`
+đặt ngân sách tối ưu **6.000 lượt / 120ms** cho nhanh, trong khi ứng dụng thật
+chạy tới 40.000 lượt / 400ms. Hậu quả không phải chậm hay nhanh mà là bảng số nói
+về một phần mềm không tồn tại. Nó đã báo sai một lần: một kịch bản báo thiếu
+**1,07 suất**, nhưng với ngân sách thật con số đó là **0,60**.
+
+Đã bỏ hẳn phần bóp ngân sách. Bộ kiểm thử **không chậm đi thấy được** (~15 giây).
+
+Cũng nhân đó phát hiện: bài kiểm thử ấy trước nay xanh là **do may**. Cho lần
+lượt từng người trong chín người về sớm thì **1 trên 9** làm vỡ mức hứa 1,05 — ở
+cả bản cũ lẫn bản mới, và chỉ ở ngân sách bị bóp. Kịch bản luôn chọn người đầu
+danh sách, mà người đó tình cờ an toàn.
+
+---
+
 ## Còn lại
 
 ### Việc nhỏ chưa làm
