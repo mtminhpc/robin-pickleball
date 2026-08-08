@@ -256,6 +256,26 @@ kết quả lúc đạt lúc hỏng với cùng một đoạn mã. Kho giữ d�
 tiến trình khác ghi vào tệp là bị nuốt mất. Nay mỗi lần đọc hay ghi đều liếc qua
 thời điểm sửa tệp, lệch thì nạp lại.
 
+### Đệm tổng kết, và tab `rollups` đã bỏ
+
+Trang tổng kết trước đây gọi thẳng `getRepo().listByClub(...)`, tức là đi vòng
+qua toàn bộ lớp đệm — hai mươi người cùng mở là hai mươi lần đọc, mà `listByClub`
+đọc cả bảng sự kiện kèm ảnh chụp trạng thái tới 180 nghìn ký tự mỗi dòng. Nay có
+`readClubEvents` trong `lib/sheets/cache.ts`, bọc nó vào `unstable_cache` 60 giây
+theo đúng khuôn `readClub` đã có.
+
+Buổi mới tạo cho câu lạc bộ thì xoá đệm ngay để nó hiện ra lập tức. **Cố ý không
+xoá sau mỗi lần nhập tỷ số** — bắn hỏng đệm mỗi khi có người ghi điểm thì nó
+chẳng đệm được gì, mà buổi đang đánh vốn đã được đánh dấu "số liệu còn chạy tiếp".
+
+Tab `rollups` đã có sẵn trong bố cục Sheet nhưng chưa bao giờ được đọc hay ghi,
+và nay **bỏ hẳn**. Ba lý do, ghi trong `lib/sheets/schema.ts` để lần sau không ai
+dựng lại: Sheets không lọc được phía máy chủ nên đọc dòng của một câu lạc bộ là
+đọc cả tab của mọi câu lạc bộ; đệm còn mới thì tốn 1 lời gọi y như không đệm, đệm
+cũ thì tốn 3, mà mỗi lần nhập tỷ số là `seq` đổi nên suốt buổi đang đánh lần nào
+cũng cũ; và ghi bằng `rowIndex` trên một tab dùng chung không có khoá thì hai máy
+chủ tính cùng lúc sẽ đè lên dòng của nhau.
+
 ### Bỏ gộp một máy khỏi tài khoản
 
 Trang **Của tôi** → bấm dòng *"Gộp số liệu từ N máy"* → danh sách các máy, mỗi
@@ -340,8 +360,6 @@ tới đúng giờ chỉ còn 4–5).
 - **Bật đăng nhập Google.** Cần OAuth client trong tài khoản Google Cloud của
   bạn nên tôi không làm hộ được. Mã đã sẵn sàng: điền hai biến trong
   [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) là nút hiện ra.
-- **Tab `rollups`** đã có trong bố cục Sheet nhưng chưa dùng. Tổng kết đang tính
-  lại mỗi lần đọc; khi nào câu lạc bộ có vài trăm buổi mới cần đệm vào đó.
 
 ### Cảnh báo bảo mật
 

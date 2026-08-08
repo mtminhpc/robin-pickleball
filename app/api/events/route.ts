@@ -26,7 +26,7 @@ import {
   memberForUser,
 } from "@/lib/domain/club";
 import { DEVICE_COOKIE } from "@/lib/identity/device";
-import { getClubRepo, readClub } from "@/lib/sheets/cache";
+import { getClubRepo, invalidateClubEvents, readClub } from "@/lib/sheets/cache";
 import { currentUserId } from "@/lib/api/user";
 
 interface CreateBody {
@@ -166,6 +166,9 @@ export async function POST(request: NextRequest) {
   if (!committed.ok) return fail(500, committed.error);
 
   invalidateEvent(code);
+  // Buổi mới của một câu lạc bộ phải hiện ngay trong trang tổng kết, chứ không
+  // đợi hết một phút đệm rồi mới xuất hiện.
+  if (clubId) invalidateClubEvents(clubId);
 
   const response = NextResponse.json({ code, name, invited: roster.length });
   response.cookies.set(

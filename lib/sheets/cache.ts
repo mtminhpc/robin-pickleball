@@ -131,6 +131,39 @@ export function invalidateClub(clubId: string): void {
   revalidateTag(clubTag(clubId));
 }
 
+export function clubEventsTag(clubId: string): string {
+  return `club-events:${clubId}`;
+}
+
+/**
+ * Mọi buổi đánh của một câu lạc bộ, qua bộ nhớ đệm. Dùng cho trang tổng kết.
+ *
+ * `listByClub` là lời gọi đọc đắt nhất trong ứng dụng: mỗi dòng sự kiện mang
+ * theo ảnh chụp trạng thái tới 180 nghìn ký tự, và nó đọc cả bảng. Trước đây
+ * trang tổng kết gọi thẳng `getRepo()`, tức là đi vòng qua toàn bộ lớp đệm —
+ * hai mươi người cùng mở là hai mươi lần đọc.
+ *
+ * Giữ 60 giây, cùng lý lẽ với `CLUB_TTL_SECONDS`: tổng kết nói về những buổi đã
+ * xong, chậm một phút không ai nhận ra. **Cố ý không xoá đệm sau mỗi lần nhập
+ * tỷ số** — bắn hỏng đệm mỗi khi có người ghi điểm thì nó chẳng đệm được gì, mà
+ * số liệu buổi đang đánh vốn đã được đánh dấu là còn chạy tiếp.
+ */
+export async function readClubEvents(
+  clubId: string,
+): Promise<Array<{ record: EventRecord; state: EventState }>> {
+  const load = unstable_cache(
+    async (id: string) => getRepo().listByClub(id),
+    ["club-events"],
+    { tags: [clubEventsTag(clubId)], revalidate: CLUB_TTL_SECONDS },
+  );
+  return load(clubId);
+}
+
+/** Gọi khi câu lạc bộ có thêm buổi mới, để nó hiện ra ngay chứ không đợi một phút. */
+export function invalidateClubEvents(clubId: string): void {
+  revalidateTag(clubEventsTag(clubId));
+}
+
 // ---------------------------------------------------------------------------
 // Tài khoản
 // ---------------------------------------------------------------------------

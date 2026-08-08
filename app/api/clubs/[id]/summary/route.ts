@@ -7,7 +7,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { rollupEvents, type PeriodType } from "@/lib/domain/rollup";
-import { getRepo } from "@/lib/sheets/cache";
+import { readClubEvents } from "@/lib/sheets/cache";
 import { resolveClub } from "@/lib/api/club-context";
 import { fail, isResponse } from "@/lib/api/context";
 
@@ -25,7 +25,7 @@ export async function GET(
   const raw = request.nextUrl.searchParams.get("period");
   const period: PeriodType = raw === "month" ? "month" : "week";
 
-  const events = await getRepo().listByClub(ctx.loaded.club.id);
+  const events = await readClubEvents(ctx.loaded.club.id);
   const periods = rollupEvents(
     events.map(({ record, state }) => ({
       code: record.code,

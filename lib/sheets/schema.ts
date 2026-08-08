@@ -16,7 +16,6 @@ export const TABS = {
   events: "events",
   accounts: "accounts",
   devices: "devices",
-  rollups: "rollups",
 } as const;
 
 /** Tab nhật ký của một sự kiện: nguồn sự thật, chỉ ghi thêm không sửa. */
@@ -83,15 +82,28 @@ export const HEADERS = {
     "last_seen",
     "recent_events_json",
   ],
-  [TABS.rollups]: [
-    "scope",
-    "period_type",
-    "period_key",
-    "computed_at",
-    "source_seq",
-    "data_json",
-  ],
 } as const;
+
+/*
+ * Đã có một tab `rollups` ở đây để đệm tổng kết tuần/tháng, cột
+ * `scope, period_type, period_key, computed_at, source_seq, data_json`.
+ * Nó chưa bao giờ được đọc hay ghi, và nay đã bỏ hẳn. Ghi lại lý do để lần sau
+ * không ai dựng lại đúng thứ vừa gỡ đi:
+ *
+ * - Sheets không lọc được ở phía máy chủ. Lấy các dòng của một câu lạc bộ nghĩa
+ *   là đọc cả tab, tức là mọi kỳ của mọi câu lạc bộ — sau một năm với năm câu
+ *   lạc bộ là vài megabyte để trả lời một câu hỏi. Đúng thứ định tránh.
+ * - Khi đệm còn mới thì tốn 1 lời gọi, y như không đệm. Khi đệm cũ thì tốn 3
+ *   (đọc dấu vân tay, đọc đủ trạng thái, ghi lại) — mà mỗi lần nhập tỷ số là
+ *   `seq` đổi, nên suốt buổi đang đánh lần nào cũng cũ. Đắt gấp ba đúng lúc gần
+ *   chạm hạn mức nhất.
+ * - Ghi bằng `rowIndex` đọc được từ trước, trên một tab dùng chung, không có
+ *   khoá cũng không có CAS. Hai máy chủ tính tổng kết cho hai câu lạc bộ cùng
+ *   lúc thì lời ghi này đè lên dòng của lời ghi kia, im lặng.
+ *
+ * Thay bằng `readClubEvents` trong `cache.ts`: bọc `listByClub` vào
+ * `unstable_cache` 60 giây, đúng khuôn `readClub` đã có.
+ */
 
 export const LOG_HEADERS = [
   "seq",
