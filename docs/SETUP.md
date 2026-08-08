@@ -12,8 +12,8 @@ Hai chế độ, chuyển qua lại chỉ bằng biến môi trường:
 ## Chạy thử trên máy (2 phút)
 
 ```bash
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 Mở `http://localhost:3000`. Dữ liệu lưu vào `.data/sheet.json` — mở tệp đó ra xem
@@ -106,7 +106,7 @@ quyền chủ sự kiện của mọi buổi đánh. Đừng dùng lại giữa 
 ### 6. Tạo sẵn các tab
 
 ```bash
-pnpm bootstrap-sheet
+npm run bootstrap-sheet
 ```
 
 Lệnh này tạo các tab dùng chung và dòng tiêu đề, đồng thời xác nhận cấu hình đúng.
@@ -115,7 +115,7 @@ Sai ở đâu nó sẽ nói rõ ở đó.
 ### 7. Chạy
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 Mở bảng tính bên cạnh mà xem: mỗi buổi đánh sinh ra hai tab riêng —

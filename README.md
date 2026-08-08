@@ -14,23 +14,30 @@ người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu,
 Không cần tài khoản Google, không cần cấu hình gì:
 
 ```bash
-pnpm install
-pnpm dev           # mở http://localhost:3000
+npm install
+npm run dev        # mở http://localhost:3000
 ```
 
-Dữ liệu lưu vào `.data/sheet.json`. Khi nào sẵn sàng dùng thật thì điền biến môi
-trường Google và ứng dụng tự chuyển sang Google Sheet — xem [docs/SETUP.md](docs/SETUP.md).
+Dữ liệu lưu vào `.data/sheet.json`; xoá thư mục đó là chơi lại từ đầu. Khi nào sẵn
+sàng dùng thật thì điền biến môi trường Google và ứng dụng tự chuyển sang Google
+Sheet — xem [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
-pnpm test          # 172 bài kiểm thử
-pnpm sim --matrix  # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
+npm test                  # 172 bài kiểm thử
+npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
 
 Mô phỏng một buổi cụ thể, kể cả có người vào giữa chừng và người về sớm:
 
 ```bash
-pnpm sim --players 12 --courts 2 --rounds 16 --join 5 --leave 9
+npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 ```
+
+> Repo có `pnpm-lock.yaml` và `pnpm` vẫn chạy tốt. Lệnh trên dùng `npm` vì trên
+> Windows việc cài `pnpm` hay vướng chính sách chạy script của PowerShell.
+
+**Hướng dẫn từng bước cho Windows, kịch bản bấm thử, và tình trạng dự án:**
+[docs/TIEN-DO.md](docs/TIEN-DO.md).
 
 ## Dùng ở sân thế nào
 
