@@ -23,7 +23,7 @@ sàng dùng thật thì điền biến môi trường Google và ứng dụng t�
 Sheet — xem [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
-npm test                  # 212 bài kiểm thử
+npm test                  # 217 bài kiểm thử
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
 
@@ -179,7 +179,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, đăng nhập Google
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            212 bài kiểm thử
+tests/            217 bài kiểm thử
 ```
 
 Nguyên tắc: `lib/domain` và `lib/scheduler` là hàm thuần, không đọc đồng hồ, không gọi

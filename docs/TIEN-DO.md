@@ -16,7 +16,7 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 ### Đang ở đâu
 
 Mã nguồn **xong và đã kiểm chứng** tới hết GĐ3, cộng thêm bỏ gộp máy khỏi tài
-khoản và đệm tổng kết. `npm test` 212 bài xanh, `npm run build` sạch. Không có
+khoản và đệm tổng kết. `npm test` 217 bài xanh, `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
 
 Bản nâng lên Next.js 16.3.0 nằm sẵn ở nhánh `claude/nang-next-16`, cố ý chưa gộp
@@ -38,7 +38,7 @@ sau lần deploy đầu.
 
 ```powershell
 npm install        # BẮT BUỘC chạy lại — xem lưu ý OneDrive bên dưới
-npm test           # 212 bài, xác nhận máy mới chạy đúng
+npm test           # 217 bài, xác nhận máy mới chạy đúng
 npm run dev
 ```
 
@@ -115,7 +115,7 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
-| Chạy bộ kiểm thử | `npm test` (212 bài, ~15 giây) |
+| Chạy bộ kiểm thử | `npm test` (217 bài, ~15 giây) |
 | Soát cấu hình trước khi triển khai | `npm run check-env` |
 | Sinh `APP_SECRET` mới | `npm run new-secret` |
 | Quét công bằng 42 cấu hình | `npm run sim -- --matrix` |
@@ -260,6 +260,28 @@ kết quả lúc đạt lúc hỏng với cùng một đoạn mã. Kho giữ d�
 tiến trình khác ghi vào tệp là bị nuốt mất. Nay mỗi lần đọc hay ghi đều liếc qua
 thời điểm sửa tệp, lệch thì nạp lại.
 
+### Lỗi chặn ở lần đầu nối Google Sheet thật
+
+Đáng đọc kỹ, vì nó cho thấy một khoảng mù của cả bộ kiểm thử.
+
+`GoogleSheetsClient.batchGet` gửi mọi dải lên Google, kể cả dải thuộc **tab chưa
+tồn tại**. Google trả `400 Unable to parse range`, và lỗi đó giết **cả lô** chứ
+không riêng dải hỏng. `EventRepo.load` đọc chỉ mục sự kiện chung một lô với
+`log__<mã>!A:A` — mà lúc `pickUnusedCode` đi tìm một mã chưa ai dùng thì tab nhật
+ký đương nhiên chưa có.
+
+Hệ quả: trên Sheet thật **không tạo được buổi đánh nào cả**. Ở nhà thì mọi thứ
+trơn tru.
+
+Vì sao 212 bài kiểm thử không bắt được: **không bài nào chạm tới
+`GoogleSheetsClient`**. Mọi thứ khác chạy trên `FakeSheetsClient`, vốn trả dải
+rỗng cho tab chưa có — đúng cái lệch mà chính dòng chú thích trong `batchGet` nói
+là muốn tránh. Nay có `tests/google.test.ts` chặn `fetch` nên không cần mạng hay
+tài khoản Google; gỡ phần sửa ra thì 3 trên 5 bài hỏng.
+
+Bài học cho lần sau: **kho giả dễ tính hơn hàng thật ở đâu thì chỗ đó là điểm
+mù.** Ở đây kho giả tha thứ cho tab chưa tồn tại, còn Google thì không.
+
 ### Đệm tổng kết, và tab `rollups` đã bỏ
 
 Trang tổng kết trước đây gọi thẳng `getRepo().listByClub(...)`, tức là đi vòng
@@ -336,7 +358,8 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **212 bài xanh** (`npm test`), trong đó **5 bài mới** cho việc gỡ máy khỏi tài khoản |
+| Kiểm thử tự động | **217 bài xanh** (`npm test`) — thêm 5 bài cho việc gỡ máy khỏi tài khoản và 5 bài cho kho Google Sheet |
+| **Chạy thử trên Google Sheet THẬT** | **19 phép kiểm, 0 hỏng** — lập câu lạc bộ, tạo buổi, bốn người, xếp lịch, nhập tỷ số 11–7, tổng kết, rồi đọc lại từ một tiến trình khác để chắc dữ liệu nằm trên bảng tính |
 | Kiểm tra kiểu | `npm run typecheck` sạch |
 | Quét ma trận công bằng | **42 cấu hình, 0 cấu hình bị đánh dấu** |
 | Chạy thử thật qua HTTP | **66 phép kiểm, 0 hỏng** — buổi đánh, câu lạc bộ, tổng kết, trang của tôi |
@@ -361,6 +384,10 @@ tới đúng giờ chỉ còn 4–5).
   [SETUP.md](SETUP.md) là chạy. **Bắt buộc phải có biến Google** — kho tệp cục bộ
   không sống được trên Vercel, và ứng dụng cố ý báo lỗi ngay lúc khởi động thay vì
   âm thầm mất dữ liệu.
+
+  > Phần Google Sheet **đã nối và chạy thật rồi**: service account, bảng tính,
+  > `.env.local`, và 19 phép kiểm chạy trọn một buổi đánh trên Sheet thật. Còn
+  > lại đúng phần Vercel.
 - **Bật đăng nhập Google.** Cần OAuth client trong tài khoản Google Cloud của
   bạn nên tôi không làm hộ được. Mã đã sẵn sàng: điền hai biến trong
   [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) là nút hiện ra.
@@ -425,7 +452,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            212 bài kiểm thử
+tests/            217 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —
