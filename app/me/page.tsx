@@ -15,11 +15,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { loadProfile, loadRecentEvents } from "@/lib/identity/device";
+import { ACCOUNT_KEY } from "@/hooks/useAccount";
 import { AccountBar } from "@/components/AccountBar";
 import { Avatar } from "@/components/Avatar";
-import { Card, Empty } from "@/components/ui";
+import { Button, Card, Empty } from "@/components/ui";
 
 interface MeResponse {
   events: Array<{
@@ -52,11 +53,25 @@ interface MeResponse {
     of: number;
   }>;
   /** `null` khi chưa đăng nhập — số liệu khi đó chỉ của riêng máy này. */
-  account: { email: string; displayName: string; devices: number } | null;
+  account: {
+    email: string;
+    displayName: string;
+    devices: number;
+    deviceList: DeviceRow[];
+  } | null;
+}
+
+interface DeviceRow {
+  deviceId: string;
+  displayName: string;
+  lastSeen: number;
+  /** Chính cái máy đang mở trang này. */
+  current: boolean;
 }
 
 export default function MePage() {
   const [payload, setPayload] = useState<{ codes: string[]; name: string } | null>(null);
+  const [showDevices, setShowDevices] = useState(false);
 
   useEffect(() => {
     setPayload({
@@ -95,13 +110,21 @@ export default function MePage() {
             <h1 className="text-2xl font-bold">
               {data?.account?.displayName || profile?.name || "Máy này"}
             </h1>
-            <p className="text-sm text-slate-400">
-              {data?.account
-                ? data.account.devices > 1
-                  ? `Gộp số liệu từ ${data.account.devices} máy`
-                  : "Số liệu theo tài khoản"
-                : "Số liệu lưu trên máy, không cần tài khoản"}
-            </p>
+            {data?.account && data.account.devices > 1 ? (
+              <button
+                className="text-sm text-slate-400 underline decoration-slate-700 underline-offset-4 hover:text-slate-200"
+                onClick={() => setShowDevices((v) => !v)}
+              >
+                Gộp số liệu từ {data.account.devices} máy
+                <span className="ml-1 text-xs">{showDevices ? "▲" : "▼"}</span>
+              </button>
+            ) : (
+              <p className="text-sm text-slate-400">
+                {data?.account
+                  ? "Số liệu theo tài khoản"
+                  : "Số liệu lưu trên máy, không cần tài khoản"}
+              </p>
+            )}
           </div>
         </div>
       </header>
@@ -185,6 +208,8 @@ export default function MePage() {
         </>
       )}
 
+      {showDevices && data?.account && <DeviceList devices={data.account.deviceList} />}
+
       <AccountBar next="/me" />
 
       <p className="pb-4 text-xs text-slate-600">
@@ -194,6 +219,124 @@ export default function MePage() {
       </p>
     </main>
   );
+}
+
+/**
+ * Những máy đang được gộp vào tài khoản, và nút bỏ bớt.
+ *
+ * Chữ ở đây phải nói đúng phạm vi việc mình làm, vì rất dễ đọc nhầm thành "khoá
+ * cái điện thoại đã mất". Nó **không làm được thế**: cookie thiết bị nằm trong
+ * chính cái máy đó, và danh bạ câu lạc bộ vẫn nhận nó theo mã máy. Thứ duy nhất
+ * bị cắt là việc gộp số liệu — nên nút cũng chỉ hứa đúng chừng ấy.
+ *
+ * Máy đang cầm không gỡ được: gỡ nó chỉ tạo ra trạng thái vừa đang đăng nhập vừa
+ * không thuộc tài khoản nào, rồi lần đăng nhập sau nó tự gắn lại. Đăng xuất mới
+ * là việc người dùng đang định làm.
+ */
+function DeviceList({ devices }: { devices: DeviceRow[] }) {
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const remove = useMutation({
+    mutationFn: async (deviceId: string) => {
+      const res = await fetch("/api/auth/devices", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deviceId }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? "Không gỡ được máy này.");
+    },
+    onSuccess: () => {
+      // Số liệu thu hẹp lại, và AccountBar vẽ số máy từ phiên đăng nhập — không
+      // tính lại cả hai thì người vừa bấm nhìn thấy con số của trạng thái cũ.
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      queryClient.invalidateQueries({ queryKey: ACCOUNT_KEY });
+      setConfirming(null);
+    },
+  });
+
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+        Máy đang gộp
+      </h2>
+
+      {devices.map((d) => (
+        <Card key={d.deviceId} className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-medium">
+                {d.displayName || "Máy không tên"}
+                <span className="ml-2 font-mono text-xs text-slate-600">
+                  ·{d.deviceId.slice(-4)}
+                </span>
+              </p>
+              <p className="text-xs text-slate-500">
+                {d.current ? "Máy này" : `Đồng bộ lần cuối ${whenLabel(d.lastSeen)}`}
+              </p>
+            </div>
+
+            {d.current ? (
+              <span className="shrink-0 text-xs text-slate-600">Dùng Đăng xuất</span>
+            ) : (
+              confirming !== d.deviceId && (
+                <button
+                  className="shrink-0 text-sm text-slate-400 hover:text-slate-100"
+                  onClick={() => {
+                    remove.reset();
+                    setConfirming(d.deviceId);
+                  }}
+                >
+                  Bỏ gộp
+                </button>
+              )
+            )}
+          </div>
+
+          {confirming === d.deviceId && (
+            <div className="mt-3 space-y-3 rounded-xl bg-amber-500/10 p-3">
+              <p className="text-sm text-amber-200">
+                Số liệu từ máy này thôi được cộng vào trang của bạn, và danh sách
+                buổi của nó không còn theo tài khoản sang máy khác nữa.
+                <strong className="block pt-1 font-semibold">
+                  Việc này không khoá được cái điện thoại đó.
+                </strong>
+                Ai đang cầm nó vẫn mở được các buổi đã lưu sẵn trong máy, và vẫn
+                là thành viên câu lạc bộ như trước.
+              </p>
+              {remove.error && (
+                <p className="text-sm text-rose-300">{(remove.error as Error).message}</p>
+              )}
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={() => setConfirming(null)}>
+                  Thôi
+                </Button>
+                <Button
+                  tone="danger"
+                  className="flex-1"
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate(d.deviceId)}
+                >
+                  {remove.isPending ? "Đang gỡ…" : "Bỏ gộp"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      ))}
+    </section>
+  );
+}
+
+/** "hôm nay" / "3 ngày trước" — ngày tháng đầy đủ cho mốc đã xa. */
+function whenLabel(at: number): string {
+  if (!at) return "chưa rõ";
+  const days = Math.floor((Date.now() - at) / 86_400_000);
+  if (days <= 0) return "hôm nay";
+  if (days === 1) return "hôm qua";
+  if (days < 30) return `${days} ngày trước`;
+  return new Date(at).toLocaleDateString("vi-VN");
 }
 
 function Stat({

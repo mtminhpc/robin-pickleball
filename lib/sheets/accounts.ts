@@ -166,6 +166,10 @@ export class AccountRepo {
    * chung mà hai người lần lượt đăng nhập thì người sau nhận máy, đúng như họ
    * mong đợi. Danh sách buổi cũ vẫn được gộp lại chứ không xoá — nó là lịch sử
    * của cái máy, và những buổi đó cả hai người đều có mặt.
+   *
+   * Điều đó chỉ đúng cho **người sau tự đăng nhập đè lên**. Chủ máy chủ động bấm
+   * gỡ là một tín hiệu khác hẳn, và `unlinkDevice` xoá danh sách đi — xem docblock
+   * ở đó.
    */
   async linkDevice(input: {
     deviceId: string;
@@ -208,6 +212,50 @@ export class AccountRepo {
   }
 
   /**
+   * Bỏ một cái máy ra khỏi tài khoản.
+   *
+   * Chỉ gỡ được máy của **chính mình**: `userId` phải khớp, không thì trả `false`
+   * và không ghi gì. Không có bước này thì ai đoán được `deviceId` của người khác
+   * là gỡ được máy của họ.
+   *
+   * Xoá luôn danh sách buổi của cái máy đó, khác hẳn `linkDevice` vốn gộp lại.
+   * Hai tình huống khác nhau: điện thoại dùng chung thì cả hai người đều có mặt
+   * ở những buổi ấy nên giữ là đúng; còn chủ máy chủ động bấm gỡ là đang nói *"đừng
+   * gộp số liệu từ máy này nữa"*, mà để danh sách lại thì `linkDevice` sẽ merge nó
+   * sang tài khoản người đăng nhập kế tiếp — tức là việc gỡ không mua được gì.
+   *
+   * Giữ lại dòng chứ không xoá, giống `ClubRepo.removeMember`: `SheetsClient` chỉ
+   * có `update` và `append`, và xoá dòng thật thì mọi `rowIndex` phía dưới đều
+   * xê dịch.
+   *
+   * **Việc này không cắt được cái điện thoại**, chỉ cắt việc gộp số liệu. Cookie
+   * thiết bị vẫn nằm trong máy đó, và `ClubRepo.forDevice` vẫn nhận nó là thành
+   * viên câu lạc bộ theo `device_id`. Muốn cắt thật thì phải đổi cookie thiết bị,
+   * mà chỉ chính cái máy đó làm được.
+   */
+  async unlinkDevice(userId: UserId, deviceId: string): Promise<boolean> {
+    if (!userId || !deviceId) return false;
+
+    const [, deviceRows] = await this.readAll();
+    const rowIndex = deviceRows.findIndex(
+      (row, i) => i > 0 && row[D.device_id] === deviceId,
+    );
+    if (rowIndex === -1) return false;
+
+    const existing = toDeviceLink(deviceRows[rowIndex]!);
+    if (existing.userId !== userId) return false;
+
+    await this.sheets.batch([
+      {
+        kind: "update",
+        range: rowRange(TABS.devices, rowIndex, DEVICE_COLUMNS.length),
+        values: [deviceRow({ ...existing, userId: "", recentEvents: [] })],
+      },
+    ]);
+    return true;
+  }
+
+  /**
    * Chép danh sách buổi của một thiết bị lên Sheet để máy khác đọc được.
    *
    * Trả `false` và **không ghi gì** khi danh sách không đổi. Trang "Của tôi" mở
@@ -230,6 +278,14 @@ export class AccountRepo {
     if (rowIndex === -1) return false;
 
     const existing = toDeviceLink(deviceRows[rowIndex]!);
+
+    // Máy đã bị gỡ khỏi tài khoản đang ở đúng trạng thái vừa nói: có một dòng,
+    // nhưng dòng đó không thuộc về ai. Thiếu chỗ này thì việc gỡ vô tác dụng —
+    // cookie tài khoản sống 30 ngày và không có danh sách thu hồi, nên cái máy
+    // vừa bị gỡ chỉ cần mở trang "Của tôi" một lần là ghi lại đúng danh sách ta
+    // vừa xoá.
+    if (existing.userId === "") return false;
+
     const merged = mergeRecentEvents(existing.recentEvents, codes);
     if (
       merged.length === existing.recentEvents.length &&

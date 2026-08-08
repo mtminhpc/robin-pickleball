@@ -248,6 +248,85 @@ describe("kho tài khoản", () => {
     expect(link?.recentEvents).toEqual(["BBB222", "AAA111"]);
   });
 
+  describe("gỡ máy khỏi tài khoản", () => {
+    async function twoDevices() {
+      const { sheets, repo } = fresh();
+      const nam = await repo.upsertByEmail(seed);
+      for (const [deviceId, code] of [
+        ["dt-cu", "AAA111"],
+        ["dt-moi", "BBB222"],
+      ] as const) {
+        await repo.linkDevice({
+          deviceId,
+          userId: nam.userId,
+          displayName: "Nam",
+          avatarId: "e01-c01",
+          recentEvents: [code],
+          at: 1000,
+        });
+      }
+      return { sheets, repo, nam };
+    }
+
+    it("gỡ rồi thì máy đó không còn được gộp, và mất luôn danh sách buổi", async () => {
+      const { repo, nam } = await twoDevices();
+
+      expect(await repo.unlinkDevice(nam.userId, "dt-cu")).toBe(true);
+      expect((await repo.devicesOf(nam.userId)).map((d) => d.deviceId)).toEqual(["dt-moi"]);
+
+      // Dòng vẫn còn — `SheetsClient` không xoá dòng được, và xoá thật thì mọi
+      // rowIndex phía dưới đều xê dịch.
+      const link = await repo.deviceLink("dt-cu");
+      expect(link?.userId).toBe("");
+      expect(link?.recentEvents).toEqual([]);
+    });
+
+    it("không gỡ được máy của người khác, và không ghi gì", async () => {
+      const { sheets, repo, nam } = await twoDevices();
+      const lan = await repo.upsertByEmail({ ...seed, email: "lan@example.com" });
+
+      const before = sheets.calls.batch;
+      expect(await repo.unlinkDevice(lan.userId, "dt-cu")).toBe(false);
+      expect(sheets.calls.batch).toBe(before);
+      expect((await repo.devicesOf(nam.userId)).length).toBe(2);
+    });
+
+    it("máy không có trong sổ thì trả false chứ không ném lỗi", async () => {
+      const { repo, nam } = await twoDevices();
+      expect(await repo.unlinkDevice(nam.userId, "dt-khong-co")).toBe(false);
+    });
+
+    it("máy đã gỡ không ghi ngược danh sách buổi lên nữa", async () => {
+      // Cookie tài khoản sống 30 ngày và không có danh sách thu hồi, nên cái máy
+      // vừa bị gỡ vẫn gọi được tới đây. Thiếu chốt chặn này thì nó mở trang "Của
+      // tôi" một lần là danh sách quay về, và việc gỡ thành vô nghĩa.
+      const { sheets, repo, nam } = await twoDevices();
+      await repo.unlinkDevice(nam.userId, "dt-cu");
+
+      const before = sheets.calls.batch;
+      expect(await repo.rememberEvents("dt-cu", ["CCC333"], 4000)).toBe(false);
+      expect(sheets.calls.batch).toBe(before);
+      expect((await repo.deviceLink("dt-cu"))?.recentEvents).toEqual([]);
+    });
+
+    it("người khác đăng nhập lên máy đó không thừa hưởng buổi cũ", async () => {
+      const { repo, nam } = await twoDevices();
+      await repo.unlinkDevice(nam.userId, "dt-cu");
+
+      const lan = await repo.upsertByEmail({ ...seed, email: "lan@example.com" });
+      await repo.linkDevice({
+        deviceId: "dt-cu",
+        userId: lan.userId,
+        displayName: "Lan",
+        avatarId: "e02-c02",
+        recentEvents: ["DDD444"],
+        at: 5000,
+      });
+
+      expect((await repo.deviceLink("dt-cu"))?.recentEvents).toEqual(["DDD444"]);
+    });
+  });
+
   it("không ghi lại khi danh sách buổi không đổi", async () => {
     // Trang "Của tôi" mở ra là gọi tới đây. Ghi một lần cho mỗi lần mở là đốt
     // hạn mức Sheets vào việc lưu đúng thứ đã có sẵn.

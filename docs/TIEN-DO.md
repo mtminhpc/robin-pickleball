@@ -256,6 +256,25 @@ kết quả lúc đạt lúc hỏng với cùng một đoạn mã. Kho giữ d�
 tiến trình khác ghi vào tệp là bị nuốt mất. Nay mỗi lần đọc hay ghi đều liếc qua
 thời điểm sửa tệp, lệch thì nạp lại.
 
+### Bỏ gộp một máy khỏi tài khoản
+
+Trang **Của tôi** → bấm dòng *"Gộp số liệu từ N máy"* → danh sách các máy, mỗi
+dòng một nút **Bỏ gộp**. Máy đang cầm không gỡ được, vì gỡ nó chỉ tạo ra trạng
+thái vừa đang đăng nhập vừa không thuộc tài khoản nào, rồi lần đăng nhập sau tự
+gắn lại — việc người dùng đang định làm là **Đăng xuất**.
+
+Hai điều đáng ghi lại, vì cả hai đều dễ làm sai:
+
+| | |
+|---|---|
+| **Việc này không cắt được cái điện thoại** | Cookie thiết bị nằm trong chính cái máy đó nên máy chủ không xoá được, và `ClubRepo.forDevice` vẫn nhận nó là thành viên câu lạc bộ theo mã máy. Thứ duy nhất bị cắt là **gộp số liệu**. Chữ trên nút và hộp xác nhận nói đúng chừng ấy — hứa hơn là hứa sai |
+| **Phải chặn máy đã gỡ ghi ngược lại** | `rememberEvents` tìm dòng chỉ bằng mã máy. Cookie tài khoản sống 30 ngày và không có danh sách thu hồi, nên máy vừa bị gỡ chỉ cần mở trang Của tôi một lần là ghi lại đúng danh sách vừa xoá — rồi người đăng nhập kế tiếp trên máy đó thừa hưởng nó. Nay `rememberEvents` trả `false` khi dòng không thuộc tài khoản nào |
+
+Khác `linkDevice` ở chỗ **xoá luôn danh sách buổi** của máy đó. Hai tín hiệu khác
+nhau: điện thoại dùng chung mà người sau đăng nhập đè lên thì cả hai đều có mặt ở
+những buổi ấy nên giữ là đúng; còn chủ máy chủ động bấm gỡ là đang nói *"đừng gộp
+số liệu từ máy này nữa"*.
+
 ### Đổi mã mời câu lạc bộ
 
 Mã mời không hết hạn và dùng được vô số lần — chiếu lên tường sân cho hai mươi
@@ -323,9 +342,6 @@ tới đúng giờ chỉ còn 4–5).
   [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) là nút hiện ra.
 - **Tab `rollups`** đã có trong bố cục Sheet nhưng chưa dùng. Tổng kết đang tính
   lại mỗi lần đọc; khi nào câu lạc bộ có vài trăm buổi mới cần đệm vào đó.
-- **Gỡ một thiết bị khỏi tài khoản.** Hiện đăng nhập là gắn, đăng xuất chỉ xoá
-  cookie chứ không gỡ dòng trong sổ thiết bị. Cần khi ai đó bán mất điện thoại
-  cũ — chưa gấp, vì dòng đó chỉ mang danh sách mã buổi đánh.
 
 ### Cảnh báo bảo mật
 

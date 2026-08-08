@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       events: [],
       totals: emptyTotals(),
       periods: [],
-      account: accountInfo(me),
+      account: accountInfo(me, deviceId),
     });
   }
 
@@ -134,7 +134,12 @@ export async function POST(request: NextRequest) {
     };
   });
 
-  return NextResponse.json({ events, totals, periods, account: accountInfo(me) });
+  return NextResponse.json({
+    events,
+    totals,
+    periods,
+    account: accountInfo(me, deviceId),
+  });
 }
 
 /**
@@ -218,13 +223,32 @@ function findMe(
   return null;
 }
 
-/** Cho giao diện biết đang gộp số liệu của mấy máy, để nói thật về phạm vi. */
-function accountInfo(me: Awaited<ReturnType<typeof currentUser>>) {
+/**
+ * Cho giao diện biết đang gộp số liệu của mấy máy, để nói thật về phạm vi.
+ *
+ * Kèm luôn danh sách máy để trang "Của tôi" gỡ được máy cũ. Không tốn thêm lần
+ * đọc Sheet nào: `currentUser` đi qua `readAccount`, vốn đã trả về cả `DeviceLink[]`.
+ */
+function accountInfo(
+  me: Awaited<ReturnType<typeof currentUser>>,
+  thisDeviceId: string,
+) {
   if (!me) return null;
   return {
     email: me.account.email,
     displayName: me.account.displayName,
     devices: me.devices.length,
+    deviceList: me.devices
+      .map((d) => ({
+        deviceId: d.deviceId,
+        displayName: d.displayName,
+        lastSeen: d.lastSeen,
+        current: d.deviceId === thisDeviceId,
+      }))
+      // Máy đang cầm lên đầu, còn lại mới dùng gần đây đứng trước.
+      .sort((a, b) =>
+        a.current !== b.current ? (a.current ? -1 : 1) : b.lastSeen - a.lastSeen,
+      ),
   };
 }
 
