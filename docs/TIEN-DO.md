@@ -55,16 +55,6 @@ Ba thứ **không nằm trong git** nên máy mới sẽ không có, và đó l�
 | **Ghi thẳng vào `.data\sheet.json` từ tiến trình khác** trong lúc máy chủ chạy | Kết quả lúc đạt lúc hỏng với cùng một đoạn mã | Đã sửa: kho nay nạp lại khi tệp đổi. Nhưng vẫn còn lớp đệm 60 giây của Next cho câu lạc bộ và tài khoản |
 | **`node_modules` nằm trong OneDrive** | Đồng bộ rất chậm, thỉnh thoảng hỏng tệp giữa chừng | Đừng chờ OneDrive đồng bộ `node_modules`. Máy mới cứ `npm install` lại từ đầu |
 
-### Một quyết định còn treo
-
-Repo có **cả `pnpm-lock.yaml` lẫn `package-lock.json`**. Hai tệp khoá cho cùng
-một dự án thì sớm muộn cũng lệch nhau. Nên chọn một:
-
-- Bỏ `pnpm-lock.yaml`, dùng hẳn npm — hợp với thực tế đang chạy trên Windows
-- Hoặc thêm `package-lock.json` vào `.gitignore` và quay lại pnpm
-
-Chưa chọn thì chưa hỏng gì, nhưng đừng để lâu.
-
 ---
 
 ## Chạy trên máy — Windows
@@ -128,9 +118,10 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 | Mô phỏng một buổi cụ thể | `npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9` |
 | Mở bằng điện thoại cùng wifi | `npm run dev -- -H 0.0.0.0`, lấy IP bằng `ipconfig`, vào `http://192.168.x.x:3000` |
 
-> **Dùng `npm` chứ không phải `pnpm`.** Repo có `pnpm-lock.yaml` nhưng `npm` chạy
-> tốt, và trên Windows việc cài `pnpm` hay vướng chính sách chạy script của
-> PowerShell — không đáng để mất thời gian cho một lần chạy thử.
+> **Dùng `npm`.** Tệp khoá duy nhất của dự án là `package-lock.json`, và đừng
+> thêm tệp khoá thứ hai — hai tệp khoá cho cùng một dự án thì sớm muộn cũng lệch
+> nhau. Trên Windows việc cài `pnpm` cũng hay vướng chính sách chạy script của
+> PowerShell, không đáng để mất thời gian.
 
 ---
 

@@ -33,8 +33,9 @@ Mô phỏng một buổi cụ thể, kể cả có người vào giữa chừng 
 npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 ```
 
-> Repo có `pnpm-lock.yaml` và `pnpm` vẫn chạy tốt. Lệnh trên dùng `npm` vì trên
-> Windows việc cài `pnpm` hay vướng chính sách chạy script của PowerShell.
+> **Dự án dùng `npm`**, và tệp khoá duy nhất là `package-lock.json`. Đừng thêm
+> tệp khoá thứ hai: hai tệp khoá cho cùng một dự án thì sớm muộn cũng lệch nhau,
+> và khi đó máy này cài ra một bộ thư viện còn máy kia ra bộ khác.
 
 **Hướng dẫn từng bước cho Windows, kịch bản bấm thử, và tình trạng dự án:**
 [docs/TIEN-DO.md](docs/TIEN-DO.md).
