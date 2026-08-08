@@ -149,24 +149,61 @@ export class GoogleSheetsClient implements SheetsClient {
 
   // -- đọc và ghi ----------------------------------------------------------
 
+  /**
+   * Đọc nhiều dải ô một lượt.
+   *
+   * **Bỏ qua dải thuộc tab chưa tồn tại**, trả về dải rỗng cho nó. Bản giả trong
+   * bộ nhớ vẫn luôn làm vậy, còn Google thì trả `400 Unable to parse range` —
+   * và tệ hơn, lỗi đó giết **cả lô** chứ không riêng dải hỏng. Không có chỗ này
+   * thì hỏi "mã buổi này đã ai dùng chưa" là hỏng, vì `EventRepo.load` đọc chỉ
+   * mục sự kiện chung với `log__<mã>!A:A` mà tab nhật ký thì chưa có. Hệ quả:
+   * trên Sheet thật không tạo được buổi đánh nào cả.
+   */
   async batchGet(ranges: string[]): Promise<CellRange[]> {
-    const params = new URLSearchParams();
-    for (const range of ranges) params.append("ranges", range);
-    // Ô trống ở cuối dòng bị Google cắt bớt; xin trả về đúng chuỗi rỗng cho khớp
-    // với bản giả trong bộ nhớ, để hai đường chạy không lệch nhau âm thầm.
-    params.set("majorDimension", "ROWS");
-    params.set("valueRenderOption", "UNFORMATTED_VALUE");
+    const known = await this.tabsKnownFor(ranges);
+    const wanted = ranges.map((r, i) => [r, i] as const).filter(([r]) => known.has(parseRange(r).tab));
 
-    const body = await this.call<{
-      valueRanges?: Array<{ range: string; values?: unknown[][] }>;
-    }>(`${API}/${this.config.spreadsheetId}/values:batchGet?${params}`);
+    const rows = new Array<unknown[][]>(ranges.length);
+    if (wanted.length > 0) {
+      const params = new URLSearchParams();
+      for (const [range] of wanted) params.append("ranges", range);
+      // Ô trống ở cuối dòng bị Google cắt bớt; xin trả về đúng chuỗi rỗng cho khớp
+      // với bản giả trong bộ nhớ, để hai đường chạy không lệch nhau âm thầm.
+      params.set("majorDimension", "ROWS");
+      params.set("valueRenderOption", "UNFORMATTED_VALUE");
+
+      const body = await this.call<{
+        valueRanges?: Array<{ range: string; values?: unknown[][] }>;
+      }>(`${API}/${this.config.spreadsheetId}/values:batchGet?${params}`);
+
+      wanted.forEach(([, at], i) => {
+        rows[at] = body.valueRanges?.[i]?.values ?? [];
+      });
+    }
 
     return ranges.map((range, i) => ({
       range,
-      values: (body.valueRanges?.[i]?.values ?? []).map((row) =>
+      values: (rows[i] ?? []).map((row) =>
         row.map((cell) => (cell === null || cell === undefined ? "" : String(cell))),
       ),
     }));
+  }
+
+  /**
+   * Những tab đang có thật, đủ để trả lời cho đúng các dải sắp đọc.
+   *
+   * Thiếu tab nào thì đọc lại siêu dữ liệu **một lần** rồi mới kết luận, giống
+   * `ensureTab`: bản đồ tab nằm trong bộ nhớ của một tiến trình, mà một hàm
+   * serverless khác có thể vừa tạo tab đó xong. Kết luận vội là `load` trả `null`
+   * cho một buổi đánh đang có thật.
+   *
+   * Đường thường gặp — mọi tab đều đã biết — không tốn thêm lời gọi nào.
+   */
+  private async tabsKnownFor(ranges: readonly string[]): Promise<Set<string>> {
+    const wanted = new Set(ranges.map((r) => parseRange(r).tab));
+    const known = new Set((await this.loadSheetIds()).keys());
+    if ([...wanted].every((tab) => known.has(tab))) return known;
+    return new Set((await this.loadSheetIds(true)).keys());
   }
 
   async batch(ops: WriteOp[]): Promise<void> {

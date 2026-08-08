@@ -8,3 +8,11 @@ next-env.d.ts
 .vercel
 .DS_Store
 .data/
+
+# Khoá service account tải từ Google Cloud. Ai có tệp này thì ghi được vào bảng
+# tính của bạn, nên nó tuyệt đối không được vào git — mà tên tệp Google đặt sẵn
+# lại trông vô hại như mọi tệp JSON khác.
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json
+service-account*.json
+gcp-*.json
+*credentials*.json

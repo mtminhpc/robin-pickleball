@@ -1,7 +1,7 @@
 /**
  * Tạo sẵn các tab và dòng tiêu đề trong Google Sheet.
  *
- *   pnpm bootstrap-sheet
+ *   npm run bootstrap-sheet
  *
  * Chạy một lần sau khi đã điền biến môi trường. Ứng dụng cũng tự tạo tab khi
  * cần, nhưng chạy trước ở đây có hai cái lợi: bạn biết ngay là cấu hình đúng hay
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
       "Chưa có biến môi trường Google.\n" +
         "Cần GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY và SHEET_ID trong .env.local.\n" +
         "Xem docs/SETUP.md để biết cách lấy.\n\n" +
-        "Nếu bạn chỉ muốn chạy thử trên máy thì không cần script này: `pnpm dev` là chạy được ngay.",
+        "Nếu bạn chỉ muốn chạy thử trên máy thì không cần script này: `npm run dev` là chạy được ngay.",
     );
     process.exit(1);
   }
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
   console.log(
     "\nMỗi buổi đánh sẽ tự sinh thêm hai tab riêng: log__<mã> (nhật ký) và view__<mã> (bản in).",
   );
-  console.log("\nXong. Chạy `pnpm dev` hoặc triển khai lên Vercel.");
+  console.log("\nXong. Chạy `npm run dev` hoặc triển khai lên Vercel.");
 }
 
 main().catch((error: unknown) => {

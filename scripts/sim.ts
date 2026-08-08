@@ -5,9 +5,9 @@
  * khi có giao diện. Lời hứa "công bằng nhất có thể" chỉ đáng tin khi nhìn được
  * bằng số, và đây là chỗ nhìn.
  *
- *   pnpm sim --players 13 --courts 3 --rounds 15
- *   pnpm sim --players 12 --courts 2 --rounds 14 --join 5 --leave 9
- *   pnpm sim --matrix
+ *   npm run sim -- --players 13 --courts 3 --rounds 15
+ *   npm run sim -- --players 12 --courts 2 --rounds 14 --join 5 --leave 9
+ *   npm run sim -- --matrix
  */
 
 import { standingsFromState } from "../lib/domain/standings";
