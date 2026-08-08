@@ -95,12 +95,38 @@ export function planSchedule(
    * ghim). Không được phát lại chúng trong lệnh, nếu không sẽ có hai bản.
    */
   const keptByReduce = new Set<string>();
+  /** Sân bị trận đã đánh chiếm mà không dựng được `Slot`. Xem `blockedByRound`. */
+  const blockedByRound = new Map<number, { courts: Set<number>; busy: Set<number> }>();
 
   for (const m of existing) {
+    const offsetOf = m.round - fromRound;
     const slot = toSlot(m, index);
-    // Trận nhắc tới người không còn chơi thì bỏ qua — họ đã rời cuộc.
-    if (!slot) continue;
-    const offset = m.round - fromRound;
+
+    if (!slot) {
+      // Trận nhắc tới người không còn được xếp lịch.
+      //
+      // Nếu nó CHƯA đánh thì bỏ qua là đúng: người kia đã về, trận đó sẽ được
+      // xếp lại. Nhưng nếu nó ĐÃ đánh (hoặc đang đánh, hoặc bị ghim) thì bỏ qua
+      // là mất dấu một cái sân đang bị chiếm — và bước sinh sẽ đặt chồng thêm
+      // một trận nữa lên đúng sân ấy, gọi ba người ra hai trận cùng một lúc.
+      const daDienRa = m.status !== "scheduled" || m.pinned;
+      if (daDienRa && offsetOf >= 0 && offsetOf < lookahead) {
+        const entry = blockedByRound.get(offsetOf) ?? {
+          courts: new Set<number>(),
+          busy: new Set<number>(),
+        };
+        entry.courts.add(m.court);
+        for (const id of [...m.teamA, ...m.teamB]) {
+          const i = index.get(id);
+          if (i !== undefined) entry.busy.add(i);
+        }
+        blockedByRound.set(offsetOf, entry);
+        keptByReduce.add(m.id);
+      }
+      continue;
+    }
+
+    const offset = offsetOf;
     if (offset < 0 || offset >= lookahead) continue;
 
     if (m.status !== "scheduled" || m.pinned) keptByReduce.add(m.id);
@@ -154,6 +180,7 @@ export function planSchedule(
     softMax: ctx.softMax,
     hardMax: ctx.hardMax,
     frozenByRound: mergeWarmStart(frozenByRound, warmByRound, lookahead),
+    blockedByRound,
     rng,
   });
 

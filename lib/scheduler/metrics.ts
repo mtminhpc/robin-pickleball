@@ -66,7 +66,24 @@ export interface History {
  * `ids` thường là danh sách người đang active (để xếp lịch), nhưng khi tính bảng
  * Công bằng thì truyền cả người đã về để họ vẫn hiện trong bảng.
  */
-export function buildHistory(state: EventState, ids: PlayerId[]): History {
+/**
+ * @param throughRound Vòng cuối cùng được tính vào lịch sử.
+ *
+ * Mặc định là vòng ngay trước cửa sổ xếp lịch — đúng cho **thuật toán**, vì nó
+ * chỉ được phép dựa vào quá khứ đã chốt.
+ *
+ * Nhưng bảng Công bằng hiển thị cho người đọc thì cần mốc khác. Một trận có thể
+ * được nhập tỷ số ở vòng nằm SAU cửa sổ đó: chủ sân ghim một vòng rồi cả nhóm
+ * đánh vòng sau trước, hoặc bấm nhập điểm từ tab Lịch. Lấy mốc mặc định thì
+ * những trận ấy không được đếm, và bảng Công bằng báo ít trận hơn thực tế trong
+ * khi bảng Xếp hạng — vốn duyệt mọi trận — lại báo đúng. Hai bảng cãi nhau ngay
+ * trên cùng một màn hình.
+ */
+export function buildHistory(
+  state: EventState,
+  ids: PlayerId[],
+  throughRound?: number,
+): History {
   const n = ids.length;
   const courts = Math.max(1, state.config.courts);
   const index = new Map<PlayerId, number>();
@@ -91,7 +108,7 @@ export function buildHistory(state: EventState, ids: PlayerId[]): History {
   };
 
   const byId = new Map(state.players.map((p) => [p.id, p] as const));
-  const lastPast = firstOpenRound(state) - 1;
+  const lastPast = throughRound ?? firstOpenRound(state) - 1;
 
   for (let round = 1; round <= lastPast; round++) {
     const happened = state.matches.filter((m) => m.round === round && didHappen(m));
@@ -208,13 +225,24 @@ export interface FairnessReport {
   warnings: string[];
 }
 
+/** Vòng cuối cùng có ít nhất một trận đã diễn ra. `0` nếu chưa đánh gì. */
+function lastRoundThatHappened(state: EventState): number {
+  let last = 0;
+  for (const m of state.matches) {
+    if (didHappen(m) && m.round > last) last = m.round;
+  }
+  return last;
+}
+
 export function fairnessReport(state: EventState): FairnessReport {
   // Người đã về vẫn hiện trong bảng; người bị từ chối hoặc báo bận thì không.
   const shown = state.players.filter(
     (p) => p.presence.length > 0 || p.status === "active",
   );
   const ids = shown.map((p) => p.id);
-  const h = buildHistory(state, ids);
+  // Đếm tới vòng cuối cùng THẬT SỰ có trận diễn ra, không dừng ở cửa sổ xếp
+  // lịch: trận đánh không theo thứ tự vòng vẫn phải được tính đủ.
+  const h = buildHistory(state, ids, lastRoundThatHappened(state));
   const n = ids.length;
 
   const players: PlayerFairness[] = shown.map((p, i) => {

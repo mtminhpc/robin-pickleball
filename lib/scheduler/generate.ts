@@ -19,6 +19,16 @@ export interface GenerateOptions {
   hardMax: number;
   /** Trận không được xê dịch, theo chỉ số vòng trong cửa sổ. */
   frozenByRound: Map<number, Slot[]>;
+  /**
+   * Sân đã bị chiếm bởi một trận **không biểu diễn được thành `Slot`**.
+   *
+   * Xảy ra khi một trận đã đánh có mặt người nay không còn trong danh sách xếp
+   * lịch: họ nghỉ tạm hoặc đã về, nên không có chỉ số trong `history`. Trận ấy
+   * vẫn chiếm sân đó ở vòng đó — nó đã diễn ra rồi. Không giữ chỗ thì bước sinh
+   * đặt thêm một trận nữa lên đúng sân ấy, và ba người bị gọi ra hai trận cùng
+   * một lúc.
+   */
+  blockedByRound?: Map<number, { courts: Set<number>; busy: Set<number> }>;
   rng: Rng;
 }
 
@@ -51,6 +61,14 @@ export function generate(opts: GenerateOptions): Plan {
     for (const s of frozen) for (const q of s.quad) busy.add(q);
 
     const takenCourts = new Set(frozen.map((s) => s.court));
+
+    // Trận đã đánh mà có người nay không còn được xếp lịch: sân vẫn bị chiếm,
+    // và những người đang chơi có mặt trong trận đó vẫn đang bận ở vòng này.
+    const blocked = opts.blockedByRound?.get(r);
+    if (blocked) {
+      for (const c of blocked.courts) takenCourts.add(c);
+      for (const q of blocked.busy) busy.add(q);
+    }
     const freeCourts: number[] = [];
     for (let c = 1; c <= opts.courts; c++) {
       if (!takenCourts.has(c)) freeCourts.push(c);

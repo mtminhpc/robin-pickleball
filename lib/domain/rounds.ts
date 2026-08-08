@@ -11,11 +11,25 @@ import { isFrozen } from "./types";
  */
 export function firstOpenRound(state: EventState): number {
   let earliest: number | null = null;
+  let lastFrozen = 0;
   for (const m of state.matches) {
-    if (isFrozen(m)) continue;
+    if (isFrozen(m)) {
+      if (m.round > lastFrozen) lastFrozen = m.round;
+      continue;
+    }
     if (earliest === null || m.round < earliest) earliest = m.round;
   }
-  return earliest ?? state.lastRound + 1;
+
+  const conTran = earliest ?? state.lastRound + 1;
+
+  // Vòng RỖNG cũng là vòng còn mở.
+  //
+  // Trên một sân, mỗi vòng chỉ có đúng một trận. Người về sớm mà trận đó có tên
+  // họ thì cả vòng biến mất khỏi lịch, và nếu chỉ đi tìm "trận chưa đông cứng
+  // sớm nhất" thì mốc này nhảy thẳng qua chỗ trống đó. Hệ quả: bộ xếp lịch không
+  // bao giờ quay lại lấp, lịch để lại một lỗ vĩnh viễn — sau vòng 6 nhảy tới
+  // vòng 8 — và cái lỗ ấy bị mọi phép đếm hiểu thành "một vòng ai cũng nghỉ".
+  return Math.min(conTran, lastFrozen + 1);
 }
 
 /**

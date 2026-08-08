@@ -214,7 +214,18 @@ function deactivate(
   // người vừa ra về vẫn còn tên trong những trận đã ghim, và cả sân đứng chờ
   // một người không có mặt.
   const open = firstUnplayedRound(state);
-  closePresence(player, open - 1);
+
+  // Nhưng KHÔNG được đóng lùi xuống trước vòng người này đã thật sự ra sân.
+  //
+  // `closePresence` xoá hẳn khoảng có mặt khi mốc đóng nằm trước mốc mở — đúng
+  // cho người vừa vào đã rời, chưa kịp được xếp trận nào. Với người đã đánh thì
+  // nó là tai hoạ: mất khoảng có mặt là mất luôn tên khỏi cả bảng Công bằng lẫn
+  // bảng Xếp hạng, trong khi tỷ số của họ vẫn nằm đó và bạn đôi của họ vẫn hiện.
+  //
+  // Hai mốc này tách nhau ra thật khi có một vòng **đã ghim mà chưa đánh**:
+  // `firstOpenRound` nhảy qua nó còn `firstUnplayedRound` thì không, nên người
+  // vào giữa chừng nhận khoảng bắt đầu muộn hơn mốc đóng.
+  closePresence(player, Math.max(open - 1, lastRoundPlayed(state, player.id)));
   player.status = status;
   dropFutureMatches(state, player.id, open);
 }
@@ -226,6 +237,23 @@ function deactivate(
  * giữ lại chỉ tổ tạo ra một trận thiếu người mà thuật toán không được phép sửa.
  * Trận đang đánh dở thì giữ nguyên — chủ sự kiện tự quyết bỏ dở hay ghi tỷ số.
  */
+/**
+ * Vòng cuối cùng người này đã thật sự ra sân. `0` nếu chưa đánh trận nào.
+ *
+ * Tính cả trận bỏ dở: họ đã ra sân, đã tốn sức, và tên họ phải ở lại trong bảng.
+ */
+function lastRoundPlayed(state: EventState, playerId: PlayerId): number {
+  let last = 0;
+  for (const m of state.matches) {
+    if (m.status !== "submitted" && m.status !== "playing" && m.status !== "abandoned") {
+      continue;
+    }
+    if (!m.teamA.includes(playerId) && !m.teamB.includes(playerId)) continue;
+    if (m.round > last) last = m.round;
+  }
+  return last;
+}
+
 function dropFutureMatches(
   state: EventState,
   playerId: PlayerId,
