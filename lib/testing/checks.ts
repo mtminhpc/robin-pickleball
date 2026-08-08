@@ -7,7 +7,7 @@
  * hình sẽ nói một đằng mà bộ kiểm thử canh một nẻo.
  */
 
-import type { EventState, PlayerId } from "../domain/types";
+import { isAvailableAt, type EventState, type PlayerId } from "../domain/types";
 import { standingsFromState } from "../domain/standings";
 import { achievableStreakCap, countsAsGame, fairnessReport } from "../scheduler/metrics";
 
@@ -285,6 +285,29 @@ export function checkGameCounts(state: EventState): Problem[] {
   return out;
 }
 
+/**
+ * **Lời khai trước phải được tôn trọng.**
+ *
+ * Ai đã báo "vòng 5 tôi mới tới" hoặc "tôi đánh tới vòng 8 thôi" thì không được
+ * có tên trong lịch ngoài khoảng đó. Xếp rồi để cả sân đứng chờ một người đã nói
+ * rõ là mình chưa đến là cách nhanh nhất khiến không ai thèm khai nữa.
+ */
+export function checkDeclaredAvailability(state: EventState): Problem[] {
+  const out: Problem[] = [];
+  for (const p of state.players) {
+    if (!p.available) continue;
+    for (const round of roundsOf(state, p.id)) {
+      if (isAvailableAt(p, round)) continue;
+      const w = p.available;
+      out.push({
+        rule: "khai trước bị bỏ qua",
+        detail: `${p.name} khai có mặt vòng ${w.from}–${w.to ?? "hết"} nhưng bị xếp vào vòng ${round}`,
+      });
+    }
+  }
+  return out;
+}
+
 /** Chạy hết mọi luật một lượt. */
 export function checkAll(state: EventState, opts: CheckOptions = {}): Problem[] {
   const out = [
@@ -293,6 +316,7 @@ export function checkAll(state: EventState, opts: CheckOptions = {}): Problem[] 
     ...checkFairShare(state, opts.tolerance ?? 1.05),
     ...checkPlayedStayVisible(state),
     ...checkGameCounts(state),
+    ...checkDeclaredAvailability(state),
   ];
   if (opts.stableRoster) out.push(...checkGameSpread(state));
   return out;

@@ -137,7 +137,36 @@ export interface Player {
    * Xem `catchUpFactor` trong cấu hình.
    */
   catchUpCredit: number;
+  /**
+   * Khoảng vòng người này **khai trước** là mình có mặt được.
+   *
+   * Khác `presence` ở thì: `presence` ghi lại quá khứ đã xảy ra, còn cái này là
+   * lời hứa về tương lai. "Tôi 7 giờ mới tới, tầm vòng 4" hoặc "9 giờ tôi phải
+   * về, đánh tới vòng 12 thôi" — chuyện xảy ra ở mọi buổi, và trước đây phần mềm
+   * không có chỗ nào để ghi.
+   *
+   * Không khai thì `undefined`, nghĩa là có mặt suốt — đúng mặc định cho phần
+   * lớn người chơi.
+   *
+   * Thuật toán xếp lịch coi đây là **ràng buộc cứng**: không xếp ai vào vòng họ
+   * đã báo trước là không có mặt. Xếp rồi để cả sân đứng chờ một người đã nói
+   * trước là mình chưa tới thì tệ hơn nhiều so với việc cho họ nghỉ thêm.
+   */
+  available?: PresenceSpan;
   addedAt: number;
+}
+
+/**
+ * Người này có nhận xếp lịch ở vòng `round` không, theo lời khai trước.
+ *
+ * Không khai gì thì luôn nhận — đó là mặc định, và là trường hợp của gần hết
+ * người chơi.
+ */
+export function isAvailableAt(p: Player, round: number): boolean {
+  const w = p.available;
+  if (!w) return true;
+  if (round < w.from) return false;
+  return w.to === null || round <= w.to;
 }
 
 // ---------------------------------------------------------------------------

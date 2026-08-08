@@ -16,7 +16,7 @@
 
 import type { MatchSeed } from "../domain/commands";
 import { firstOpenRound } from "../domain/rounds";
-import type { EventState, Match, PlayerId } from "../domain/types";
+import { isAvailableAt, type EventState, type Match, type PlayerId } from "../domain/types";
 import { DEFAULT_WEIGHTS, type CostContext, type Plan, type Slot, type Weights } from "./cost";
 import { generate } from "./generate";
 import { achievableStreakCap, buildHistory, type History } from "./metrics";
@@ -98,6 +98,14 @@ export function planSchedule(
   /** Sân bị trận đã đánh chiếm mà không dựng được `Slot`. Xem `blockedByRound`. */
   const blockedByRound = new Map<number, { courts: Set<number>; busy: Set<number> }>();
 
+  const byId = new Map(state.players.map((p) => [p.id, p] as const));
+  /** Trận này có xếp ai vào vòng họ đã báo trước là không có mặt không. */
+  const viPhamKhaiBao = (m: Match): boolean =>
+    [...m.teamA, ...m.teamB].some((id) => {
+      const p = byId.get(id);
+      return p ? !isAvailableAt(p, m.round) : false;
+    });
+
   for (const m of existing) {
     const offsetOf = m.round - fromRound;
     const slot = toSlot(m, index);
@@ -140,6 +148,15 @@ export function planSchedule(
       m.pinned ||
       (mode === "extend" && m.status === "scheduled" && committed);
 
+    // Lịch cũ vi phạm lời khai trước thì VỨT đi thay vì mang vào khởi động ấm.
+    //
+    // Khởi động ấm đưa lịch cũ vào làm phương án ban đầu và bước sinh coi những
+    // chỗ đó là đã kín, nên nó không dựng lại. Phần tinh chỉnh sau đó vẫn gỡ
+    // được, nhưng đó là trông chờ vào may rủi của luyện kim mô phỏng để thoả một
+    // ràng buộc cứng — đo được: còn sót 2 trên 4 vòng. Bỏ hẳn trận vi phạm ra
+    // thì bước sinh xếp lại vòng đó từ đầu, và nó vốn đã lọc theo lời khai.
+    if (!immovable && viPhamKhaiBao(m)) continue;
+
     const bucket = immovable ? frozenByRound : warmByRound;
     const list = bucket.get(offset) ?? [];
     list.push({ ...slot, frozen: immovable });
@@ -162,12 +179,30 @@ export function planSchedule(
     weights.restStreak = 0;
   }
 
+  // Bảng "ai không có mặt ở vòng nào", theo lời khai trước của từng người.
+  // Chỉ dựng khi thật sự có người khai — phần lớn buổi thì không ai khai gì, và
+  // khi đó cả bước này lẫn khoản phạt trong hàm chi phí đều được bỏ qua.
+  const coKhaiBao = activeIds.some((id) => byId.get(id)?.available);
+  let unavailable: Uint8Array | undefined;
+  if (coKhaiBao) {
+    unavailable = new Uint8Array(activeIds.length * lookahead);
+    activeIds.forEach((id, i) => {
+      const p = byId.get(id);
+      if (!p) return;
+      for (let r = 0; r < lookahead; r++) {
+        if (!isAvailableAt(p, fromRound + r)) unavailable![i * lookahead + r] = 1;
+      }
+    });
+  }
+
   const ctx: CostContext = {
     history,
     weights,
     softMax: Math.max(state.config.softMaxConsecutive, Number.isFinite(best) ? best : 0),
     hardMax: Math.max(state.config.hardMaxConsecutive, Number.isFinite(best) ? best : 0),
     activeCount: activeIds.length,
+    unavailable,
+    lookahead,
   };
 
   const seed = options.seed ?? seedFrom(`${state.code}:${state.seq}:${mode}`);
@@ -181,6 +216,7 @@ export function planSchedule(
     hardMax: ctx.hardMax,
     frozenByRound: mergeWarmStart(frozenByRound, warmByRound, lookahead),
     blockedByRound,
+    unavailable,
     rng,
   });
 

@@ -86,6 +86,21 @@ export type Command =
    * một ưu ái ngầm.
    */
   | { type: "GrantCatchUp"; playerId: PlayerId; games: number }
+  /**
+   * Khai trước mình có mặt được từ vòng nào đến vòng nào.
+   *
+   * `toRound: null` nghĩa là "từ vòng đó trở đi thì ở tới hết buổi". Gửi cả hai
+   * là `null` để xoá lời khai, quay về mặc định có mặt suốt.
+   *
+   * Ai cũng gửi được cho chính mình — người biết mình mấy giờ tới là chính họ,
+   * bắt phải nhắn cho chủ sân rồi chủ sân gõ hộ thì sẽ không ai dùng.
+   */
+  | {
+      type: "DeclareAvailability";
+      playerId: PlayerId;
+      fromRound: number | null;
+      toRound: number | null;
+    }
 
   // ---- lịch thi đấu ------------------------------------------------------
   /**

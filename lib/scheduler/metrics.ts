@@ -15,7 +15,7 @@
 
 import { firstOpenRound } from "../domain/rounds";
 import type { EventState, Match, Player, PlayerId } from "../domain/types";
-import { wasPresentAt } from "../domain/types";
+import { isAvailableAt, wasPresentAt } from "../domain/types";
 
 /** Trận thực sự đã diễn ra (kể cả bỏ dở) — trận huỷ khi chưa đánh thì không. */
 export function didHappen(m: Match): boolean {
@@ -124,7 +124,15 @@ export function buildHistory(
     const present: number[] = [];
     for (let i = 0; i < n; i++) {
       const p = byId.get(ids[i]!);
-      if (p && wasPresentAt(p, round)) present.push(i);
+      if (!p) continue;
+      if (!wasPresentAt(p, round)) continue;
+      // Đã khai trước là vòng này mình không có mặt thì cũng không hưởng suất
+      // của vòng đó. Thiếu chỗ này thì người báo "7 giờ tôi mới tới" vẫn được
+      // cộng suất cho những vòng họ còn đang trên đường, rồi bảng Công bằng hiện
+      // họ THIẾU mấy trận — và thuật toán sẽ đi bù cho một khoản nợ không có thật,
+      // lấy suất của những người có mặt từ đầu.
+      if (!isAvailableAt(p, round)) continue;
+      present.push(i);
     }
     if (present.length === 0) continue;
 

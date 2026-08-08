@@ -507,6 +507,37 @@ function applyInPlace(
       return ok(null);
     }
 
+    case "DeclareAvailability": {
+      const p = findPlayer(state, c.playerId);
+      if (!p) return err("Không tìm thấy người chơi.");
+
+      // Cả hai rỗng là xoá lời khai, quay về mặc định có mặt suốt buổi.
+      if (c.fromRound === null && c.toRound === null) {
+        delete p.available;
+        return ok(null);
+      }
+
+      const from = Math.max(1, Math.floor(c.fromRound ?? 1));
+      const to = c.toRound === null ? null : Math.floor(c.toRound);
+      if (to !== null && to < from) {
+        return err("Vòng kết thúc phải từ vòng bắt đầu trở đi.");
+      }
+
+      // Vòng đã đánh rồi thì khai lại cũng không đổi được quá khứ. Chặn ở đây
+      // để lời khai luôn nói về những vòng còn xếp lại được — nếu không, người
+      // dùng gõ "tôi chỉ đánh tới vòng 3" ở vòng 8 rồi ngồi chờ một điều sẽ
+      // không bao giờ xảy ra.
+      const open = firstOpenRound(state);
+      if (to !== null && to < open) {
+        return err(
+          `Vòng ${to} đã đánh xong rồi. Muốn về sớm thì bấm rời cuộc, không khai lịch.`,
+        );
+      }
+
+      p.available = { from, to };
+      return ok(null);
+    }
+
     // ---- lịch thi đấu ----------------------------------------------------
     case "SetSchedule": {
       const known = new Set(state.players.map((p) => p.id));

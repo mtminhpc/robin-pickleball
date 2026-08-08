@@ -23,6 +23,8 @@ export interface Weights {
   softStreak: number;
   /** Mỗi vòng đánh vượt trần cứng — lớn tới mức thực tế là cấm. */
   hardStreak: number;
+  /** Xếp người vào vòng họ đã báo trước là không có mặt. */
+  unavailable: number;
   /** Mỗi vòng nghỉ liên tiếp thứ hai trở đi. */
   restStreak: number;
   /** Tổng bình phương số lần cặp đôi lặp lại. */
@@ -38,6 +40,9 @@ export const DEFAULT_WEIGHTS: Weights = {
   bye: 100,
   softStreak: 120,
   hardStreak: 1_000_000,
+  // Nặng hơn trần chuỗi: đánh liên tiếp nhiều vòng là mệt, còn thiếu người là
+  // cả sân đứng chờ và không đánh được trận nào.
+  unavailable: 5_000_000,
   restStreak: 200,
   partner: 60,
   opponent: 25,
@@ -64,6 +69,16 @@ export interface CostContext {
   hardMax: number;
   /** Số người có mặt trong suốt cửa sổ (dùng để tính suất kỳ vọng). */
   activeCount: number;
+  /**
+   * Ai KHÔNG nhận xếp lịch ở vòng nào, theo lời khai trước.
+   *
+   * Mảng phẳng `n × lookahead`, `1` là không có mặt. Bỏ trống nghĩa là không ai
+   * khai gì — trường hợp của gần hết các buổi, và khi đó phần tính này được bỏ
+   * qua hoàn toàn nên không tốn gì.
+   */
+  unavailable?: Uint8Array;
+  /** Số vòng trong cửa sổ, để đọc `unavailable` cho đúng ô. */
+  lookahead?: number;
 }
 
 export interface CostBreakdown {
@@ -156,8 +171,13 @@ export class Evaluator {
     let hardStreakCount = 0;
     let restStreakCount = 0;
     let deficitAccum = 0;
+    let unavailableCount = 0;
 
-    for (const round of plan) {
+    const unavailable = this.ctx.unavailable;
+    const lookahead = this.ctx.lookahead ?? plan.length;
+
+    for (let r = 0; r < plan.length; r++) {
+      const round = plan[r]!;
       playedThisRound.fill(0);
 
       const share =
@@ -167,6 +187,18 @@ export class Evaluator {
 
       for (const slot of round) {
         const [a0, a1, b0, b1] = slot.quad;
+
+        // Xếp ai vào vòng họ đã báo trước là không có mặt thì cả sân đứng chờ
+        // một người chưa tới. Phạt nặng hơn cả trần chuỗi liên tiếp: chuỗi dài
+        // là mệt, còn thiếu người là không đánh được.
+        if (unavailable && !slot.frozen) {
+          const base = r;
+          if (unavailable[a0 * lookahead + base]) unavailableCount += 1;
+          if (unavailable[a1 * lookahead + base]) unavailableCount += 1;
+          if (unavailable[b0 * lookahead + base]) unavailableCount += 1;
+          if (unavailable[b1 * lookahead + base]) unavailableCount += 1;
+        }
+
         playedThisRound[a0] = 1;
         playedThisRound[a1] = 1;
         playedThisRound[b0] = 1;
@@ -265,6 +297,7 @@ export class Evaluator {
       bye: w.bye * byeSq,
       softStreak: w.softStreak * softStreakCount,
       hardStreak: w.hardStreak * hardStreakCount,
+      unavailable: w.unavailable * unavailableCount,
       restStreak: w.restStreak * restStreakCount,
       partner: w.partner * partnerSq,
       opponent: w.opponent * opponentSq,
@@ -273,12 +306,13 @@ export class Evaluator {
 
     return {
       ...parts,
-      hardViolations: hardStreakCount,
+      hardViolations: hardStreakCount + unavailableCount,
       total:
         parts.deficit +
         parts.bye +
         parts.softStreak +
         parts.hardStreak +
+        parts.unavailable +
         parts.restStreak +
         parts.partner +
         parts.opponent +

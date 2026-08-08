@@ -456,6 +456,68 @@ export const SCENARIOS: Scenario[] = [
   },
 
   {
+    key: "khai-toi-muon",
+    title: "Khai trước: 7 giờ mới tới, tầm vòng 5",
+    why: "Người đã báo trước là chưa tới KHÔNG được xếp vào những vòng đó — cả sân đứng chờ một người đã nói rõ là mình chưa đến thì tệ hơn hẳn việc cho họ nghỉ thêm.",
+    stableRoster: false,
+    run(setup) {
+      const sim = fresh(setup);
+      const events: string[] = [];
+      const id = someoneActive(sim);
+      if (id) {
+        sim.send({ type: "DeclareAvailability", playerId: id, fromRound: 5, toRound: null });
+        sim.reschedule("rebuild");
+        events.push(`${nameOf(sim, id)} khai: từ vòng 5 mới có mặt`);
+      }
+      sim.playRounds(setup.rounds);
+      return { sim, events, streakAllowance: 1 };
+    },
+  },
+
+  {
+    key: "khai-ve-som",
+    title: "Khai trước: 9 giờ phải về, đánh tới vòng 8",
+    why: "Đầu kia của cùng một lời hứa. Sau vòng 8 không được còn tên họ trong lịch.",
+    stableRoster: false,
+    run(setup) {
+      const sim = fresh(setup);
+      const events: string[] = [];
+      const id = someoneActive(sim);
+      if (id) {
+        sim.send({ type: "DeclareAvailability", playerId: id, fromRound: 1, toRound: 8 });
+        sim.reschedule("rebuild");
+        events.push(`${nameOf(sim, id)} khai: đánh tới vòng 8 thôi`);
+      }
+      sim.playRounds(setup.rounds);
+      return { sim, events, streakAllowance: 1 };
+    },
+  },
+
+  {
+    key: "khai-khoang-giua",
+    title: "Khai trước: chỉ đánh được từ vòng 4 đến vòng 9",
+    why: "Cả hai đầu cùng lúc, và hai người khai lệch nhau — chỗ dễ làm bộ xếp lịch không đủ người cho một vòng.",
+    stableRoster: false,
+    run(setup) {
+      const sim = fresh(setup);
+      const events: string[] = [];
+      const a = someoneActive(sim);
+      const b = someoneActive(sim, a ? [a] : []);
+      if (a) {
+        sim.send({ type: "DeclareAvailability", playerId: a, fromRound: 4, toRound: 9 });
+        events.push(`${nameOf(sim, a)} khai: vòng 4 → 9`);
+      }
+      if (b) {
+        sim.send({ type: "DeclareAvailability", playerId: b, fromRound: 1, toRound: 6 });
+        events.push(`${nameOf(sim, b)} khai: vòng 1 → 6`);
+      }
+      sim.reschedule("rebuild");
+      sim.playRounds(setup.rounds);
+      return { sim, events, streakAllowance: 1 };
+    },
+  },
+
+  {
     key: "ket-thuc-som",
     title: "Kết thúc sớm giữa buổi",
     why: "Các vòng phía sau chỉ còn trận đã huỷ. Không được tính chúng thành 'ai cũng nghỉ thêm mấy vòng'.",

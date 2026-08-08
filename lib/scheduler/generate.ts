@@ -29,6 +29,8 @@ export interface GenerateOptions {
    * một lúc.
    */
   blockedByRound?: Map<number, { courts: Set<number>; busy: Set<number> }>;
+  /** `n × rounds`, `1` là người này đã khai trước là không có mặt ở vòng đó. */
+  unavailable?: Uint8Array;
   rng: Rng;
 }
 
@@ -75,7 +77,12 @@ export function generate(opts: GenerateOptions): Plan {
     }
 
     const available: number[] = [];
-    for (let i = 0; i < n; i++) if (!busy.has(i)) available.push(i);
+    for (let i = 0; i < n; i++) {
+      if (busy.has(i)) continue;
+      // Đã báo trước là chưa tới (hoặc đã về) ở vòng này thì không xếp.
+      if (opts.unavailable?.[i * opts.rounds + r]) continue;
+      available.push(i);
+    }
 
     const slotsToFill = Math.min(freeCourts.length, Math.floor(available.length / 4));
     const chosen = choosePlayers(available, slotsToFill * 4, run, opts);
