@@ -181,7 +181,13 @@ function PlayerRow({
 
   return (
     <div className="flex items-center gap-3 border-b border-line py-2.5">
-      <Avatar name={player.name} avatarId={player.avatarId} dimmed={dimmed} size="sm" />
+      <Avatar
+        name={player.name}
+        avatarId={player.avatarId}
+        userId={player.userId}
+        dimmed={dimmed}
+        size="sm"
+      />
       <span
         className={`min-w-0 flex-1 truncate text-[15px] font-semibold ${
           dimmed ? "opacity-55" : ""

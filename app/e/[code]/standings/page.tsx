@@ -17,9 +17,11 @@
 
 import { useMemo, useState } from "react";
 import { standingsFromState, type StandingRow } from "@/lib/domain/standings";
+import type { Player } from "@/lib/domain/types";
 import { fairnessReport } from "@/lib/scheduler/metrics";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
+import { Avatar } from "@/components/Avatar";
 import { Button, Empty, Marker, SectionHead } from "@/components/ui";
 
 export default function StandingsPage() {
@@ -54,7 +56,11 @@ export default function StandingsPage() {
           Xếp hạng
         </SectionHead>
         {table.main.map((row) => (
-          <StandingRowView key={row.playerId} row={row} />
+          <StandingRowView
+            key={row.playerId}
+            row={row}
+            player={state.players.find((p) => p.id === row.playerId)}
+          />
         ))}
 
         {table.provisional.length > 0 && (
@@ -68,6 +74,7 @@ export default function StandingsPage() {
               <StandingRowView
                 key={row.playerId}
                 row={row}
+                player={state.players.find((p) => p.id === row.playerId)}
                 action={
                   role === "admin" && state.status === "running" ? (
                     <Button
@@ -116,9 +123,13 @@ export default function StandingsPage() {
         {showFairness && (
           <div className="pt-3">
             <p className="text-[11px] leading-relaxed text-mute-700">
-              Cột <strong className="text-ink">Lệch</strong> mới là thước đo. Số
-              trận thô lệch nhau là bình thường khi có người đến muộn hoặc về
-              sớm; điều phải gần 0 là chênh lệch so với suất kỳ vọng.
+              Cột <strong className="text-ink">Lệch</strong> mới là thước đo,
+              không phải cột Trận — số trận thô lệch nhau là bình thường khi có
+              người đến muộn hoặc về sớm.{" "}
+              <strong className="text-ink">Dấu + là đang thiếu</strong> so với
+              suất kỳ vọng, <strong className="text-ink">dấu − là đã đánh dư</strong>.
+              Bộ xếp lịch tự ưu tiên người mang dấu + ở những vòng sau, không cần
+              ai bấm gì.
               {hasCatchUp && (
                 <>
                   {" "}
@@ -152,9 +163,16 @@ export default function StandingsPage() {
                         </td>
                         <Td>{p.games}</Td>
                         <Td mute>{p.expected.toFixed(1)}</Td>
+                        {/*
+                          Chỉ tô đỏ người đang THIẾU. Bản trước tô cả hai chiều
+                          bằng `Math.abs`, nên người đánh dư một trận trông y hệt
+                          người bị thiệt một trận — mà đỏ thì ai cũng đọc là "chỗ
+                          này có vấn đề với người này". Đánh dư không phải điều
+                          người xem bảng cần đi tìm.
+                        */}
                         <td
                           className={`py-2 pl-2 text-right font-semibold ${
-                            Math.abs(p.deficit) > 1 ? "text-accent-700" : "text-ink"
+                            p.deficit > 1 ? "text-accent-700" : "text-ink"
                           }`}
                         >
                           {signed(p.deficit)}
@@ -209,16 +227,30 @@ function Td({ children, mute }: { children: React.ReactNode; mute?: boolean }) {
 
 function StandingRowView({
   row,
+  player,
   action,
 }: {
   row: StandingRow;
+  /**
+   * Người chơi tương ứng, để lấy ảnh. `StandingRow` cố ý không mang ảnh: nó là
+   * kết quả tính toán thuần của `standingsFromState`, và nhét dữ liệu hiển thị
+   * vào đó sẽ kéo phần trình bày xuống tận tầng nghiệp vụ.
+   */
+  player?: Player;
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-baseline gap-3.5 border-b border-line py-3.5">
+    <div className="flex items-center gap-3 border-b border-line py-3.5">
       <span className="w-7 flex-none font-display text-xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-mute-400">
         {row.rank ? String(row.rank).padStart(2, "0") : "—"}
       </span>
+      <Avatar
+        name={row.name}
+        avatarId={player?.avatarId}
+        userId={player?.userId}
+        size="sm"
+        dimmed={row.hasLeft}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2.5">
           <span

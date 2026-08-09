@@ -80,7 +80,7 @@ export default function ClubPage() {
 
         {members.map((m) => (
           <Card key={m.memberId} className="flex items-center gap-3 p-3">
-            <Avatar name={m.displayName} avatarId={m.avatarId} />
+            <Avatar name={m.displayName} avatarId={m.avatarId} userId={m.userId} />
             <span className="min-w-0 flex-1 truncate font-medium">{m.displayName}</span>
             {m.memberId === me?.memberId && <Tag tone="ok">bạn</Tag>}
             {isClubOwner(club, { deviceId: m.deviceId, userId: m.userId }) && (

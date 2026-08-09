@@ -10,10 +10,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export interface AccountInfo {
+  userId: string;
   email: string;
   displayName: string;
   avatarId: string;
   picture: string;
+  /** Đã tự tải ảnh lên hay chưa. Ảnh Google không tính. */
+  hasPhoto: boolean;
   devices: number;
 }
 

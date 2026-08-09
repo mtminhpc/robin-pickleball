@@ -373,6 +373,52 @@ export class EventRepo {
     const rowIndex = rows.findIndex((row, i) => i > 0 && row[0] === record.code);
     return { ...full, rowIndex };
   }
+
+  /**
+   * Đổi mật khẩu của một buổi đánh.
+   *
+   * **Chỉ ghi đúng những ô mật khẩu**, không ghi lại cả dòng. Một dòng sự kiện
+   * chứa cả ảnh chụp trạng thái tới bốn ô; ghi đè cả dòng nghĩa là lấy trạng thái
+   * mình đang cầm đè lên trạng thái trên Sheet — mà giữa lúc đó có người vừa nhập
+   * xong một tỷ số thì tỷ số ấy biến mất. Đổi mật khẩu không có lý do gì đụng tới
+   * kết quả trận đấu.
+   *
+   * Mỗi ô một lệnh ghi riêng, cố ý không gộp thành một dải: gộp được là nhờ hai
+   * cột đang nằm cạnh nhau, và cái đó chỉ đúng cho tới lần đầu tiên ai đó chèn
+   * thêm một cột vào giữa `HEADERS`. Lúc ấy nó sẽ ghi nhầm sang cột khác mà không
+   * báo lỗi gì.
+   *
+   * Tìm lại dòng theo mã thay vì tin vào `rowIndex` đang cầm: chỉ tốn một lời gọi
+   * đọc đúng một cột, mà đổi mật khẩu thì cả buổi mới xảy ra một lần.
+   */
+  async updatePasswords(
+    code: string,
+    patch: { playerPassHash?: string; adminPassHash?: string },
+  ): Promise<boolean> {
+    const [index] = await this.sheets.batchGet([`${TABS.events}!A:A`]);
+    const rows = index?.values ?? [];
+    const rowIndex = rows.findIndex((row, i) => i > 0 && row[0] === code);
+    if (rowIndex === -1) return false;
+
+    const row = rowIndex + 1;
+    const writes = [
+      { column: COL.player_pass_hash, value: patch.playerPassHash },
+      { column: COL.admin_pass_hash, value: patch.adminPassHash },
+    ]
+      .filter((w) => w.value !== undefined)
+      .map((w) => {
+        const letter = indexToColumn(w.column);
+        return {
+          kind: "update" as const,
+          range: `${TABS.events}!${letter}${row}:${letter}${row}`,
+          values: [[w.value!]],
+        };
+      });
+
+    if (writes.length === 0) return true;
+    await this.sheets.batch(writes);
+    return true;
+  }
 }
 
 // ---------------------------------------------------------------------------

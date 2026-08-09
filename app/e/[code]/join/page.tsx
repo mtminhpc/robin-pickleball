@@ -25,6 +25,7 @@ import type { PlayerSeed } from "@/lib/domain/commands";
 import { loadProfile, readDeviceId, saveProfile } from "@/lib/identity/device";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
+import { AccountBar } from "@/components/AccountBar";
 import { Avatar } from "@/components/Avatar";
 import { AvatarPicker } from "@/components/AvatarPicker";
 import { PLAYER_STATUS_LABEL } from "@/lib/domain/labels";
@@ -77,18 +78,30 @@ export default function JoinPage() {
 
   if (mine) {
     return (
-      <Card className="space-y-4 p-5 text-center">
-        <div className="flex justify-center">
-          <Avatar name={mine.name} avatarId={mine.avatarId} size="lg" />
-        </div>
-        <div>
-          <p className="text-lg font-semibold">{mine.name}</p>
-          <p className="text-sm text-mute-700">{PLAYER_STATUS_LABEL[mine.status]}</p>
-        </div>
-        <Button tone="primary" full onClick={() => router.push(`/e/${code}`)}>
-          Vào xem trận
-        </Button>
-      </Card>
+      <div className="space-y-4">
+        <Card className="space-y-4 p-5 text-center">
+          <div className="flex justify-center">
+            <Avatar
+              name={mine.name}
+              avatarId={mine.avatarId}
+              userId={mine.userId}
+              size="lg"
+            />
+          </div>
+          <div>
+            <p className="text-lg font-semibold">{mine.name}</p>
+            <p className="text-sm text-mute-700">
+              {PLAYER_STATUS_LABEL[mine.status]}
+            </p>
+          </div>
+          <Button tone="primary" full onClick={() => router.push(`/e/${code}`)}>
+            Vào xem trận
+          </Button>
+        </Card>
+        {/* Người đã có tên trong buổi là đúng đối tượng của việc đăng nhập: gắn
+            tên này vào tài khoản thì đổi điện thoại vẫn còn, và đặt được ảnh thật. */}
+        <AccountBar next={`/e/${code}/join`} />
+      </div>
     );
   }
 
@@ -164,7 +177,12 @@ export default function JoinPage() {
                   claiming === p.id ? "bg-accent text-white" : "bg-surface"
                 }`}
               >
-                <Avatar name={p.name} avatarId={p.avatarId} size="sm" />
+                <Avatar
+                  name={p.name}
+                  avatarId={p.avatarId}
+                  userId={p.userId}
+                  size="sm"
+                />
                 {p.name}
               </button>
             ))}
@@ -203,6 +221,18 @@ export default function JoinPage() {
           {claiming ? "Đây là tôi" : afterStart ? "Xin tham gia" : "Tham gia"}
         </Button>
       </Card>
+
+      {/*
+        Đây là màn hình mã QR ở sân dẫn tới, tức là màn hình đông người xem nhất
+        trong cả ứng dụng — mà trước đây nó **không hề có nút đăng nhập nào**.
+        `AccountBar` mới chỉ nằm ở trang chủ và trang "Của tôi", hai chỗ người ra
+        sân gần như không ghé. Đó là lý do tính năng tài khoản dựng xong rồi mà
+        gần như không ai dùng tới.
+
+        Đặt cuối trang, sau nút Tham gia: vào sân vẫn là việc chính, đăng nhập
+        chỉ để giữ tên và ảnh khi đổi điện thoại.
+      */}
+      <AccountBar next={`/e/${code}/join`} />
     </div>
   );
 }

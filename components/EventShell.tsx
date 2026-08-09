@@ -86,7 +86,13 @@ function SideBar({ code }: { code: string }) {
 
   return (
     <aside className="hidden w-[14.5rem] flex-none flex-col bg-ink text-mute-200 lg:flex">
-      <div className="border-b border-white/15 px-5 pb-6 pt-7">
+      {/* Logo là đường về trang chủ. Đó là chỗ mọi người bấm theo phản xạ trên
+          web, nên gắn liên kết vào đây rẻ hơn hẳn so với thêm một mục thứ sáu
+          vào thanh điều hướng. */}
+      <Link
+        href="/"
+        className="block border-b border-white/15 px-5 pb-6 pt-7 transition hover:bg-white/5"
+      >
         <div className="mb-3.5 h-1.5 w-6 bg-accent" />
         <p className="font-display text-lg font-extrabold leading-none tracking-[-0.02em] text-white">
           ROBIN
@@ -96,7 +102,7 @@ function SideBar({ code }: { code: string }) {
         <p className="eyebrow mt-2.5 font-normal text-mute-500">
           Americano · Round robin
         </p>
-      </div>
+      </Link>
 
       <nav className="flex flex-col py-3.5">
         {TABS.filter((t) => !t.adminOnly || isAdmin).map((tab) => {
@@ -180,6 +186,14 @@ function Band({ code }: { code: string }) {
     <header className="bg-ink px-4 pb-4 pt-5 text-white lg:px-10 lg:pb-6 lg:pt-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
+          {/* Chỉ dưới `lg`, vì từ `lg` trở lên logo thanh bên đã là đường về nhà
+              rồi — hai lối ra cạnh nhau chỉ làm người ta phải chọn. */}
+          <Link
+            href="/"
+            className="eyebrow -ml-1 mb-2 inline-flex min-h-9 items-center gap-1.5 px-1 font-normal text-mute-500 transition hover:text-white lg:hidden"
+          >
+            <span aria-hidden>←</span> Trang chủ
+          </Link>
           <p className="truncate text-[10px] uppercase tracking-[0.2em] text-mute-500">
             {state.config.name}
           </p>

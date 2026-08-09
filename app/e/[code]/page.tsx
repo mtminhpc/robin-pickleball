@@ -16,9 +16,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { Command } from "@/lib/domain/commands";
 import { firstUnplayedRound } from "@/lib/domain/rounds";
-import type { Match } from "@/lib/domain/types";
+import type { EventState, Match, PlayerId } from "@/lib/domain/types";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
+import { Avatar } from "@/components/Avatar";
 import { MatchCard, pendingScoreFor } from "@/components/MatchCard";
 import { ScoreEntryDialog } from "@/components/ScoreEntryDialog";
 import { CancelMatchDialog } from "@/components/CancelMatchDialog";
@@ -168,28 +169,56 @@ export default function LivePage() {
   );
 }
 
-/** Dòng gọn cho vòng sau: chỉ cần biết mình có tên trong đó hay không. */
-function NextUpRow({
-  match,
-  state,
-}: {
-  match: Match;
-  state: { players: Array<{ id: string; name: string }> };
-}) {
-  const name = (id: string) =>
-    state.players.find((p) => p.id === id)?.name ?? id;
+/**
+ * Dòng gọn cho vòng sau: chỉ cần biết mình có tên trong đó hay không.
+ *
+ * Cũng mang ảnh như hàng trận phía trên. Cùng một màn hình mà nửa trên có mặt
+ * người còn nửa dưới chỉ có chữ thì đọc ra như một chỗ bị hỏng, chứ không ra như
+ * một lựa chọn.
+ */
+function NextUpRow({ match, state }: { match: Match; state: EventState }) {
   return (
     <div className="flex items-center gap-3 border-b border-line py-3.5 text-[13px]">
       <span className="w-4 flex-none font-display text-[11px] font-extrabold text-mute-600">
         {match.court}
       </span>
-      <span className="min-w-0 flex-1 truncate font-semibold">
-        {name(match.teamA[0])} & {name(match.teamA[1])}
-      </span>
+      <NextUpTeam ids={match.teamA} state={state} />
       <span className="text-[10px] tracking-[0.1em] text-mute-600">VS</span>
-      <span className="min-w-0 flex-1 truncate text-right font-semibold">
-        {name(match.teamB[0])} & {name(match.teamB[1])}
-      </span>
+      <NextUpTeam ids={match.teamB} state={state} align="right" />
     </div>
+  );
+}
+
+function NextUpTeam({
+  ids,
+  state,
+  align = "left",
+}: {
+  ids: readonly [PlayerId, PlayerId];
+  state: EventState;
+  align?: "left" | "right";
+}) {
+  const players = ids.map((id) => state.players.find((p) => p.id === id) ?? null);
+  return (
+    <span
+      className={`flex min-w-0 flex-1 items-center gap-2 ${
+        align === "right" ? "flex-row-reverse" : ""
+      }`}
+    >
+      <span className={`flex flex-none gap-0.5 ${align === "right" ? "flex-row-reverse" : ""}`}>
+        {players.map((p, i) => (
+          <Avatar
+            key={ids[i]}
+            name={p?.name ?? ids[i]!}
+            avatarId={p?.avatarId}
+            userId={p?.userId}
+            size="xs"
+          />
+        ))}
+      </span>
+      <span className="min-w-0 truncate font-semibold">
+        {players.map((p, i) => p?.name ?? ids[i]).join(" & ")}
+      </span>
+    </span>
   );
 }

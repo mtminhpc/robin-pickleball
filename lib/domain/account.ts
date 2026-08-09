@@ -27,8 +27,25 @@ export interface Account {
 }
 
 export interface AccountPrefs {
-  /** Ảnh đại diện Google, chỉ để hiện cạnh email trong phần đăng nhập. */
+  /**
+   * Địa chỉ ảnh đại diện bên Google, lấy về lúc đăng nhập.
+   *
+   * Chỉ là địa chỉ chứ không phải ảnh: đường `/api/avatar/[userId]` chuyển hướng
+   * sang đây khi người dùng chưa tự tải ảnh nào. Google đổi ảnh thì lần đăng nhập
+   * sau tự cập nhật — đúng điều người ta mong đợi, và không tốn chỗ nào cả.
+   */
   picture?: string;
+  /**
+   * Ảnh người dùng tự tải lên, dạng data URI đã nén còn 128×128.
+   *
+   * Đè lên `picture` khi có. Giữ riêng hai trường chứ không ghi đè lẫn nhau, vì
+   * chúng trả lời hai câu khác nhau: `picture` là "Google nói mặt bạn thế này",
+   * `photo` là "bạn nói mặt bạn thế này". Xoá `photo` thì phải quay về được
+   * `picture` mà không cần đăng nhập lại.
+   *
+   * Giới hạn độ dài ở `MAX_PHOTO_CHARS` trong [../avatars/photo.ts](../avatars/photo.ts).
+   */
+  photo?: string;
 }
 
 /** Một cái điện thoại đã nhận là của ai. */

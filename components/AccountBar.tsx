@@ -55,7 +55,11 @@ export function AccountBar({ next }: { next: string }) {
 
   return (
     <Card className="flex items-center gap-3 p-4">
-      <Avatar name={data.user.displayName} avatarId={data.user.avatarId} />
+      <Avatar
+        name={data.user.displayName}
+        avatarId={data.user.avatarId}
+        userId={data.user.userId}
+      />
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{data.user.displayName}</p>
         <p className="truncate text-xs text-mute-600">

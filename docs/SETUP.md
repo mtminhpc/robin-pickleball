@@ -137,25 +137,39 @@ Google Cloud. Service account là để ứng dụng ghi vào bảng tính; ph�
 Bỏ qua hẳn cũng được: thiếu hai biến này thì nút đăng nhập không hiện ra, không
 ai bị bắt tạo tài khoản, và toàn bộ ứng dụng chạy đúng như trước.
 
-### 1. Màn hình đồng ý (OAuth consent screen)
+> **Google đã đổi giao diện.** Phần này giờ nằm ở **Google Auth Platform**, không
+> còn ở *APIs & Services → OAuth consent screen* như trước. Đường dẫn thẳng:
+> `console.cloud.google.com/auth/overview`. Nếu bạn thấy màn hình *"Google Auth
+> Platform not configured yet"* thì đang đúng chỗ.
 
-1. **APIs & Services** → **OAuth consent screen**
-2. Chọn **External** → **Create**
-3. Điền tên ứng dụng, email hỗ trợ, email liên hệ. Không cần logo.
-4. Phần **Scopes** để nguyên — ứng dụng chỉ xin `openid`, `email`, `profile`,
-   đều là mặc định.
-5. Phần **Test users**: thêm chính email của bạn.
+### 1. Màn hình đồng ý — bấm **Get started**
 
-> Để ở chế độ **Testing** thì chỉ những email trong danh sách test user đăng nhập
-> được, và chỉ trong 7 ngày mỗi lần. Nhóm chơi cố định thì thêm hết vào là xong.
-> Muốn mở cho mọi người thì bấm **Publish app**; Google chỉ bắt xét duyệt khi
-> ứng dụng xin những quyền nhạy cảm — ba quyền ở trên thì không.
+Google hỏi bốn màn hình ngắn:
+
+| Màn hình | Điền gì |
+|---|---|
+| **App Information** | Tên ứng dụng và email hỗ trợ |
+| **Audience** | Chọn **External** |
+| **Contact Information** | Email của bạn |
+| **Finish** | Tích đồng ý điều khoản → **Create** |
+
+Không cần logo. **Không cần đụng tới Scopes** — ứng dụng chỉ xin `openid`,
+`email`, `profile`, cả ba đều là mặc định và Google không bắt xét duyệt.
+
+Xong thì vào mục **Audience** ở cột trái, phần **Test users** → thêm email của
+bạn và của những người trong nhóm.
+
+> Bước test user **không bỏ được**. Ở chế độ **Testing**, chỉ email trong danh
+> sách đó mới đăng nhập được — kể cả chính bạn — và Google báo lỗi không nói rõ
+> nguyên nhân. Nhóm chơi cố định thì thêm hết vào là xong. Muốn mở cho mọi người
+> thì bấm **Publish app** ở mục Overview.
 
 ### 2. Tạo OAuth client
 
-1. **Credentials** → **Create credentials** → **OAuth client ID**
-2. Chọn **Web application**
-3. **Authorized redirect URIs** — thêm đúng những dòng sau, **từng ký tự một**:
+1. Mục **Clients** ở cột trái → **Create client**
+2. **Application type**: chọn **Web application**
+3. **Authorized redirect URIs** → **Add URI**, thêm đúng những dòng sau,
+   **từng ký tự một**:
 
 ```
 http://localhost:3000/api/auth/google/callback
@@ -164,9 +178,15 @@ https://<tên-miền-của-bạn>/api/auth/google/callback
 
 4. **Create**. Google hiện ra **Client ID** và **Client secret**.
 
+Chạy thử ở máy thì chỉ cần dòng `localhost`. Khi deploy thì quay lại **thêm**
+dòng tên miền thật chứ không thay thế — để cả hai cùng chạy được.
+
 **Sai một ký tự ở redirect URI là lỗi hay gặp nhất** của cả mục này. Triệu chứng
 rất rõ: Google hiện `Error 400: redirect_uri_mismatch` ngay trước khi bạn kịp
 chọn tài khoản. Chép nguyên văn, kể cả dấu `/` cuối (không có).
+
+Đường dẫn này do [`CALLBACK_PATH`](../lib/auth/google-oauth.ts) quy định. Đổi nó
+trong mã thì phải đổi cả trên Google, và ngược lại.
 
 ### 3. Điền biến môi trường
 

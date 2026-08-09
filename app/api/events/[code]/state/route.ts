@@ -32,6 +32,11 @@ export async function GET(
     /** Sự kiện có đặt mật khẩu người chơi hay không, để giao diện biết có cần hỏi. */
     requiresPlayerPassword: ctx.event.record.playerPassHash !== "",
     /**
+     * Bạn là chủ nhờ tài khoản đã tạo ra buổi này. Đây là điều kiện để hiện khối
+     * đổi mật khẩu — quyền đó cố ý không cho người chỉ biết mật khẩu.
+     */
+    ownerByAccount: ctx.ownerByAccount,
+    /**
      * Ảnh chụp trạng thái vừa phải dựng lại từ nhật ký. Giao diện không cần làm
      * gì, nhưng đưa ra để còn chẩn đoán được nếu nó xảy ra liên tục.
      */

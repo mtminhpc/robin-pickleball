@@ -143,6 +143,45 @@ export class AccountRepo {
     return updated;
   }
 
+  /**
+   * Sửa vài khoá trong `prefs` mà không đụng những khoá còn lại.
+   *
+   * Gộp chứ không đè cả cụm: `picture` do lần đăng nhập Google ghi, `photo` do
+   * người dùng bấm tải lên — hai đường khác nhau, hai lúc khác nhau. Ghi đè cả
+   * `prefs` thì việc tải ảnh sẽ lặng lẽ xoá mất địa chỉ ảnh Google, và người dùng
+   * bấm "xoá ảnh" sau đó sẽ không quay về đâu được.
+   *
+   * Đặt một khoá bằng `undefined` là xoá khoá đó.
+   */
+  async updatePrefs(
+    userId: UserId,
+    patch: Partial<AccountPrefs>,
+  ): Promise<Account | null> {
+    if (!userId) return null;
+
+    const [accountRows] = await this.readAll();
+    const rowIndex = accountRows.findIndex(
+      (row, i) => i > 0 && row[A.user_id] === userId,
+    );
+    if (rowIndex === -1) return null;
+
+    const existing = toAccount(accountRows[rowIndex]!);
+    const prefs: AccountPrefs = { ...existing.prefs, ...patch };
+    for (const key of Object.keys(patch) as (keyof AccountPrefs)[]) {
+      if (patch[key] === undefined) delete prefs[key];
+    }
+
+    const updated: Account = { ...existing, prefs };
+    await this.sheets.batch([
+      {
+        kind: "update",
+        range: rowRange(TABS.accounts, rowIndex, ACCOUNT_COLUMNS.length),
+        values: [accountRow(updated)],
+      },
+    ]);
+    return updated;
+  }
+
   async deviceLink(deviceId: string): Promise<DeviceLink | null> {
     if (!deviceId) return null;
     const [, deviceRows] = await this.readAll();

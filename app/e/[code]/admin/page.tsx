@@ -62,6 +62,8 @@ export default function AdminPage() {
 
       <QrSection code={code} />
 
+      {data.ownerByAccount && <PasswordSection code={code} />}
+
       <Card className="space-y-4 p-5">
         <h2 className="font-semibold">Cấu hình</h2>
         <Field
@@ -272,5 +274,110 @@ function EndDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * Đặt lại mật khẩu, chỉ hiện với chủ-theo-tài-khoản.
+ *
+ * Cố ý **không hỏi mật khẩu cũ**. Đây chính là màn hình dành cho người đã quên
+ * nó — bắt gõ lại thứ họ vừa quên thì cả khối này vô nghĩa. Quyền ở đây đến từ
+ * tài khoản Google đã tạo ra buổi đánh, và máy chủ kiểm lại điều đó chứ không
+ * tin vào việc trang này có được vẽ ra hay không.
+ */
+function PasswordSection({ code }: { code: string }) {
+  const [adminPassword, setAdminPassword] = useState("");
+  const [playerPassword, setPlayerPassword] = useState("");
+  const [touchedPlayer, setTouchedPlayer] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setDone(false);
+    try {
+      const body: Record<string, string> = {};
+      if (adminPassword) body.adminPassword = adminPassword;
+      // Gửi cả chuỗi rỗng nếu người dùng có chạm vào ô đó: rỗng nghĩa là bỏ mật
+      // khẩu người chơi, khác hẳn với không đụng tới.
+      if (touchedPlayer) body.playerPassword = playerPassword;
+
+      const res = await fetch(`/api/events/${code}/password`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const parsed = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(parsed.error ?? "Không đổi được mật khẩu.");
+
+      setAdminPassword("");
+      setPlayerPassword("");
+      setTouchedPlayer(false);
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không đổi được mật khẩu.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="space-y-4 p-5">
+      <div>
+        <h2 className="font-semibold">Mật khẩu</h2>
+        <p className="mt-1 text-sm text-mute-700">
+          Bạn là chủ buổi này nhờ tài khoản Google, nên đổi được mật khẩu mà không
+          cần nhớ mật khẩu cũ.
+        </p>
+      </div>
+
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Mật khẩu chủ sự kiện mới" hint="Để trống nếu không đổi.">
+          <input
+            type="password"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            autoComplete="new-password"
+            className={inputClass}
+          />
+        </Field>
+
+        <Field
+          label="Mật khẩu người chơi mới"
+          hint="Để trống và bấm Lưu là bỏ hẳn — ai có đường dẫn cũng nhập điểm được."
+        >
+          <input
+            type="password"
+            value={playerPassword}
+            onChange={(e) => {
+              setPlayerPassword(e.target.value);
+              setTouchedPlayer(true);
+            }}
+            autoComplete="new-password"
+            className={inputClass}
+          />
+        </Field>
+
+        {error && <p className="bg-accent p-3 text-sm text-paper">{error}</p>}
+        {done && (
+          <p className="border border-ink p-3 text-sm">
+            Đã đổi. Mật khẩu cũ không dùng được nữa — ai đang mở buổi này bằng mật
+            khẩu cũ vẫn giữ quyền tới khi họ thoát.
+          </p>
+        )}
+
+        <Button
+          tone="primary"
+          full
+          type="submit"
+          disabled={busy || (adminPassword.length < 4 && !touchedPlayer)}
+        >
+          {busy ? "Đang lưu…" : "Lưu mật khẩu"}
+        </Button>
+      </form>
+    </Card>
   );
 }

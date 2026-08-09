@@ -9,10 +9,9 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { cookies } from "next/headers";
-import type { Role } from "@/lib/domain/commands";
 import { cookieName, sessionSecret, verifySession } from "@/lib/auth/session";
 import { USER_COOKIE, verifyUserSession } from "@/lib/auth/user-session";
-import { findMyPlayer } from "@/lib/api/context";
+import { findMyPlayer, isOwnerByAccount, roleFor } from "@/lib/api/context";
 import { DEVICE_COOKIE } from "@/lib/identity/device";
 import { readEvent } from "@/lib/sheets/cache";
 import { EventShell } from "@/components/EventShell";
@@ -36,7 +35,6 @@ export default async function EventLayout({
     code,
     sessionSecret(),
   );
-  const role: Role = session?.role ?? "viewer";
 
   // Đọc header để Next hiểu trang này phụ thuộc yêu cầu và không dựng tĩnh nhầm.
   await headers();
@@ -50,6 +48,10 @@ export default async function EventLayout({
     sessionSecret(),
   )?.uid ?? null;
 
+  // Cùng một hàm với `resolveContext`, không phải bản chép tay. Xem docblock của
+  // `roleFor` để biết vì sao đó là điều kiện bắt buộc chứ không phải cho gọn.
+  const role = roleFor(event.record, session?.role ?? null, userId);
+
   return (
     <EventShell
       code={code}
@@ -59,6 +61,7 @@ export default async function EventLayout({
         deviceId,
         myPlayerId: findMyPlayer(event.state, deviceId, userId)?.id ?? null,
         requiresPlayerPassword: event.record.playerPassHash !== "",
+        ownerByAccount: isOwnerByAccount(event.record, userId),
         repaired: event.repaired,
       }}
     >

@@ -29,6 +29,7 @@ import type { EventState, Match, PlayerId } from "@/lib/domain/types";
 import { validateRoundSwap, type MoveValidation } from "@/lib/scheduler/validate";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
+import { Avatar } from "@/components/Avatar";
 import { pendingScoreFor } from "@/components/MatchCard";
 import { ScoreEntryDialog } from "@/components/ScoreEntryDialog";
 import { Button, Dialog, Empty, SectionHead } from "@/components/ui";
@@ -154,8 +155,6 @@ function ScheduleRow({
   pending?: { scoreA: number; scoreB: number };
   onOpen?: (m: Match) => void;
 }) {
-  const name = (id: PlayerId) =>
-    state.players.find((p) => p.id === id)?.name ?? id;
   const shown = pending ?? match.result;
   const dead = match.status === "cancelled" || match.status === "abandoned";
   const clickable = !!onOpen && !dead;
@@ -165,9 +164,7 @@ function ScheduleRow({
       <span className="w-4 flex-none font-display text-[11px] font-extrabold text-mute-600">
         {match.court}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
-        {name(match.teamA[0])} & {name(match.teamA[1])}
-      </span>
+      <TeamCell ids={match.teamA} state={state} />
       <span
         className={`flex-none font-display text-[15px] font-extrabold tracking-[-0.02em] tabular-nums ${
           pending ? "animate-pulse text-mute-600" : shown ? "text-ink" : "text-mute-400"
@@ -175,9 +172,7 @@ function ScheduleRow({
       >
         {shown ? `${shown.scoreA}–${shown.scoreB}` : "·"}
       </span>
-      <span className="min-w-0 flex-1 truncate text-right text-[13px] font-semibold">
-        {name(match.teamB[0])} & {name(match.teamB[1])}
-      </span>
+      <TeamCell ids={match.teamB} state={state} align="right" />
     </>
   );
 
@@ -190,6 +185,49 @@ function ScheduleRow({
     <button type="button" onClick={() => onOpen!(match)} className={`${cls} hover:bg-ink/[0.04]`}>
       {body}
     </button>
+  );
+}
+
+/**
+ * Một đôi trong hàng lịch: hai ảnh cỡ nhỏ nhất rồi tới tên.
+ *
+ * Bốn người trên một hàng ở màn hình điện thoại là chỗ chật nhất trong cả ứng
+ * dụng. Ngân sách bề ngang ở máy 375px: 343 còn lại sau lề, trừ 16 cho số sân,
+ * 40 cho tỷ số và 36 cho các khoảng cách, còn 125 mỗi đôi. Hai ảnh 20px cộng
+ * khoảng cách chiếm 42, để lại khoảng 75px cho chữ — vừa đủ "Linh & Nam", tên
+ * dài hơn thì `truncate` cắt bớt như nó vẫn làm từ trước.
+ */
+function TeamCell({
+  ids,
+  state,
+  align = "left",
+}: {
+  ids: readonly [PlayerId, PlayerId];
+  state: EventState;
+  align?: "left" | "right";
+}) {
+  const players = ids.map((id) => state.players.find((p) => p.id === id) ?? null);
+  const label = players.map((p, i) => p?.name ?? ids[i]).join(" & ");
+
+  return (
+    <span
+      className={`flex min-w-0 flex-1 items-center gap-2 ${
+        align === "right" ? "flex-row-reverse" : ""
+      }`}
+    >
+      <span className={`flex flex-none gap-0.5 ${align === "right" ? "flex-row-reverse" : ""}`}>
+        {players.map((p, i) => (
+          <Avatar
+            key={ids[i]}
+            name={p?.name ?? ids[i]!}
+            avatarId={p?.avatarId}
+            userId={p?.userId}
+            size="xs"
+          />
+        ))}
+      </span>
+      <span className="min-w-0 truncate text-[13px] font-semibold">{label}</span>
+    </span>
   );
 }
 

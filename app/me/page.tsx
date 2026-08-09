@@ -19,7 +19,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { loadProfile, loadRecentEvents } from "@/lib/identity/device";
 import { ACCOUNT_KEY } from "@/hooks/useAccount";
 import { AccountBar } from "@/components/AccountBar";
-import { Avatar } from "@/components/Avatar";
+import { PhotoPicker } from "@/components/PhotoPicker";
 import { Button, Card, Empty } from "@/components/ui";
 
 interface MeResponse {
@@ -105,7 +105,10 @@ export default function MePage() {
           ← Trang chủ
         </Link>
         <div className="flex items-center gap-3 pt-1">
-          {profile && <Avatar name={profile.name} avatarId={profile.avatarId} size="lg" />}
+          <PhotoPicker
+            fallbackName={profile?.name ?? "Máy này"}
+            fallbackAvatarId={profile?.avatarId}
+          />
           <div>
             <h1 className="text-2xl font-bold">
               {data?.account?.displayName || profile?.name || "Máy này"}

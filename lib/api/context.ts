@@ -13,6 +13,7 @@ import type { Role } from "../domain/commands";
 import { DEVICE_COOKIE } from "../identity/device";
 import { cookieName, sessionSecret, verifySession } from "../auth/session";
 import { readEvent, type CachedEvent } from "../sheets/cache";
+import type { EventRecord } from "../sheets/repo";
 import { currentUserId } from "./user";
 
 export interface RequestContext {
@@ -22,9 +23,46 @@ export interface RequestContext {
   deviceId: string;
   /** Tài khoản đang đăng nhập, `null` với phần lớn người ra sân. */
   userId: string | null;
+  /** Người này là chủ buổi đánh nhờ tài khoản, không phải nhờ gõ mật khẩu. */
+  ownerByAccount: boolean;
   /** Người chơi ứng với người gửi yêu cầu, nếu tìm được. */
   me: Player | null;
   actor: Actor;
+}
+
+/**
+ * Vai trò trong một buổi đánh: mật khẩu, hoặc tài khoản đã tạo ra buổi đó.
+ *
+ * **Hàm này phải là nơi duy nhất trả lời câu hỏi đó.** Vai trò được tính ở hai
+ * chỗ — `resolveContext` cho các route, và `app/e/[code]/layout.tsx` cho lượt
+ * dựng đầu tiên ở máy chủ. Để hai chỗ tự tính lấy thì chúng sẽ lệch nhau, và
+ * kiểu lệch ấy hiện ra rất khó chịu: trang vẽ lần đầu ở "chế độ xem" rồi nháy
+ * sang "chủ sự kiện" khi trình duyệt hỏi lại, mà trong khoảnh khắc đó các nút
+ * quản trị chưa có nên người dùng bấm hụt.
+ *
+ * Tách thành hàm thuần còn vì một lý do nữa: **không bài kiểm thử nào trong dự
+ * án chạm tới route handler hay layout**, nên logic nằm trong đó là logic không
+ * ai canh. Ở đây thì kiểm được.
+ *
+ * Hai phép `&&` không thừa. `ownerUserId` là chuỗi rỗng với mọi buổi tạo lúc
+ * chưa đăng nhập — thiếu chúng thì một `userId` rỗng sẽ khớp với một
+ * `ownerUserId` rỗng, và **người lạ bất kỳ thành chủ mọi buổi đánh cũ**.
+ */
+export function roleFor(
+  record: Pick<EventRecord, "ownerUserId">,
+  sessionRole: Role | null,
+  userId: string | null,
+): Role {
+  if (userId && record.ownerUserId && userId === record.ownerUserId) return "admin";
+  return sessionRole ?? "viewer";
+}
+
+/** Chủ buổi đánh nhờ tài khoản. Quyền này không mượn được như mật khẩu. */
+export function isOwnerByAccount(
+  record: Pick<EventRecord, "ownerUserId">,
+  userId: string | null,
+): boolean {
+  return Boolean(userId && record.ownerUserId && userId === record.ownerUserId);
 }
 
 /**
@@ -47,11 +85,11 @@ export async function resolveContext(
     code,
     sessionSecret(),
   );
-  const role: Role = session?.role ?? "viewer";
   const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
   // Chỉ đọc cookie đã ký, không đọc bảng tài khoản: đây là đường bị gọi nhiều
   // nhất trong cả ứng dụng, mỗi điện thoại đang mở app hỏi lại vài giây một lần.
   const userId = currentUserId(request);
+  const role = roleFor(event.record, session?.role ?? null, userId);
   const me = findMyPlayer(event.state, deviceId, userId);
 
   return {
@@ -60,6 +98,7 @@ export async function resolveContext(
     role,
     deviceId,
     userId,
+    ownerByAccount: isOwnerByAccount(event.record, userId),
     me,
     actor: buildActor(role, deviceId, me),
   };

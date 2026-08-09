@@ -435,6 +435,67 @@ danh sách, mà người đó tình cờ an toàn.
 
 ---
 
+## Ảnh đại diện thật, và tài khoản Google làm đường vào
+
+Ba việc đi cùng nhau vì chúng chung một sợi dây: `Player.userId`.
+
+**Ảnh thật.** Ai đăng nhập thì đặt được ảnh của mình. Trình duyệt thu ảnh về
+128×128 WebP (~3KB) *trước khi gửi* — xem [lib/avatars/resize.ts](../lib/avatars/resize.ts)
+— rồi lưu base64 thẳng vào cột `prefs_json` của tab `accounts`, và
+[/api/avatar/[userId]](../app/api/avatar/[userId]/route.ts) trả về. **Không thêm
+kho tệp, không thêm biến môi trường, không thêm dịch vụ nào.** Một ô Sheets chứa
+được 50.000 ký tự, chính giới hạn đã buộc bảng `events` phải cắt trạng thái ra
+làm bốn ô — 3KB nằm gọn trong đó.
+
+Ba nước dự phòng, và nước nào cũng phải chạy được: ảnh tự tải lên → ảnh tài khoản
+Google (chuyển hướng, để CDN của Google tự lo) → biểu tượng suy từ tên như cũ.
+Nước cuối mới là **trường hợp thường gặp**, vì phần lớn người ra sân không đăng
+nhập bao giờ.
+
+Một cái bẫy đã sập một lần trong lúc chạy thử: bản đầu *đổi* giữa ảnh và biểu
+tượng, nên trong khoảng từ lúc bắt đầu tải tới lúc `onError` kêu lên — hàng chục
+giây nếu máy chủ ảnh không phản hồi — người dùng nhìn thấy một vòng tròn màu rỗng
+không. Nay biểu tượng luôn được vẽ và ảnh **nằm đè lên**, nên không còn khoảng
+trống nào.
+
+**Tài khoản Google là đường vào chính.** `ownerUserId` vốn đã được ghi từ lúc tạo
+buổi nhưng chưa dùng để xét quyền; nay nó cho quyền chủ sự kiện trên mọi máy, và
+đó cũng là câu trả lời cho *quên mật khẩu thì sao* — trước đây không có câu trả
+lời nào, quên là buổi đánh thành chỉ-đọc vĩnh viễn.
+
+Vai trò nay do đúng một hàm quyết định: `roleFor` trong
+[lib/api/context.ts](../lib/api/context.ts). Nó được gọi từ **hai chỗ** —
+`resolveContext` cho các route, và `app/e/[code]/layout.tsx` cho lượt dựng đầu ở
+máy chủ. Để hai chỗ tự tính lấy thì màn hình sẽ vẽ lần đầu ở "chế độ xem" rồi
+nháy sang "chủ sự kiện", và người dùng bấm hụt nút trong khoảnh khắc đó.
+
+Phép so sánh trong `roleFor` có hai lá chắn trông như thừa:
+
+```ts
+if (userId && record.ownerUserId && userId === record.ownerUserId)
+```
+
+Chúng **không** thừa. `ownerUserId` là chuỗi rỗng với mọi buổi tạo lúc chưa đăng
+nhập; bỏ chúng đi là chuỗi rỗng khớp chuỗi rỗng, và người lạ bất kỳ thành chủ mọi
+buổi đánh cũ. Đã kiểm bằng cách xoá lá chắn và xác nhận bài kiểm thử đỏ lên.
+
+**Đổi mật khẩu** ở [/api/events/[code]/password](../app/api/events/[code]/password/route.ts)
+chỉ cho chủ-theo-tài-khoản, cố ý **không** cho người đang là admin nhờ biết mật
+khẩu — người đó có thể là ai đó được nhờ nhập điểm hộ tối qua, và cho họ đổi mật
+khẩu là cho họ khoá chính chủ ra ngoài. Đường ghi chỉ đụng đúng hai ô mật khẩu
+chứ không ghi lại cả dòng: dòng sự kiện chứa cả ảnh chụp trạng thái, ghi đè cả
+dòng là xoá mất tỷ số người khác vừa nhập.
+
+**Đường về trang chủ.** Trước đây vào trong một sự kiện là không có lối ra: logo
+là thẻ chữ thường, thanh dưới chỉ có năm mục trong sự kiện. Nay logo là liên kết,
+và trên điện thoại có dòng `← Trang chủ` trong băng tiêu đề.
+
+Và một phát hiện đáng nói: nút đăng nhập trước giờ **chỉ có ở trang chủ với trang
+"Của tôi"** — hai chỗ người ra sân gần như không ghé. Người quét mã QR ở sân
+không bao giờ nhìn thấy nó. Đó là lý do tính năng tài khoản dựng xong từ giai
+đoạn trước mà gần như không ai dùng tới. Nay `AccountBar` có mặt ở màn hình tham
+gia, và ô nhập mật khẩu có thêm dòng *"Bạn tạo buổi này mà quên mật khẩu?"*.
+
 ## Còn lại
 
 ### Việc nhỏ chưa làm
@@ -451,6 +512,24 @@ danh sách, mà người đó tình cờ an toàn.
 - **Bật đăng nhập Google.** Cần OAuth client trong tài khoản Google Cloud của
   bạn nên tôi không làm hộ được. Mã đã sẵn sàng: điền hai biến trong
   [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) là nút hiện ra.
+
+  > Từ đợt ảnh đại diện thật, hai biến này quyết định **nhiều hơn trước**: thiếu
+  > chúng thì không ai đăng nhập được, mà không đăng nhập thì không đặt được ảnh
+  > thật và không lấy lại được quyền chủ khi quên mật khẩu. Mọi thứ vẫn chạy như
+  > cũ, chỉ là ba tính năng đó nằm im.
+
+### Đã cân nhắc và cố ý không làm
+
+- **Mời đồng chủ sự kiện.** Quyền chủ hiện gắn với đúng một tài khoản
+  (`ownerUserId`) cộng với mật khẩu. Việc cho phép chủ mời tài khoản khác cùng
+  làm chủ — hữu ích khi hôm đó bận, nhờ người khác chạy buổi — đã được cân nhắc
+  và bỏ, vì nó cần một bảng phân quyền riêng chứ không nhét thêm được vào một ô.
+  Đừng dựng lại mà chưa hỏi lại: mật khẩu chủ sự kiện đã giải quyết được phần
+  lớn tình huống ấy rồi.
+- **Ảnh đại diện trong bảng Công bằng và hộp nhập tỷ số.** Bảng Công bằng là để
+  quét mắt theo cột số, thêm ảnh vào làm nó chật. Riêng bước xác nhận trong hộp
+  nhập tỷ số thì ảnh **sẽ có ích thật** — đó là chỗ bắt lỗi "nhập đúng tỷ số vào
+  nhầm trận" — nhưng để dành, chưa làm.
 
 ### Nhánh `claude/nang-next-16` — làm xong, chờ gộp
 

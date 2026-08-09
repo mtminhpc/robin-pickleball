@@ -28,6 +28,14 @@ export interface EventSnapshot {
    */
   myPlayerId: string | null;
   requiresPlayerPassword: boolean;
+  /**
+   * Bạn là chủ buổi đánh nhờ tài khoản, không phải nhờ gõ mật khẩu.
+   *
+   * Chỉ có cờ đúng/sai chứ không có mã tài khoản của chủ. Giao diện cần biết
+   * *bạn có phải chủ không*, chứ không cần biết *chủ là ai* — mà mọi người xem
+   * buổi đánh đều nhận được cùng một câu trả lời này.
+   */
+  ownerByAccount: boolean;
   repaired: boolean;
 }
 

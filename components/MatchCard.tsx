@@ -12,11 +12,17 @@
  *     Chỉ nhìn là biết cái nào chắc chắn, không phải nhớ mình vừa bấm gì.
  *   • Mọi lần sửa hiện công khai ngay tại chỗ: ai sửa, lúc mấy giờ, từ bao nhiêu
  *     thành bao nhiêu. Minh bạch quan trọng hơn gọn gàng khi có tranh cãi.
+ *
+ * Ảnh đại diện đứng cạnh tên. Bản thiết kế Modernist ban đầu cố ý bỏ ảnh khỏi
+ * đây để danh sách trận đọc như một bảng chữ — **chủ dự án đã cân nhắc và quyết
+ * định đưa lại**, vì ở sân người ta nhận nhau bằng mặt nhanh hơn đọc tên, nhất
+ * là khi trong nhóm có hai người trùng tên. Đừng "sửa lại cho đúng thiết kế".
  */
 
 import type { Command } from "@/lib/domain/commands";
 import { canEditResult } from "@/lib/domain/rules";
-import type { Actor, EventState, Match, PlayerId } from "@/lib/domain/types";
+import type { Actor, EventState, Match, Player, PlayerId } from "@/lib/domain/types";
+import { Avatar } from "@/components/Avatar";
 import { Button, Marker } from "@/components/ui";
 
 export function MatchCard({
@@ -37,8 +43,7 @@ export function MatchCard({
   onEnterScore: (match: Match) => void;
   onCancel?: (match: Match) => void;
 }) {
-  const nameOf = (id: PlayerId) =>
-    state.players.find((p) => p.id === id)?.name ?? id;
+  const playerOf = (id: PlayerId) => state.players.find((p) => p.id === id);
   const result = match.result;
   const shown = pendingScore ?? result;
   const editable =
@@ -72,7 +77,7 @@ export function MatchCard({
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2.5">
-        <Team ids={match.teamA} nameOf={nameOf} />
+        <Team ids={match.teamA} playerOf={playerOf} />
         <div
           className={`px-2 text-center font-display text-score tabular-nums ${
             pendingScore
@@ -84,7 +89,7 @@ export function MatchCard({
         >
           {shown ? `${shown.scoreA}–${shown.scoreB}` : "vs"}
         </div>
-        <Team ids={match.teamB} nameOf={nameOf} align="right" />
+        <Team ids={match.teamB} playerOf={playerOf} align="right" />
       </div>
 
       {match.cancelReason && (
@@ -146,27 +151,40 @@ export function MatchCard({
 
 function Team({
   ids,
-  nameOf,
+  playerOf,
   align = "left",
 }: {
   ids: readonly [PlayerId, PlayerId];
-  nameOf: (id: PlayerId) => string;
+  playerOf: (id: PlayerId) => Player | undefined;
   align?: "left" | "right";
 }) {
   return (
     // `min-w-0` cho phép cột lưới co lại để `truncate` có tác dụng. Thiếu nó thì
     // tên dài như "Nguyễn Văn Cường" đẩy cả hàng tràn ra ngoài màn hình.
     <div
-      className={`flex min-w-0 flex-col gap-1.5 ${align === "right" ? "text-right" : ""}`}
+      className={`flex min-w-0 flex-col gap-2 ${align === "right" ? "items-end" : ""}`}
     >
-      {ids.map((id) => (
-        <span
-          key={id}
-          className="truncate text-[15px] font-semibold tracking-[-0.01em]"
-        >
-          {nameOf(id)}
-        </span>
-      ))}
+      {ids.map((id) => {
+        const player = playerOf(id);
+        return (
+          <span
+            key={id}
+            className={`flex min-w-0 max-w-full items-center gap-2 ${
+              align === "right" ? "flex-row-reverse" : ""
+            }`}
+          >
+            <Avatar
+              name={player?.name ?? id}
+              avatarId={player?.avatarId}
+              userId={player?.userId}
+              size="sm"
+            />
+            <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">
+              {player?.name ?? id}
+            </span>
+          </span>
+        );
+      })}
     </div>
   );
 }

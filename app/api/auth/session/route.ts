@@ -21,10 +21,21 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     enabled: true,
     user: {
+      /**
+       * Để trang "Của tôi" dựng được địa chỉ ảnh của chính mình.
+       *
+       * Không phải là để lộ thêm gì: mã tài khoản của mọi người chơi vốn đã nằm
+       * trong trạng thái sự kiện gửi xuống trình duyệt. Nó là mã ngẫu nhiên,
+       * không suy ra được email, và tự nó không cho phép làm gì cả — mọi đường
+       * ghi đều xét cookie phiên chứ không xét mã này.
+       */
+      userId: me.account.userId,
       email: me.account.email,
       displayName: me.account.displayName,
       avatarId: me.account.avatarId,
       picture: me.account.prefs.picture ?? "",
+      /** Có ảnh tự tải lên hay chưa — để biết có hiện nút Xoá ảnh không. */
+      hasPhoto: Boolean(me.account.prefs.photo),
       devices: me.devices.length,
     },
   });
