@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   // Chép danh sách của trình duyệt lên Sheet để máy khác của cùng tài khoản đọc
   // được. Chỉ ghi khi thật sự có gì mới — trang này mở ra là gọi tới đây.
   if (userId && deviceId && fromBrowser.length > 0) {
-    await rememberQuietly(deviceId, fromBrowser);
+    await rememberQuietly(deviceId, fromBrowser, userId);
   }
 
   const repo = getRepo();
@@ -269,9 +269,13 @@ function dedupe(codes: string[]): string[] {
  * được số liệu của mình — không có lý do gì để cả trang hỏng vì một bước đồng bộ
  * mà lần mở sau sẽ tự chạy lại.
  */
-async function rememberQuietly(deviceId: string, codes: string[]): Promise<void> {
+async function rememberQuietly(
+  deviceId: string,
+  codes: string[],
+  userId: string,
+): Promise<void> {
   try {
-    await getAccountRepo().rememberEvents(deviceId, codes, Date.now());
+    await getAccountRepo().rememberEvents(deviceId, codes, Date.now(), userId);
   } catch (error) {
     console.error("[robin-pickleball] không chép được danh sách buổi lên Sheet:", error);
   }

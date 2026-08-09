@@ -50,6 +50,7 @@ describe("làm mới dữ liệu trình duyệt theo phiên bản", () => {
       [CLIENT_DATA_VERSION_KEY]: "v0.2.1",
       rp_profile: "profile",
       rp_recent_events: "events",
+      rp_recent_events_account: "user-id",
       rp_recent_clubs: "clubs",
       rp_old_draft: "temporary",
       another_library: "untouched",
@@ -65,6 +66,7 @@ describe("làm mới dữ liệu trình duyệt theo phiên bản", () => {
     });
     expect(storage.getItem("rp_profile")).toBe("profile");
     expect(storage.getItem("rp_recent_events")).toBe("events");
+    expect(storage.getItem("rp_recent_events_account")).toBe("user-id");
     expect(storage.getItem("rp_recent_clubs")).toBe("clubs");
     expect(storage.getItem("another_library")).toBe("untouched");
     expect(storage.getItem("rp_old_draft")).toBeNull();

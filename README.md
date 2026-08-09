@@ -4,7 +4,7 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Phiên bản v0.5.0 · Trạng thái: handoff Claude Design v3 đã triển khai.** Ứng dụng
+> **Phiên bản v0.5.1 · Trạng thái: đồng bộ đa thiết bị và nhận lại buổi cũ.** Ứng dụng
 > chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
 > bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
 > tuần và tháng, đăng nhập Google, sự kiện đã tạo, nhà tài trợ và Bảng vàng.
@@ -36,7 +36,7 @@ Lệnh này luôn dùng `.data/test-sandbox.json`, kể cả máy đã cấu hì
 chạy lại không nhân đôi hay reset buổi đang thử và không đụng dữ liệu thật.
 
 ```bash
-npm test                  # 513 bài kiểm thử
+npm test                  # 524 bài kiểm thử
 npm run scenarios         # 152 lượt thực chiến 4–11 người
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
@@ -51,6 +51,11 @@ npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 > tệp khoá thứ hai: hai tệp khoá cho cùng một dự án thì sớm muộn cũng lệch nhau,
 > và khi đó máy này cài ra một bộ thư viện còn máy kia ra bộ khác.
 
+> **Lưu ý nâng lên v0.5.1:** “Gần đây” hiện ngay từ máy rồi đồng bộ qua tài khoản
+> Google; buổi cũ chưa có chủ có thể gắn lại bằng mật khẩu chủ trong trang Quản
+> lý. Tạo buổi dùng hai ô Giờ bắt đầu và Ngày diễn ra. Không có bước nào xoá sự
+> kiện, tỷ số, tài khoản, CLB hay kho TEST.
+>
 > **Lưu ý nâng lên v0.5.0:** snapshot cũ được bổ sung mặc định, không xoá hoặc
 > reset tài khoản, CLB, sự kiện hay tỷ số. `ClientDataRefresh` chỉ dọn dữ liệu
 > tạm theo version và bảo toàn hồ sơ/lịch sử/hàng đợi chưa gửi. Lớp bảo vệ danh

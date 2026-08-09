@@ -36,6 +36,8 @@ export async function GET(
      * đổi mật khẩu — quyền đó cố ý không cho người chỉ biết mật khẩu.
      */
     ownerByAccount: ctx.ownerByAccount,
+    /** Buổi legacy chưa có chủ tài khoản; không trả mã/email của bất kỳ ai. */
+    ownerClaimable: ctx.event.record.ownerUserId === "",
     /**
      * Ảnh chụp trạng thái vừa phải dựng lại từ nhật ký. Giao diện không cần làm
      * gì, nhưng đưa ra để còn chẩn đoán được nếu nó xảy ra liên tục.

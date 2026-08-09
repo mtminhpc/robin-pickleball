@@ -6,17 +6,23 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 
 ## Trạng thái đã chốt
 
-- Phiên bản mã hiện tại: `v0.5.0`, nhánh phát hành
-  `codex/design-handoff-v3-v0.5.0`. Tag/Production phải cùng trỏ bản đã qua cổng
+- Phiên bản mã hiện tại: `v0.5.1`, nhánh phát hành
+  `codex/v0.5.1-cross-device-history`. Tag/Production phải cùng trỏ bản đã qua cổng
   kiểm định; xem huy hiệu dưới phải giao diện để biết commit đang chạy.
 - Production: https://robin-pickleball.vercel.app
-- Mốc Production trước đợt này là deployment `dpl_DANZBkMLZyJ7aGY3JNFWx215eeNs`,
-  HTML `v0.4.1 · 6ae181f`. Không được nhầm mốc cũ này với việc v0.5.0 đã deploy;
+- Mốc Production trước đợt này là deployment `dpl_3Dzh1cnnvZRoBk3oTg6qGeG48hFc`,
+  HTML `v0.5.0 · 6a1e4d4`. Không được nhầm mốc cũ này với việc v0.5.1 đã deploy;
   sau khi đẩy `main` phải kiểm alias và huy hiệu lại.
 - Bản `v0.5.0` dựng sát handoff Claude Design v3: trang chủ bốn tab, danh sách
   sự kiện theo tài khoản, quota, tài trợ ba hình dạng, Bảng vàng/trao giải và
   kết thúc bình thường. Toàn bộ 513 bài test xanh; 152 lượt mô phỏng 4–11
   người/0 vấn đề; `npm run typecheck` và `npm run build` sạch.
+- Bản `v0.5.1` gộp “Gần đây” qua các thiết bị cùng Gmail, tách cache React Query
+  theo `userId`, và không chuyển lịch sử khi Gmail khác nhận cùng một trình duyệt.
+  Buổi legacy có `owner_user_id` rỗng được nhận lại bằng mật khẩu chủ; sổ
+  `event_owner_claims` append-only phân xử đồng thời, và chỉ đúng ô chủ tài khoản
+  được ghi. Hai ô giờ/ngày thay `datetime-local`. Cổng cuối: 524 bài test,
+  152 lượt công bằng, build và typecheck sạch.
 - Kho thử bền vững nằm ở `.data/test-sandbox.json`: chạy `npm run dev:test`, vào mã
   `TEST11` để thử công bằng hoặc `TESTV5` để xem tài trợ/Bảng vàng; mật khẩu
   người chơi `test1234`, quản trị `admin1234`. Chạy lại không reset dữ liệu và

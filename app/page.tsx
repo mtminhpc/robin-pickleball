@@ -3,9 +3,9 @@
 /**
  * Trang chủ: tạo buổi đánh mới, hoặc vào buổi đã có.
  *
- * Danh sách "sự kiện gần đây" lấy từ localStorage của chính máy. Đó là thứ khiến
- * lần mở thứ hai trở đi thành một cú bấm: không ai nhớ nổi mã sáu ký tự của buổi
- * tuần trước, nhưng ai cũng nhận ra tên buổi đánh.
+ * Danh sách "sự kiện gần đây" hiện ngay từ localStorage của chính máy, rồi gộp
+ * nền với các thiết bị đăng nhập cùng tài khoản. Nhờ vậy lần mở thứ hai vẫn tức
+ * thì, còn đổi điện thoại không làm biến mất các lối tắt cũ.
  */
 
 import { useEffect, useState } from "react";
@@ -15,6 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   loadRecentClubs,
   loadRecentEvents,
+  recentEventsForAccount,
+  saveAccountRecentEvents,
   type RecentClub,
   type RecentEvent,
   loadProfile,
@@ -22,18 +24,53 @@ import {
 import { Button, Field, inputClass } from "@/components/ui";
 import { Avatar } from "@/components/Avatar";
 import { signInHref, useAccount } from "@/hooks/useAccount";
+import { scheduledAtFromInputs } from "@/lib/scheduled-at";
 
 const HOME_ACCENT = "#087a55";
 
 export default function HomePage() {
   const [recent, setRecent] = useState<RecentEvent[]>([]);
   const [clubs, setClubs] = useState<RecentClub[]>([]);
+  const [recentReady, setRecentReady] = useState(false);
   const [tab, setTab] = useState<"join" | "created" | "create" | "club">("join");
+  const account = useAccount();
 
   useEffect(() => {
     setRecent(loadRecentEvents());
     setClubs(loadRecentClubs());
+    setRecentReady(true);
   }, []);
+
+  const recentSync = useQuery<{ events: RecentEvent[] }>({
+    queryKey: [
+      "recent-events",
+      account.data?.user?.userId ?? "anonymous",
+      recent.map((event) => event.code).join(","),
+    ],
+    enabled: recentReady && Boolean(account.data?.user),
+    queryFn: async () => {
+      const userId = account.data!.user!.userId;
+      const response = await fetch("/api/events/recent", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ events: recentEventsForAccount(userId) }),
+      });
+      const body = (await response.json()) as { events?: RecentEvent[]; error?: string };
+      if (!response.ok || !body.events) {
+        throw new Error(body.error ?? "Không đồng bộ được các buổi gần đây.");
+      }
+      return { events: body.events };
+    },
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    const userId = account.data?.user?.userId;
+    if (!userId || !recentSync.data) return;
+    saveAccountRecentEvents(userId, recentSync.data.events);
+    setRecent(recentSync.data.events);
+  }, [account.data?.user?.userId, recentSync.data]);
 
   return (
     <main className="mx-auto min-h-dvh max-w-md overflow-hidden border-x border-line bg-paper pb-16">
@@ -374,12 +411,13 @@ interface OwnedEvent {
 
 function CreatedEvents() {
   const account = useAccount();
+  const userId = account.data?.user?.userId ?? "";
   const query = useQuery<{
     events: OwnedEvent[];
     quota: { used: number; limit: number | null; remaining: number | null };
   }>({
-    queryKey: ["owned-events"],
-    enabled: Boolean(account.data?.user),
+    queryKey: ["owned-events", userId],
+    enabled: Boolean(userId),
     queryFn: async () => {
       const response = await fetch("/api/events");
       const body = await response.json();
@@ -414,11 +452,16 @@ function CreatedEvents() {
   return (
     <div id="home-panel-created" role="tabpanel" aria-labelledby="home-tab-created" className="space-y-4 border border-t-0 border-line bg-surface p-4">
       {query.data && (
-        <div className="flex items-center justify-between border-l-4 border-[#087a55] bg-paper px-3 py-2 text-xs">
-          <strong>Sự kiện đang mở</strong>
-          <span className="font-mono font-bold text-[#087a55]">
-            {query.data.quota.used}/{query.data.quota.limit ?? "∞"}
-          </span>
+        <div className="border-l-4 border-[#087a55] bg-paper px-3 py-2 text-xs">
+          <div className="flex items-center justify-between">
+            <strong>Sự kiện đang mở</strong>
+            <span className="font-mono font-bold text-[#087a55]">
+              {query.data.quota.used}/{query.data.quota.limit ?? "∞"}
+            </span>
+          </div>
+          <p className="mt-1 truncate text-[10px] text-mute-600">
+            Theo tài khoản {account.data?.user?.email}
+          </p>
         </div>
       )}
       {query.isLoading && <p className="text-sm text-mute-600">Đang tải…</p>}
@@ -476,12 +519,18 @@ function CreateEvent() {
   const [winBy2, setWinBy2] = useState(true);
   const [playerPassword, setPlayerPassword] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
-  const [scheduledAt, setScheduledAt] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const schedule = scheduledAtFromInputs(scheduledDate, scheduledTime);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (schedule.error) {
+      setError(schedule.error);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -495,7 +544,7 @@ function CreateEvent() {
           winBy2,
           playerPassword,
           adminPassword,
-          scheduledAt: scheduledAt ? new Date(scheduledAt).getTime() : null,
+          scheduledAt: schedule.value,
         }),
       });
       const body = (await res.json()) as { code?: string; error?: string };
@@ -533,9 +582,32 @@ function CreateEvent() {
           />
         </Field>
 
-        <Field label="Ngày giờ dự kiến" hint="Không bắt buộc.">
-          <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className={`${inputClass} !bg-paper`} />
-        </Field>
+        <div className="grid gap-3">
+          <Field label="Giờ bắt đầu" hint="Định dạng 24 giờ: giờ:phút.">
+            <input
+              type="time"
+              lang="vi-VN"
+              step={60}
+              value={scheduledTime}
+              onChange={(event) => setScheduledTime(event.target.value)}
+              className={`${inputClass} !bg-paper tabular-nums`}
+            />
+          </Field>
+          <Field label="Ngày diễn ra" hint="Ngày / tháng / năm. Không bắt buộc nếu để trống cả hai ô.">
+            <input
+              type="date"
+              lang="vi-VN"
+              value={scheduledDate}
+              onChange={(event) => setScheduledDate(event.target.value)}
+              className={`${inputClass} !bg-paper tabular-nums`}
+            />
+          </Field>
+          {schedule.error && (
+            <p className="text-pretty text-xs font-semibold text-accent-700" role="alert">
+              {schedule.error}
+            </p>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Số sân">

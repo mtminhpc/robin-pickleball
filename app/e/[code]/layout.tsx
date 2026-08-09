@@ -64,6 +64,7 @@ export default async function EventLayout({
         myPlayerId: findMyPlayer(event.state, deviceId, userId)?.id ?? null,
         requiresPlayerPassword: event.record.playerPassHash !== "",
         ownerByAccount: isOwnerByAccount(event.record, userId),
+        ownerClaimable: event.record.ownerUserId === "",
         repaired: event.repaired,
       }}
     >

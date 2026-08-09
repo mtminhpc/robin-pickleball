@@ -19,6 +19,7 @@ export const TABS = {
   eventAssets: "event_assets",
   appEventLimits: "app_event_limits",
   appEventReservations: "app_event_reservations",
+  eventOwnerClaims: "event_owner_claims",
 } as const;
 
 /** Tab nhật ký của một sự kiện: nguồn sự thật, chỉ ghi thêm không sửa. */
@@ -109,6 +110,12 @@ export const HEADERS = {
     "status",
     "created_at",
     "updated_at",
+  ],
+  [TABS.eventOwnerClaims]: [
+    "event_code",
+    "user_id",
+    "token",
+    "created_at",
   ],
 } as const;
 

@@ -11,6 +11,26 @@ Không coi một `git push` là đã phát hành: nhánh tính năng chỉ tạo
 còn Production đi từ `main` và phải được kiểm lại qua alias công khai. Không sửa
 hay commit hai ZIP handoff của người dùng.
 
+## Trạng thái cuối phiên Codex 09/08/2026 — v0.5.1
+
+- Nhánh phát hành là `codex/v0.5.1-cross-device-history`, dựng tiếp từ tag
+  `v0.5.0`; không sửa lại giao diện/tài trợ/Bảng vàng đã chạy tốt.
+- `HY62PJ · Test sân` đã được kiểm trực tiếp trên Production và vẫn tồn tại. Lý
+  do hai máy khác nhau là mục “Gần đây” trước đây chỉ nằm trong localStorage;
+  dữ liệu sự kiện trên Google Sheet không bị xoá.
+- `POST /api/events/recent` nay chép lịch sử thiết bị lên tài khoản rồi gộp các
+  thiết bị cùng Gmail. Khoá `rp_recent_events_account` ngăn Gmail tiếp theo trên
+  máy dùng chung thừa hưởng lịch sử Gmail trước; dữ liệu legacy được nhận vào
+  Gmail đầu tiên để cứu danh sách cũ.
+- `POST /api/events/[code]/ownership` nhận buổi có `owner_user_id` rỗng sau khi
+  đăng nhập và nhập lại đúng mật khẩu chủ. Tab `event_owner_claims` append-only
+  chọn ứng viên đầu tiên; quota vẫn áp dụng với buổi chưa kết thúc. Không dùng
+  app-admin để vào buổi của người khác và không ghi lại snapshot/tỷ số.
+- Form tạo buổi có hai ô Giờ bắt đầu (`HH:mm`) rồi Ngày diễn ra
+  (`DD/MM/YYYY`), ghép theo múi giờ thiết bị; phải nhập đủ cả hai hoặc để trống.
+- Kho TEST/`TEST11`/`TESTV5` giữ nguyên. Cổng cuối: 524/524 test, 152
+  lượt công bằng/0 vấn đề, build và typecheck sạch.
+
 ## Trạng thái cuối phiên Codex 09/08/2026 — v0.5.0
 
 - Mã v0.5.0 nằm trên `codex/design-handoff-v3-v0.5.0`, dựng từ handoff Claude

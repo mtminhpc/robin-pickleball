@@ -438,6 +438,44 @@ export class EventRepo {
     await this.sheets.batch(writes);
     return true;
   }
+
+  /**
+   * Gắn một buổi cũ vào tài khoản bằng cách chỉ ghi đúng ô `owner_user_id`.
+   *
+   * Không ghi lại cả dòng: dòng ấy còn chứa ảnh chụp trạng thái, và một bản chụp
+   * cũ có thể xoá tỷ số người khác vừa nhập. Phân xử hai tài khoản tranh nhau nằm
+   * ở `EventOwnerClaimRepo`; phép kiểm ở đây là lớp phòng thủ cuối cùng.
+   */
+  async claimOwner(
+    code: string,
+    userId: string,
+  ): Promise<"claimed" | "already-owned" | "owned-by-other" | "not-found"> {
+    if (!code || !userId) return "not-found";
+
+    const ownerColumn = indexToColumn(COL.owner_user_id);
+    const [index] = await this.sheets.batchGet([
+      `${TABS.events}!A:${ownerColumn}`,
+    ]);
+    const rows = index?.values ?? [];
+    const rowIndex = rows.findIndex(
+      (row, i) => i > 0 && (row[COL.code] ?? "").toUpperCase() === code.toUpperCase(),
+    );
+    if (rowIndex === -1) return "not-found";
+
+    const current = rows[rowIndex]?.[COL.owner_user_id] ?? "";
+    if (current === userId) return "already-owned";
+    if (current !== "") return "owned-by-other";
+
+    const rowNumber = rowIndex + 1;
+    await this.sheets.batch([
+      {
+        kind: "update",
+        range: `${TABS.events}!${ownerColumn}${rowNumber}:${ownerColumn}${rowNumber}`,
+        values: [[userId]],
+      },
+    ]);
+    return "claimed";
+  }
 }
 
 // ---------------------------------------------------------------------------

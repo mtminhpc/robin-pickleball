@@ -18,10 +18,16 @@
 export const DEVICE_COOKIE = "rp_device";
 export const PROFILE_KEY = "rp_profile";
 export const RECENT_KEY = "rp_recent_events";
+export const RECENT_ACCOUNT_KEY = "rp_recent_events_account";
 export const CLUBS_KEY = "rp_recent_clubs";
 /** Dữ liệu thuộc về người dùng, phải sống qua mọi lần nâng phiên bản. */
-export const USER_LOCAL_STORAGE_KEYS = [PROFILE_KEY, RECENT_KEY, CLUBS_KEY] as const;
-const MAX_RECENT = 12;
+export const USER_LOCAL_STORAGE_KEYS = [
+  PROFILE_KEY,
+  RECENT_KEY,
+  RECENT_ACCOUNT_KEY,
+  CLUBS_KEY,
+] as const;
+export const MAX_RECENT = 12;
 
 export interface DeviceProfile {
   name: string;
@@ -43,7 +49,50 @@ export function saveProfile(profile: DeviceProfile): void {
 }
 
 export function loadRecentEvents(): RecentEvent[] {
-  return readJson<RecentEvent[]>(RECENT_KEY) ?? [];
+  const stored = readJson<unknown>(RECENT_KEY);
+  if (!Array.isArray(stored)) return [];
+  return normalizeRecentEvents(stored);
+}
+
+/**
+ * Ghi lại danh sách đã được máy chủ gộp từ các thiết bị của cùng tài khoản.
+ *
+ * Tên lấy từ snapshot trên Sheet chứ không tin chuỗi do trình duyệt khác gửi
+ * lên. Hàm vẫn allowlist hình dạng trước khi chạm localStorage để một giá trị cũ
+ * hoặc hỏng không làm trang chủ lỗi mãi ở mọi lần mở sau.
+ */
+export function saveRecentEvents(events: readonly RecentEvent[]): void {
+  writeJson(RECENT_KEY, normalizeRecentEvents(events));
+}
+
+/**
+ * Chỉ gửi lịch sử cục bộ cho tài khoản đã đồng bộ nó trước đó.
+ *
+ * Khoá chưa có là dữ liệu legacy và được nhận vào tài khoản đầu tiên — đây là
+ * bước cứu lịch sử trên điện thoại hiện tại. Nếu một Gmail khác đăng nhập sau,
+ * không tải lịch sử của người trước lên tài khoản mới.
+ */
+export function recentEventsForAccount(userId: string): RecentEvent[] {
+  if (typeof window === "undefined" || !userId) return [];
+  try {
+    const bound = window.localStorage.getItem(RECENT_ACCOUNT_KEY);
+    return !bound || bound === userId ? loadRecentEvents() : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveAccountRecentEvents(
+  userId: string,
+  events: readonly RecentEvent[],
+): void {
+  saveRecentEvents(events);
+  if (typeof window === "undefined" || !userId) return;
+  try {
+    window.localStorage.setItem(RECENT_ACCOUNT_KEY, userId);
+  } catch {
+    // Safari riêng tư có thể chặn localStorage; danh sách trên máy chủ vẫn an toàn.
+  }
 }
 
 /**
@@ -55,7 +104,7 @@ export function loadRecentEvents(): RecentEvent[] {
 export function rememberEvent(code: string, name: string): void {
   const now = Date.now();
   const rest = loadRecentEvents().filter((e) => e.code !== code);
-  writeJson(RECENT_KEY, [{ code, name, lastOpenedAt: now }, ...rest].slice(0, MAX_RECENT));
+  saveRecentEvents([{ code, name, lastOpenedAt: now }, ...rest]);
 }
 
 export interface RecentClub {
@@ -107,4 +156,20 @@ function writeJson(key: string, value: unknown): void {
   } catch {
     // như trên
   }
+}
+
+function normalizeRecentEvents(value: readonly unknown[]): RecentEvent[] {
+  const out: RecentEvent[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Partial<RecentEvent>;
+    const code = typeof raw.code === "string" ? raw.code.trim().toUpperCase() : "";
+    const name = typeof raw.name === "string" ? raw.name.trim().slice(0, 80) : "";
+    const lastOpenedAt = Number(raw.lastOpenedAt);
+    if (!/^[A-Z0-9]{4,6}$/.test(code) || !name || !Number.isFinite(lastOpenedAt)) continue;
+    if (out.some((event) => event.code === code)) continue;
+    out.push({ code, name, lastOpenedAt: Math.max(0, Math.floor(lastOpenedAt)) });
+    if (out.length === MAX_RECENT) break;
+  }
+  return out;
 }

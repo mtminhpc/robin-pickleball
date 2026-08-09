@@ -308,8 +308,8 @@ describe("kho tài khoản", () => {
     });
     expect((await repo.devicesOf(nam.userId)).map((d) => d.deviceId)).toEqual(["dt-1"]);
 
-    // Điện thoại dùng chung: người sau nhận máy, nhưng lịch sử của cái máy đó
-    // không mất — những buổi ấy cả hai đều có mặt.
+    // Điện thoại dùng chung: người sau nhận máy nhưng không được thừa hưởng lịch
+    // sử riêng của Gmail trước.
     await repo.linkDevice({
       deviceId: "dt-1",
       userId: lan.userId,
@@ -321,7 +321,31 @@ describe("kho tài khoản", () => {
     expect(await repo.devicesOf(nam.userId)).toEqual([]);
     const link = await repo.deviceLink("dt-1");
     expect(link?.userId).toBe(lan.userId);
-    expect(link?.recentEvents).toEqual(["BBB222", "AAA111"]);
+    expect(link?.recentEvents).toEqual(["BBB222"]);
+  });
+
+  it("hai thiết bị cùng Gmail đọc được mã buổi đã lưu từ điện thoại", async () => {
+    const { repo } = fresh();
+    const nam = await repo.upsertByEmail(seed);
+    await repo.linkDevice({
+      deviceId: "dien-thoai",
+      userId: nam.userId,
+      displayName: "Nam",
+      avatarId: "e01-c01",
+      recentEvents: ["HY62PJ"],
+      at: 1000,
+    });
+    await repo.linkDevice({
+      deviceId: "may-tinh",
+      userId: nam.userId,
+      displayName: "Nam",
+      avatarId: "e01-c01",
+      at: 2000,
+    });
+
+    const devices = await repo.devicesOf(nam.userId);
+    expect(devices).toHaveLength(2);
+    expect(devices.flatMap((device) => device.recentEvents)).toContain("HY62PJ");
   });
 
   describe("gỡ máy khỏi tài khoản", () => {
@@ -431,6 +455,26 @@ describe("kho tài khoản", () => {
     const before = sheets.calls.batch;
     expect(await repo.rememberEvents("dt-la", ["AAA111"], 1000)).toBe(false);
     expect(sheets.calls.batch).toBe(before);
+  });
+
+  it("cookie tài khoản cũ không ghi lịch sử vào thiết bị đã thuộc Gmail khác", async () => {
+    const { sheets, repo } = fresh();
+    const nam = await repo.upsertByEmail(seed);
+    const lan = await repo.upsertByEmail({ ...seed, email: "lan@example.com" });
+    await repo.linkDevice({
+      deviceId: "dt-chung",
+      userId: lan.userId,
+      displayName: "Lan",
+      avatarId: "e02-c02",
+      at: 1000,
+    });
+
+    const before = sheets.calls.batch;
+    expect(
+      await repo.rememberEvents("dt-chung", ["AAA111"], 2000, nam.userId),
+    ).toBe(false);
+    expect(sheets.calls.batch).toBe(before);
+    expect((await repo.deviceLink("dt-chung"))?.recentEvents).toEqual([]);
   });
 });
 

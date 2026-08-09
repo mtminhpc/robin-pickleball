@@ -39,6 +39,8 @@ export interface EventSnapshot {
    * buổi đánh đều nhận được cùng một câu trả lời này.
    */
   ownerByAccount: boolean;
+  /** Buổi cũ chưa có tài khoản chủ và có thể nhận lại bằng mật khẩu chủ. */
+  ownerClaimable: boolean;
   repaired: boolean;
 }
 

@@ -18,6 +18,7 @@ import { EventRepo, type EventRecord } from "./repo";
 import { AppEventLimitRepo } from "./app-event-limits";
 import { EventAssetRepo } from "./event-assets";
 import { EventCreationReservationRepo } from "./event-reservations";
+import { EventOwnerClaimRepo } from "./event-owner-claims";
 
 /** Bao lâu thì chấp nhận dữ liệu cũ. Ghi thì xoá đệm ngay nên không ai phải chờ. */
 const TTL_SECONDS = 5;
@@ -117,6 +118,10 @@ export function getEventAssetRepo(): EventAssetRepo {
 
 export function getEventCreationReservationRepo(): EventCreationReservationRepo {
   return new EventCreationReservationRepo(getSheetsClient());
+}
+
+export function getEventOwnerClaimRepo(): EventOwnerClaimRepo {
+  return new EventOwnerClaimRepo(getSheetsClient());
 }
 
 // ---------------------------------------------------------------------------

@@ -10,9 +10,12 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { firstUnplayedRound } from "@/lib/domain/rounds";
-import { useEvent } from "@/hooks/useEventState";
+import { eventQueryKey, useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
+import { signInHref, useAccount } from "@/hooks/useAccount";
+import { rememberEvent } from "@/lib/identity/device";
 import { PasswordGate } from "@/components/PasswordGate";
 import { Button, Card, Dialog, Empty, Field, inputClass } from "@/components/ui";
 import { SponsorManager } from "@/components/SponsorManager";
@@ -65,6 +68,8 @@ export default function AdminPage() {
       )}
 
       <QrSection code={code} />
+
+      <OwnershipSection code={code} eventName={state.config.name} />
 
       {data.ownerByAccount && <PasswordSection code={code} />}
 
@@ -145,6 +150,115 @@ export default function AdminPage() {
         }}
       />
     </div>
+  );
+}
+
+function OwnershipSection({
+  code,
+  eventName,
+}: {
+  code: string;
+  eventName: string;
+}) {
+  const { data, refresh } = useEvent();
+  const account = useAccount();
+  const queryClient = useQueryClient();
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const user = account.data?.user ?? null;
+
+  if (!data?.ownerClaimable || data.ownerByAccount) return null;
+
+  if (!user) {
+    return (
+      <Card className="space-y-3 border-accent-600 p-5">
+        <h2 className="text-balance font-semibold">Buổi cũ chưa gắn tài khoản</h2>
+        <p className="text-pretty text-sm text-mute-700">
+          Đăng nhập Google rồi nhập lại mật khẩu chủ để buổi này xuất hiện trong
+          “Các trận đã tạo” trên mọi thiết bị.
+        </p>
+        {account.data?.enabled && (
+          <a
+            href={signInHref(`/e/${code}/admin`)}
+            className="inline-flex min-h-tap items-center border border-ink px-4 font-display text-[10px] font-extrabold uppercase"
+          >
+            Đăng nhập Google
+          </a>
+        )}
+      </Card>
+    );
+  }
+
+  const claim = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/events/${code}/ownership`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ adminPassword: password }),
+      });
+      const body = (await response.json()) as { claimed?: boolean; error?: string };
+      if (!response.ok || !body.claimed) {
+        setError(body.error ?? "Không gắn được buổi này với tài khoản.");
+        return;
+      }
+
+      rememberEvent(code, eventName);
+      setDone(true);
+      setPassword("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["owned-events", user.userId] }),
+        queryClient.invalidateQueries({ queryKey: ["recent-events", user.userId] }),
+        queryClient.invalidateQueries({ queryKey: eventQueryKey(code) }),
+      ]);
+      refresh();
+    } catch {
+      setError("Không nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="space-y-4 border-accent-600 p-5">
+      <div>
+        <h2 className="text-balance font-semibold">Gắn buổi cũ với tài khoản</h2>
+        <p className="mt-1 text-pretty text-sm text-mute-700">
+          Sau khi xác minh, buổi này sẽ thuộc {user.email} và hiện
+          trên các thiết bị đăng nhập cùng Gmail.
+        </p>
+      </div>
+      {done ? (
+        <p className="text-sm font-semibold text-accent-700" role="status">
+          Đã gắn với tài khoản. Danh sách đang được làm mới.
+        </p>
+      ) : (
+        <form onSubmit={claim} className="space-y-3">
+          <Field label="Nhập lại mật khẩu chủ sự kiện">
+            <input
+              type="password"
+              autoComplete="current-password"
+              maxLength={200}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          {error && (
+            <p className="text-pretty text-sm font-semibold text-accent-700" role="alert">
+              {error}
+            </p>
+          )}
+          <Button type="submit" tone="primary" full disabled={busy || !password}>
+            {busy ? "Đang xác minh…" : "Gắn với tài khoản"}
+          </Button>
+        </form>
+      )}
+    </Card>
   );
 }
 

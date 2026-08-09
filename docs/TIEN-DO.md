@@ -1,6 +1,6 @@
 # Tiến độ dự án
 
-Cập nhật: 09/08/2026 · nhánh `codex/design-handoff-v3-v0.5.0` ·
+Cập nhật: 09/08/2026 · nhánh `codex/v0.5.1-cross-device-history` ·
 **đích Production: https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
@@ -15,7 +15,7 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.5.0 — Claude Design handoff v3`.**
+**Phiên bản hiện tại: `v0.5.1 — đồng bộ đa thiết bị và nhận lại buổi cũ`.**
 Không còn phần mã nào đang làm dở trong đợt này.
 
 | | |
@@ -27,9 +27,36 @@ Không còn phần mã nào đang làm dở trong đợt này.
 | GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-`npm test` 513 bài xanh, `npm run scenarios` chạy 152 lượt/0 vấn đề,
+`npm test` 524 bài xanh, `npm run scenarios` chạy 152 lượt/0 vấn đề,
 `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
+
+### Ghi chú khoá phiên Codex 09/08/2026 — v0.5.1
+
+- Production đã được đọc trực tiếp: `HY62PJ · Test sân` trả HTTP 200 và vẫn là
+  draft. Không có bản phát hành nào xoá buổi/tỷ số trong Google Sheet.
+- Trước v0.5.1, mục “Gần đây” là `rp_recent_events` riêng của từng trình duyệt;
+  “Các trận đã tạo” lại lọc `owner_user_id`. Đây là lý do điện thoại thấy lối tắt
+  mà máy tính không thấy, không phải dữ liệu bị reset.
+- `POST /api/events/recent` nhận tối đa 60 mã đã allowlist, ghi vào thiết bị đang
+  thuộc đúng tài khoản rồi trả tên chuẩn từ snapshot. Trang chủ hiện local trước,
+  gộp nền sau. Query sự kiện sở hữu mang `userId`, nên đổi Gmail không dùng cache
+  của người trước.
+- `rp_recent_events_account` được bảo toàn qua nâng version: dữ liệu chưa gắn là
+  legacy và vào Gmail đầu tiên; khi Gmail khác đăng nhập trên cùng máy thì không
+  tải lịch sử cũ sang tài khoản mới. `AccountRepo` cũng kiểm `expectedUserId` ở
+  đường ghi để cookie tài khoản cũ không chép nhầm dữ liệu.
+- Buổi cũ `owner_user_id` rỗng có thẻ nhận lại trong Quản lý. Người dùng phải
+  đăng nhập và nhập lại đúng mật khẩu chủ; mật khẩu bị rate-limit. Tab
+  `event_owner_claims` append-only chọn người đến trước giữa nhiều Vercel
+  instance. Chỉ ô `owner_user_id` được cập nhật, snapshot/seq/updatedAt giữ nguyên;
+  buổi chưa kết thúc vẫn chiếm quota, buổi đã thuộc người khác không chuyển được.
+- Ô `datetime-local` đã tách thành Giờ bắt đầu rồi Ngày diễn ra, hiển thị rõ
+  `HH:mm`/`DD/MM/YYYY`, ghép theo giờ địa phương và báo lỗi nếu chỉ nhập một ô.
+- Thêm 11 kiểm thử hồi quy: HY62PJ xuyên hai thiết bị cùng Gmail, chống chia sẻ
+  sang Gmail khác, dữ liệu legacy, ngày giờ, snapshot không đổi, quota, idempotent
+  và tranh claim đồng thời. Kho TEST giữ nguyên SHA-256
+  `FAF9167333BA9C5CD1C72065C82F06393650F133F90B7000D2EEA099565254DA`.
 
 ### Ghi chú khoá phiên Codex 09/08/2026 — v0.5.0
 

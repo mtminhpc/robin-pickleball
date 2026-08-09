@@ -243,14 +243,9 @@ export class AccountRepo {
   /**
    * Gắn cái máy đang dùng vào một tài khoản.
    *
-   * Một thiết bị chỉ thuộc về một tài khoản tại một thời điểm: điện thoại dùng
-   * chung mà hai người lần lượt đăng nhập thì người sau nhận máy, đúng như họ
-   * mong đợi. Danh sách buổi cũ vẫn được gộp lại chứ không xoá — nó là lịch sử
-   * của cái máy, và những buổi đó cả hai người đều có mặt.
-   *
-   * Điều đó chỉ đúng cho **người sau tự đăng nhập đè lên**. Chủ máy chủ động bấm
-   * gỡ là một tín hiệu khác hẳn, và `unlinkDevice` xoá danh sách đi — xem docblock
-   * ở đó.
+   * Một thiết bị chỉ thuộc về một tài khoản tại một thời điểm. Khi Gmail khác
+   * đăng nhập trên máy dùng chung, danh sách phía máy chủ của người trước phải bị
+   * tách ra; nếu gộp tiếp thì chỉ một lần mượn máy đã làm lộ lịch sử buổi đánh.
    */
   async linkDevice(input: {
     deviceId: string;
@@ -275,7 +270,7 @@ export class AccountRepo {
       avatarId: input.avatarId || (previous?.avatarId ?? ""),
       lastSeen: input.at,
       recentEvents: mergeRecentEvents(
-        previous?.recentEvents ?? [],
+        previous?.userId === input.userId ? previous.recentEvents : [],
         input.recentEvents ?? [],
       ),
     };
@@ -299,11 +294,8 @@ export class AccountRepo {
    * và không ghi gì. Không có bước này thì ai đoán được `deviceId` của người khác
    * là gỡ được máy của họ.
    *
-   * Xoá luôn danh sách buổi của cái máy đó, khác hẳn `linkDevice` vốn gộp lại.
-   * Hai tình huống khác nhau: điện thoại dùng chung thì cả hai người đều có mặt
-   * ở những buổi ấy nên giữ là đúng; còn chủ máy chủ động bấm gỡ là đang nói *"đừng
-   * gộp số liệu từ máy này nữa"*, mà để danh sách lại thì `linkDevice` sẽ merge nó
-   * sang tài khoản người đăng nhập kế tiếp — tức là việc gỡ không mua được gì.
+   * Xoá luôn danh sách buổi của cái máy đó. `linkDevice` cũng tách lịch sử khi
+   * Gmail khác nhận máy, để không chuyển dữ liệu người trước sang tài khoản sau.
    *
    * Giữ lại dòng chứ không xoá, giống `ClubRepo.removeMember`: `SheetsClient` chỉ
    * có `update` và `append`, và xoá dòng thật thì mọi `rowIndex` phía dưới đều
@@ -347,6 +339,7 @@ export class AccountRepo {
     deviceId: string,
     codes: readonly string[],
     at: number,
+    expectedUserId?: string,
   ): Promise<boolean> {
     if (!deviceId || codes.length === 0) return false;
 
@@ -365,7 +358,12 @@ export class AccountRepo {
     // cookie tài khoản sống 30 ngày và không có danh sách thu hồi, nên cái máy
     // vừa bị gỡ chỉ cần mở trang "Của tôi" một lần là ghi lại đúng danh sách ta
     // vừa xoá.
-    if (existing.userId === "") return false;
+    if (
+      existing.userId === "" ||
+      (expectedUserId !== undefined && existing.userId !== expectedUserId)
+    ) {
+      return false;
+    }
 
     const merged = mergeRecentEvents(existing.recentEvents, codes);
     if (
