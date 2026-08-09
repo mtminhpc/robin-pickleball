@@ -15,9 +15,9 @@ import {
   sessionSecret,
   signSession,
 } from "@/lib/auth/session";
-import type { Role } from "@/lib/domain/commands";
+import type { SessionRole } from "@/lib/auth/session";
 import { fail, readJson } from "@/lib/api/context";
-import { readEvent } from "@/lib/sheets/cache";
+import { readEvent, readEventAuthVersion } from "@/lib/sheets/cache";
 
 export async function POST(
   request: NextRequest,
@@ -43,7 +43,7 @@ export async function POST(
   const event = await readEvent(code);
   if (!event) return fail(404, `Không tìm thấy sự kiện có mã ${code}.`);
 
-  let role: Role | null = null;
+  let role: SessionRole | null = null;
   if (await verifyPassword(password, event.record.adminPassHash)) role = "admin";
   else if (
     event.record.playerPassHash &&
@@ -65,7 +65,15 @@ export async function POST(
   const response = NextResponse.json({ role });
   response.cookies.set(
     cookieName(code),
-    signSession(newSession(code, role), sessionSecret()),
+    signSession(
+      newSession(
+        code,
+        role,
+        Date.now(),
+        role === "admin" ? await readEventAuthVersion(code) : 0,
+      ),
+      sessionSecret(),
+    ),
     {
       httpOnly: true,
       sameSite: "lax",

@@ -17,9 +17,10 @@
 
 import { useEffect, useState } from "react";
 import type { Command } from "@/lib/domain/commands";
-import { checkScore } from "@/lib/domain/rules";
+import { canEditResult, checkScore } from "@/lib/domain/rules";
 import type { EventState, Match, PlayerId } from "@/lib/domain/types";
 import { Button, Dialog } from "@/components/ui";
+import { useEvent } from "@/hooks/useEventState";
 
 export function ScoreEntryDialog({
   match,
@@ -37,12 +38,14 @@ export function ScoreEntryDialog({
   onClose: () => void;
   onSubmit: (command: Command) => void;
 }) {
+  const { data } = useEvent();
   // Mở lại hộp thoại phải thấy con số mình vừa nhập, kể cả khi nó chưa gửi đi
   // được. Hiện lại số 0 sẽ khiến người ta tưởng lần nhập trước đã mất.
   const existing = pendingScore ?? match?.result;
   const [scoreA, setScoreA] = useState(0);
   const [scoreB, setScoreB] = useState(0);
   const [confirming, setConfirming] = useState(false);
+  const [note, setNote] = useState("");
 
   // Mở lại hộp thoại thì nạp lại tỷ số của trận đó, không giữ số của lần trước.
   useEffect(() => {
@@ -50,6 +53,7 @@ export function ScoreEntryDialog({
     setScoreA(existing?.scoreA ?? 0);
     setScoreB(existing?.scoreB ?? 0);
     setConfirming(false);
+    setNote("");
   }, [open, match?.id, existing?.scoreA, existing?.scoreB]);
 
   if (!match) return null;
@@ -63,6 +67,22 @@ export function ScoreEntryDialog({
   // Chỉ là "sửa" khi máy chủ đã có kết quả. Tỷ số mới đang chờ gửi thì vẫn là
   // lần nhập đầu tiên — gửi `EditResult` cho một trận chưa có kết quả sẽ bị từ chối.
   const isEdit = match.result !== null;
+  const actor = data?.actorRef
+    ? { kind: "player" as const, label: "người nhập", ref: data.actorRef }
+    : { kind: "player" as const, label: "người xem" };
+  const ownWindow = isEdit
+    ? canEditResult(match, actor, Date.now(), state.config).allowed
+    : false;
+  const canEditSaved = !isEdit || (
+    state.status === "finished"
+      ? data?.role === "owner"
+      : Boolean(ownWindow || data?.capabilities.canEditAnyScore)
+  );
+  const needsReason = Boolean(
+    isEdit &&
+    data?.capabilities.canEditAnyScore &&
+    (state.status === "finished" || !ownWindow),
+  );
 
   const submit = () => {
     onSubmit({
@@ -71,7 +91,12 @@ export function ScoreEntryDialog({
       scoreA,
       scoreB,
       irregular: !check.regular,
+      ...(note.trim() ? { note: note.trim() } : {}),
     });
+    onClose();
+  };
+  const revert = () => {
+    onSubmit({ type: "RevertResult", matchId: match.id, ...(note.trim() ? { note: note.trim() } : {}) });
     onClose();
   };
 
@@ -113,6 +138,37 @@ export function ScoreEntryDialog({
               {check.warning} Vẫn lưu được, kết quả sẽ có dấu riêng.
             </p>
           )}
+          {isEdit && !canEditSaved && (
+            <p className="mt-4 bg-accent p-3 text-xs text-paper">
+              {state.status === "finished"
+                ? "Sau khi sự kiện kết thúc, chỉ Chủ sự kiện được sửa kết quả."
+                : "Bạn không còn quyền sửa kết quả đã chốt này."}
+            </p>
+          )}
+          {isEdit && (
+            <label className="mt-4 block text-xs font-semibold">
+              Lý do sửa {needsReason ? "(bắt buộc)" : "(không bắt buộc trong cửa sổ tự sửa)"}
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                maxLength={200}
+                className="mt-1 min-h-20 w-full border border-ink bg-transparent p-3 text-sm font-normal"
+                placeholder="Ví dụ: Phó sự kiện nhập nhầm tỷ số"
+              />
+            </label>
+          )}
+          {isEdit && canEditSaved && data?.capabilities.canEditAnyScore && (
+            <Button
+              type="button"
+              tone="ghost"
+              full
+              className="mt-3 text-accent-700"
+              disabled={needsReason && note.trim().length < 2}
+              onClick={revert}
+            >
+              {match.edits.some((edit) => edit.from && edit.to) ? "Hoàn tác lần sửa gần nhất" : "Gỡ kết quả này"}
+            </Button>
+          )}
 
           <div className="mt-4.5 flex gap-2.5">
             <Button className="min-h-[3.25rem] flex-1" onClick={onClose}>
@@ -121,7 +177,7 @@ export function ScoreEntryDialog({
             <Button
               tone="primary"
               className="min-h-[3.25rem] flex-1"
-              disabled={check.fatal !== null}
+              disabled={!canEditSaved || check.fatal !== null || (needsReason && note.trim().length < 2)}
               onClick={() => setConfirming(true)}
             >
               Tiếp tục

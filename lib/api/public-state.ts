@@ -19,10 +19,11 @@ export interface PublicEventSnapshot {
 export function publicEventSnapshot(
   state: EventState,
   viewerDeviceId: string,
+  viewerUserId?: string | null,
 ): PublicEventSnapshot {
   return {
-    state: redactEventState(state, viewerDeviceId),
-    actorRef: viewerDeviceId ? "self" : "",
+    state: redactEventState(state, viewerDeviceId, viewerUserId),
+    actorRef: viewerDeviceId || viewerUserId ? "self" : "",
     claimedPlayerIds: state.players
       .filter((player) => Boolean(player.deviceId || player.userId))
       .map((player) => player.id),
@@ -33,36 +34,42 @@ export function publicEventSnapshot(
 export function redactEventState(
   state: EventState,
   viewerDeviceId: string,
+  viewerUserId?: string | null,
 ): EventState {
+  const viewerRefs = new Set([viewerDeviceId, viewerUserId ?? ""].filter(Boolean));
   return {
     ...state,
     players: state.players.map((player) => {
-      const { deviceId: _privateDeviceId, ...publicPlayer } = player;
+      const {
+        deviceId: _privateDeviceId,
+        userId: _privateUserId,
+        ...publicPlayer
+      } = player;
       return publicPlayer;
     }),
-    matches: state.matches.map((match) => redactMatch(match, viewerDeviceId)),
+    matches: state.matches.map((match) => redactMatch(match, viewerRefs)),
   };
 }
 
-function redactMatch(match: Match, viewerDeviceId: string): Match {
+function redactMatch(match: Match, viewerRefs: Set<string>): Match {
   return {
     ...match,
     result: match.result
       ? {
           ...match.result,
-          submittedBy: redactActor(match.result.submittedBy, viewerDeviceId),
+          submittedBy: redactActor(match.result.submittedBy, viewerRefs),
         }
       : null,
     edits: match.edits.map((edit) => ({
       ...edit,
-      by: redactActor(edit.by, viewerDeviceId),
+      by: redactActor(edit.by, viewerRefs),
     })),
   };
 }
 
-function redactActor(actor: Actor, viewerDeviceId: string): Actor {
+function redactActor(actor: Actor, viewerRefs: Set<string>): Actor {
   const { ref: _privateRef, ...publicActor } = actor;
-  return actor.ref && actor.ref === viewerDeviceId
+  return actor.ref && viewerRefs.has(actor.ref)
     ? { ...publicActor, ref: "self" }
     : publicActor;
 }

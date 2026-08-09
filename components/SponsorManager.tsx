@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { EventSponsor, SponsorLogoShape, SponsorTier } from "@/lib/domain/types";
-import { shrinkEventAsset } from "@/lib/assets/resize";
+import { ImageEditor, type ImageEditorValue } from "@/components/ImageEditor";
 import { useEvent } from "@/hooks/useEventState";
 import { Button, Card, Dialog, Field, inputClass } from "@/components/ui";
 
@@ -85,30 +85,27 @@ export function SponsorManager({ code }: { code: string }) {
         </div>
       )}
       {error && <p className="bg-accent p-3 text-sm text-white">{error}</p>}
-      <SponsorDialog open={editing !== null} sponsor={editing === "new" ? null : editing} busy={busy} onClose={() => setEditing(null)} onSave={async (input) => { const ok = await act({ action: "upsertSponsor", ...input }); if (ok) setEditing(null); }} />
+      <SponsorDialog key={editing === "new" ? "new" : editing?.id ?? "closed"} shape={sponsorLogoShape} open={editing !== null} sponsor={editing === "new" ? null : editing} busy={busy} onClose={() => setEditing(null)} onSave={async (input) => { const ok = await act({ action: "upsertSponsor", ...input }); if (ok) setEditing(null); }} />
     </Card>
   );
 }
 
-function SponsorDialog({ open, sponsor, busy, onClose, onSave }: { open: boolean; sponsor: EventSponsor | null; busy: boolean; onClose: () => void; onSave: (input: object) => Promise<void> }) {
-  const file = useRef<HTMLInputElement>(null);
+function SponsorDialog({ open, sponsor, shape, busy, onClose, onSave }: { open: boolean; sponsor: EventSponsor | null; shape: SponsorLogoShape; busy: boolean; onClose: () => void; onSave: (input: object) => Promise<void> }) {
   const [name, setName] = useState(sponsor?.name ?? "");
   const [tier, setTier] = useState<SponsorTier>(sponsor?.tier ?? "partner");
   const [tierLabel, setTierLabel] = useState(sponsor?.tierLabel ?? "");
-  const [image, setImage] = useState<string | undefined>();
+  const [edited, setEdited] = useState<ImageEditorValue | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
-  const key = sponsor?.id ?? "new";
-
   return (
-    <Dialog key={key} open={open} onClose={onClose} title={sponsor ? "Sửa nhà tài trợ" : "Thêm nhà tài trợ"}>
-      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void onSave({ id: sponsor?.id, name, tier, tierLabel, image }); }}>
+    <Dialog open={open} onClose={onClose} title={sponsor ? "Sửa nhà tài trợ" : "Thêm nhà tài trợ"}>
+      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void onSave({ id: sponsor?.id, name, tier, tierLabel, ...edited }); }}>
         <h2 className="text-lg uppercase">{sponsor ? "Sửa nhà tài trợ" : "Thêm nhà tài trợ"}</h2>
         <Field label="Tên nhà tài trợ"><input value={name} onChange={(event) => setName(event.target.value)} className={inputClass} required minLength={2} /></Field>
         <Field label="Hạng"><select defaultValue={sponsor?.tier ?? "partner"} onChange={(event) => setTier(event.target.value as SponsorTier)} className={inputClass}>{TIERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
         {tier === "custom" && <Field label="Tên hạng tự đặt"><input value={tierLabel} onChange={(event) => setTierLabel(event.target.value)} className={inputClass} required minLength={2} /></Field>}
-        <Field label={sponsor ? "Logo mới (không bắt buộc)" : "Logo PNG/JPG/WebP"} hint="Tự thu nhỏ contain 128×128, giữ nền trong."><input ref={file} type="file" accept="image/png,image/jpeg,image/webp" required={!sponsor} onChange={async (event) => { setImageError(null); try { const selected = event.target.files?.[0]; if (selected) setImage(await shrinkEventAsset(selected)); } catch (reason) { setImageError(reason instanceof Error ? reason.message : "Không đọc được ảnh."); } }} /></Field>
+        <ImageEditor label={sponsor ? "Logo mới (không bắt buộc)" : "Logo nhà tài trợ"} defaultFit="contain" shape={shape} required={!sponsor} onChange={(value, reason) => { setEdited(value); setImageError(reason ?? null); }} />
         {imageError && <p className="text-sm text-accent-700">{imageError}</p>}
-        <div className="flex gap-2"><Button type="button" tone="ghost" full onClick={onClose}>Huỷ</Button><Button type="submit" tone="primary" full disabled={busy || Boolean(imageError)}>{busy ? "Đang lưu…" : "Lưu"}</Button></div>
+        <div className="flex gap-2"><Button type="button" tone="ghost" full onClick={onClose}>Huỷ</Button><Button type="submit" tone="primary" full disabled={busy || Boolean(imageError) || (!sponsor && !edited)}>{busy ? "Đang lưu…" : "Lưu"}</Button></div>
       </form>
     </Dialog>
   );

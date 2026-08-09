@@ -18,9 +18,22 @@ export async function GET(
   const ctx = await resolveContext(request, code.toUpperCase());
   if (isResponse(ctx)) return ctx;
 
-  return NextResponse.json({
-    ...publicEventSnapshot(ctx.event.state, ctx.deviceId),
-    role: ctx.role,
+  const etag = `W/\"${ctx.event.state.seq}-${ctx.event.state.processed}-${ctx.role}-${ctx.me?.id ?? "-"}-${ctx.event.record.ownerUserId ? "owned" : "claimable"}-${ctx.event.record.playerPassHash ? "player-pass" : "open"}\"`;
+  const headers = {
+    ETag: etag,
+    Vary: "Cookie",
+    "Cache-Control": "private, no-cache, must-revalidate",
+  };
+  if (request.headers.get("if-none-match") === etag) {
+    return new NextResponse(null, { status: 304, headers });
+  }
+
+  return NextResponse.json(
+    {
+      ...publicEventSnapshot(ctx.event.state, ctx.deviceId, ctx.userId),
+      role: ctx.role,
+      capabilities: ctx.capabilities,
+      roleLabel: ctx.roleLabel,
     /**
      * Người chơi nào là người đang xem.
      *
@@ -29,6 +42,7 @@ export async function GET(
      * app lên sẽ không thấy mình đâu cả dù đã đăng nhập.
      */
     myPlayerId: ctx.me?.id ?? null,
+    myPlayerHasAccount: Boolean(ctx.me?.userId),
     /** Sự kiện có đặt mật khẩu người chơi hay không, để giao diện biết có cần hỏi. */
     requiresPlayerPassword: ctx.event.record.playerPassHash !== "",
     /**
@@ -42,6 +56,8 @@ export async function GET(
      * Ảnh chụp trạng thái vừa phải dựng lại từ nhật ký. Giao diện không cần làm
      * gì, nhưng đưa ra để còn chẩn đoán được nếu nó xảy ra liên tục.
      */
-    repaired: ctx.event.repaired,
-  });
+      repaired: ctx.event.repaired,
+    },
+    { headers },
+  );
 }

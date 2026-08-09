@@ -57,6 +57,11 @@ export function rescheduleMode(
     case "AbandonMatch":
       return needsMoreRounds(state) ? "extend" : null;
 
+    // Trận vừa đưa lên được ghim nên rebuild giữ nguyên nó, chỉ bù lại phần lịch
+    // tương lai chưa chốt để deficit/đa dạng phản ánh lượt sân mới.
+    case "PromoteMatch":
+      return "rebuild";
+
     // Admin vừa dời tay. Tự xếp lại ngay sẽ đá lại chính thao tác họ vừa làm;
     // muốn dọn thì có nút "Sửa lại tự động" riêng.
     default:

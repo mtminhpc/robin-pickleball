@@ -31,6 +31,8 @@ export interface ScoringConfig {
 
 export interface EventConfig {
   name: string;
+  /** Địa chỉ sân tách khỏi tên sự kiện; để trống với dữ liệu cũ hoặc khi chưa chốt sân. */
+  venueAddress: string;
   /** Ngày giờ dự kiến bắt đầu, epoch mili-giây; `null` nếu chưa hẹn. */
   scheduledAt: number | null;
   /** Số sân chạy song song. */
@@ -69,10 +71,19 @@ export interface EventConfig {
   publicStandings: boolean;
   /** Tính cả các trận dở dang (có tỷ số) vào bảng xếp hạng. */
   countPartialMatches: boolean;
+  /** Sĩ số dùng để ước tính trước buổi đánh, không phải danh sách có mặt thật. */
+  expectedPlayers: number;
+  /** Mục tiêu tham khảo; lịch vẫn tiếp tục sinh cho tới khi chủ kết thúc sự kiện. */
+  targetGamesPerPlayer: number;
+  /** Thời lượng trung bình của một trận, tính bằng phút. */
+  estimatedMatchMinutes: number;
+  /** Thời gian đổi sân/xếp trận giữa hai lượt sân, tính bằng phút. */
+  courtTurnoverMinutes: number;
 }
 
 export const DEFAULT_CONFIG: EventConfig = {
   name: "Buổi đánh Pickleball",
+  venueAddress: "",
   scheduledAt: null,
   courts: 2,
   scoring: { pointsTo: 11, winBy2: true },
@@ -85,6 +96,10 @@ export const DEFAULT_CONFIG: EventConfig = {
   selfEditWindowMs: 2 * 60 * 1000,
   publicStandings: true,
   countPartialMatches: true,
+  expectedPlayers: 8,
+  targetGamesPerPlayer: 6,
+  estimatedMatchMinutes: 15,
+  courtTurnoverMinutes: 3,
 };
 
 // ---------------------------------------------------------------------------
@@ -213,6 +228,8 @@ export interface Match {
   id: MatchId;
   round: number;
   court: number;
+  /** Lượt dùng sân trong cùng một vòng logic; dữ liệu trước v0.6 mặc định là 1. */
+  courtWave: number;
   teamA: [PlayerId, PlayerId];
   teamB: [PlayerId, PlayerId];
   status: MatchStatus;
@@ -224,6 +241,8 @@ export interface Match {
   /** Lịch sử chỉnh sửa công khai — mọi lần mở khoá và sửa điểm. */
   edits: MatchEdit[];
   createdAt: number;
+  /** Thời điểm bắt đầu thật, null nếu chưa đánh hoặc snapshot cũ chưa từng ghi. */
+  startedAt: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -338,6 +357,17 @@ export function withEventDefaults(state: EventState): EventState {
         ? state.presentation.awards
         : [],
     },
+    matches: Array.isArray(state.matches)
+      ? state.matches.map((match) => ({
+          ...match,
+          courtWave:
+            Number.isInteger(match.courtWave) && match.courtWave > 0
+              ? match.courtWave
+              : 1,
+          startedAt:
+            typeof match.startedAt === "number" ? match.startedAt : null,
+        }))
+      : [],
   };
 }
 

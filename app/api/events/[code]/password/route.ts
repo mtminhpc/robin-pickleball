@@ -14,7 +14,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { hashPassword } from "@/lib/auth/passwords";
 import { fail, isResponse, readJson, resolveContext } from "@/lib/api/context";
-import { getRepo, invalidateEvent } from "@/lib/sheets/cache";
+import {
+  getEventAuthRepo,
+  getRepo,
+  invalidateEvent,
+  invalidateEventAuth,
+} from "@/lib/sheets/cache";
 
 interface Body {
   adminPassword?: string;
@@ -47,7 +52,7 @@ export async function POST(
   if (parsed.body.adminPassword !== undefined) {
     const next = parsed.body.adminPassword;
     if (next.length < 4) {
-      return fail(400, "Mật khẩu chủ sự kiện phải ít nhất 4 ký tự.");
+      return fail(400, "Mật khẩu điều hành phải ít nhất 4 ký tự.");
     }
     patch.adminPassHash = await hashPassword(next);
   }
@@ -68,9 +73,12 @@ export async function POST(
   if (!ok) return fail(404, `Không tìm thấy sự kiện có mã ${code}.`);
 
   invalidateEvent(code);
+  if (patch.adminPassHash !== undefined) {
+    await getEventAuthRepo().bump(code, Date.now());
+    invalidateEventAuth(code);
+  }
 
-  // Cookie phiên cũ vẫn còn hạn và vẫn cho quyền như trước. Đó là chủ ý: người
-  // vừa đổi mật khẩu không có lý do gì bị đá ra khỏi buổi đánh đang diễn ra, và
-  // quyền của chính họ vốn đã đến từ tài khoản chứ không từ mật khẩu.
+  // Phiên dùng mật khẩu cũ bị vô hiệu bằng phiên bản ở `event_auth`. Chủ đang đăng nhập
+  // Google vẫn giữ quyền nhờ tài khoản nên không bị đá khỏi buổi đánh.
   return NextResponse.json({ changed: Object.keys(patch) });
 }

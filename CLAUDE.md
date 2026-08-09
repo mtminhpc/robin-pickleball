@@ -11,6 +11,35 @@ Không coi một `git push` là đã phát hành: nhánh tính năng chỉ tạo
 còn Production đi từ `main` và phải được kiểm lại qua alias công khai. Không sửa
 hay commit hai ZIP handoff của người dùng.
 
+## Trạng thái cuối phiên Codex 09/08/2026 — v0.6.0
+
+- Nhánh phát hành: `codex/v0.6.0-media-cache-copy`, dựng từ tag `v0.5.1`.
+- Điều hành: đúng một Chủ, tối đa năm Phó mời bằng Gmail và mật khẩu điều hành dự
+  phòng. Quyền nằm trong ma trận capability tập trung; đổi mật khẩu tăng version và
+  vô hiệu phiên mật khẩu cũ, không ảnh hưởng phiên Google Chủ/Phó.
+- Sửa sai: Chủ/Phó sửa hoặc hoàn tác kết quả đã chốt với lý do bắt buộc; sau khi
+  finished chỉ Chủ được sửa. Log công khai chỉ có nhãn vai trò/tên, không có email,
+  user ID, device ID hoặc actor ref.
+- Tạo buổi tách tên/địa chỉ, có số người dự kiến và ước tính số trận/thời lượng.
+  Chủ sao chép buổi finished bằng idempotency key; bản sao không mang lịch, điểm,
+  giải, ngày giờ, quyền hay mật khẩu và phải qua quota.
+- Editor ảnh dùng chung cho tài trợ/cúp/avatar: contain/cover, kéo/pinch, zoom, xoay,
+  trim và preview theo khung; chỉ lưu đầu ra 256×256 đã xử lý + metadata. Logo/cúp ở
+  `event_assets`, avatar mới ở `account_assets`; dữ liệu ảnh legacy vẫn đọc được.
+- `EventProvider` tồn tại xuyên năm tab, IndexedDB cache snapshot đã lược quyền, ETag,
+  BroadcastChannel, poll thích ứng và hàng đợi offline. Các lệnh quan trọng gửi ngay;
+  banner nói rõ đang xử lý/lưu/đã lưu/đồng bộ/xung đột/mất mạng.
+- `PromoteMatch` đưa một trận tương lai hợp lệ lên lượt sân bổ sung, không dời cả
+  vòng và không cho cưỡng ép. `StartMatch` kiểm lại trùng người/sân. Precondition được
+  ghi cùng log giúp nhiều Vercel instance phân xử cùng tỷ số/vị trí mà không chặn
+  các lệnh độc lập.
+- Kho test giữ `TEST11`, `TESTV5`, CLB/sân/11 người và thêm `TESTV6`; seed chạy lại
+  không reset hoặc nhân đôi. SHA local sau seed:
+  `6DD0194AE0FC81784CEA39301D8DD372B7AFD9FDCE738243088CCB5D5A20754D`. Cổng phát hành:
+  560/560 test, 152 lượt công bằng/0 vấn đề, typecheck và build sạch. Smoke test
+  Chrome 390×844 + Edge 1440×1000; ETag trả 304 và public state không có
+  `userId`/`deviceId`.
+
 ## Trạng thái cuối phiên Codex 09/08/2026 — v0.5.1
 
 - Nhánh phát hành là `codex/v0.5.1-cross-device-history`, dựng tiếp từ tag

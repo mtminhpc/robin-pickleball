@@ -20,6 +20,10 @@ export const TABS = {
   appEventLimits: "app_event_limits",
   appEventReservations: "app_event_reservations",
   eventOwnerClaims: "event_owner_claims",
+  eventStaff: "event_staff",
+  eventAuth: "event_auth",
+  accountAssets: "account_assets",
+  eventCopies: "event_copies",
 } as const;
 
 /** Tab nhật ký của một sự kiện: nguồn sự thật, chỉ ghi thêm không sửa. */
@@ -31,6 +35,15 @@ export function logTab(code: string): string {
 export function viewTab(code: string): string {
   return `view__${code}`;
 }
+
+/** Ảnh tối đa 512 KB phải tách ô vì một ô Google Sheet chỉ chứa 50.000 ký tự. */
+export const ASSET_CELL_LIMIT = 45_000;
+export const ASSET_CHUNK_HEADERS = [
+  "data_1", "data_2", "data_3", "data_4",
+  "data_5", "data_6", "data_7", "data_8",
+  "data_9", "data_10", "data_11", "data_12",
+  "data_13", "data_14", "data_15", "data_16",
+] as const;
 
 export const HEADERS = {
   [TABS.clubs]: [
@@ -96,6 +109,8 @@ export const HEADERS = {
     "created_by",
     "created_at",
     "updated_at",
+    "metadata_json",
+    ...ASSET_CHUNK_HEADERS,
   ],
   [TABS.appEventLimits]: [
     "email",
@@ -116,6 +131,43 @@ export const HEADERS = {
     "user_id",
     "token",
     "created_at",
+  ],
+  [TABS.eventStaff]: [
+    "event_code",
+    "staff_id",
+    "email",
+    "user_id",
+    "display_name",
+    "status",
+    "granted_by",
+    "created_at",
+    "revoked_at",
+  ],
+  [TABS.eventAuth]: [
+    "event_code",
+    "admin_pass_version",
+    "updated_at",
+  ],
+  [TABS.accountAssets]: [
+    "user_id",
+    "asset_id",
+    "kind",
+    "mime",
+    "data_uri",
+    "metadata_json",
+    "active",
+    "created_at",
+    "updated_at",
+    ...ASSET_CHUNK_HEADERS,
+  ],
+  [TABS.eventCopies]: [
+    "owner_user_id",
+    "source_code",
+    "idempotency_key",
+    "token",
+    "new_code",
+    "created_at",
+    "status",
   ],
 } as const;
 
@@ -180,4 +232,18 @@ export function splitState(json: string): string[] {
 
 export function joinState(cells: readonly (string | undefined)[]): string {
   return cells.slice(0, STATE_CELLS).map((c) => c ?? "").join("");
+}
+
+export function splitAssetData(dataUri: string): string[] {
+  const parts = ASSET_CHUNK_HEADERS.map((_, index) =>
+    dataUri.slice(index * ASSET_CELL_LIMIT, (index + 1) * ASSET_CELL_LIMIT),
+  );
+  if (dataUri.length > ASSET_CHUNK_HEADERS.length * ASSET_CELL_LIMIT) {
+    throw new Error("Ảnh vượt sức chứa 512 KB của kho asset.");
+  }
+  return parts;
+}
+
+export function joinAssetData(row: readonly (string | undefined)[]): string {
+  return ASSET_CHUNK_HEADERS.map((header) => row[HEADERS[TABS.eventAssets].indexOf(header)] ?? "").join("");
 }

@@ -19,9 +19,11 @@
  */
 
 import { useMutationQueue } from "@/hooks/useMutationQueue";
+import { useEvent } from "@/hooks/useEventState";
 
 export function SaveStatusBanner() {
   const queue = useMutationQueue();
+  const event = useEvent();
 
   // Lệnh bị từ chối hẳn phải đọc trước mọi thứ khác: gửi lại không cứu được, và
   // người dùng cần biết kết quả họ vừa nhập KHÔNG được ghi.
@@ -30,7 +32,7 @@ export function SaveStatusBanner() {
     return (
       <Banner tone="danger">
         <span className="flex-1 normal-case tracking-normal">
-          <strong className="uppercase tracking-[0.1em]">Không lưu được</strong>{" "}
+          <strong className="uppercase tracking-[0.1em]">{queue.status === "conflict" ? "Xung đột dữ liệu — cần kiểm tra" : "Không lưu được"}</strong>{" "}
           — {failure.error}
         </span>
         <BannerButton onClick={() => queue.dismissFailure(failure.id)}>
@@ -45,7 +47,7 @@ export function SaveStatusBanner() {
       <Banner tone="danger">
         <span className="flex-1 normal-case tracking-normal">
           <strong className="uppercase tracking-[0.1em]">
-            {queue.pending} thay đổi chưa lưu
+            {queue.offline ? "Mất mạng — đang chờ gửi" : `${queue.pending} thay đổi chưa lưu`}
           </strong>{" "}
           —{" "}
           {queue.offline
@@ -66,10 +68,23 @@ export function SaveStatusBanner() {
     );
   }
 
+  if (queue.status === "processing") {
+    return (
+      <Banner tone="working">
+        <Spinner />
+        Đang xử lý…
+      </Banner>
+    );
+  }
+
   if (queue.status === "saved" && queue.lastSavedAt) {
     return (
       <Banner tone="done">Đã lưu {formatClock(queue.lastSavedAt)}</Banner>
     );
+  }
+
+  if (event.externalSyncAt && Date.now() - event.externalSyncAt < 3_000) {
+    return <Banner tone="done">Có cập nhật mới — đã đồng bộ</Banner>;
   }
 
   return null;

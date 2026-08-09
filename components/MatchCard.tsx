@@ -26,6 +26,7 @@ import { Avatar } from "@/components/Avatar";
 import { Button, Marker } from "@/components/ui";
 
 export function MatchCard({
+  eventCode,
   match,
   state,
   actor,
@@ -34,6 +35,7 @@ export function MatchCard({
   onEnterScore,
   onCancel,
 }: {
+  eventCode: string;
   match: Match;
   state: EventState;
   actor: Actor;
@@ -77,7 +79,7 @@ export function MatchCard({
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2.5">
-        <Team ids={match.teamA} playerOf={playerOf} />
+        <Team eventCode={eventCode} ids={match.teamA} playerOf={playerOf} />
         <div
           className={`px-2 text-center font-display text-score tabular-nums ${
             pendingScore
@@ -89,7 +91,7 @@ export function MatchCard({
         >
           {shown ? `${shown.scoreA}–${shown.scoreB}` : "vs"}
         </div>
-        <Team ids={match.teamB} playerOf={playerOf} align="right" />
+        <Team eventCode={eventCode} ids={match.teamB} playerOf={playerOf} align="right" />
       </div>
 
       {match.cancelReason && (
@@ -150,10 +152,12 @@ export function MatchCard({
 }
 
 function Team({
+  eventCode,
   ids,
   playerOf,
   align = "left",
 }: {
+  eventCode: string;
   ids: readonly [PlayerId, PlayerId];
   playerOf: (id: PlayerId) => Player | undefined;
   align?: "left" | "right";
@@ -176,7 +180,7 @@ function Team({
             <Avatar
               name={player?.name ?? id}
               avatarId={player?.avatarId}
-              userId={player?.userId}
+              src={`/api/events/${eventCode}/players/${id}/avatar`}
               size="sm"
             />
             <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">

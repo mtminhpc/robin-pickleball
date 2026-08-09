@@ -8,7 +8,7 @@
  * thì, còn đổi điện thoại không làm biến mất các lối tắt cũ.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -25,6 +25,7 @@ import { Button, Field, inputClass } from "@/components/ui";
 import { Avatar } from "@/components/Avatar";
 import { signInHref, useAccount } from "@/hooks/useAccount";
 import { scheduledAtFromInputs } from "@/lib/scheduled-at";
+import { estimateEvent, formatEstimatedDuration } from "@/lib/domain/estimate";
 
 const HOME_ACCENT = "#087a55";
 
@@ -401,6 +402,8 @@ function JoinByCode() {
 interface OwnedEvent {
   code: string;
   name: string;
+  venueAddress: string;
+  relation: "owner" | "manager";
   status: "draft" | "running" | "finished";
   scheduledAt: number | null;
   createdAt: number;
@@ -440,13 +443,15 @@ function CreatedEvents() {
   }
 
   const events = query.data?.events ?? [];
+  const assigned = events.filter((event) => event.relation === "manager");
+  const owned = events.filter((event) => event.relation === "owner");
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const endToday = startToday + 86_400_000;
   const groups = [
-    { title: "Hôm nay", items: events.filter((event) => eventTime(event) >= startToday && eventTime(event) < endToday) },
-    { title: "Sắp tới", items: events.filter((event) => eventTime(event) >= endToday) },
-    { title: "Đã qua", items: events.filter((event) => eventTime(event) < startToday) },
+    { title: "Hôm nay", items: owned.filter((event) => eventTime(event) >= startToday && eventTime(event) < endToday) },
+    { title: "Sắp tới", items: owned.filter((event) => eventTime(event) >= endToday) },
+    { title: "Đã qua", items: owned.filter((event) => eventTime(event) < startToday) },
   ];
 
   return (
@@ -467,6 +472,14 @@ function CreatedEvents() {
       {query.isLoading && <p className="text-sm text-mute-600">Đang tải…</p>}
       {query.error && <p className="text-sm text-accent-700">{(query.error as Error).message}</p>}
       {!query.isLoading && events.length === 0 && <p className="text-sm text-mute-600">Bạn chưa tạo sự kiện nào.</p>}
+      {assigned.length > 0 && (
+        <section>
+          <h3 className="eyebrow mb-2 text-ink">Tôi được phân công</h3>
+          <div className="divide-y divide-line border-y border-line">
+            {assigned.map((event) => <OwnedEventCard key={event.code} event={event} />)}
+          </div>
+        </section>
+      )}
       {groups.map((group) => group.items.length > 0 && (
         <section key={group.title}>
           <h3 className="eyebrow mb-2 text-ink">{group.title}</h3>
@@ -485,8 +498,32 @@ function eventTime(event: OwnedEvent): number {
 
 function OwnedEventCard({ event }: { event: OwnedEvent }) {
   const first = event.sponsors[0];
+  const router = useRouter();
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState("");
+  const copyKey = useRef<string | null>(null);
+  const copy = async () => {
+    setCopying(true);
+    setCopyError("");
+    try {
+      const response = await fetch(`/api/events/${event.code}/copy`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idempotencyKey: copyKey.current ??= crypto.randomUUID() }),
+      });
+      const body = await response.json() as { code?: string; error?: string };
+      if (!response.ok || !body.code) throw new Error(body.error ?? "Không sao chép được sự kiện.");
+      copyKey.current = null;
+      router.push(`/e/${body.code}/players`);
+    } catch (error) {
+      setCopyError(error instanceof Error ? error.message : "Không sao chép được sự kiện.");
+    } finally {
+      setCopying(false);
+    }
+  };
   return (
-    <Link href={`/e/${event.code}`} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-3 bg-paper py-3 hover:bg-mute-300">
+    <div className="bg-paper">
+    <Link href={`/e/${event.code}`} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-3 py-3 hover:bg-mute-300">
       <div className="grid size-12 place-items-center overflow-hidden border border-ink bg-ink text-white">
         {first ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -500,6 +537,8 @@ function OwnedEventCard({ event }: { event: OwnedEvent }) {
         <p className="mt-1 text-[10px] text-mute-600">
           {new Date(eventTime(event)).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" })} · {event.courts} sân · {event.players} người
         </p>
+        {event.venueAddress && <p className="mt-1 truncate text-[9px] text-mute-600">{event.venueAddress}</p>}
+        {event.relation === "manager" && <p className="mt-1 text-[9px] font-bold uppercase text-[#087a55]">Phó sự kiện</p>}
         {event.sponsors.length > 1 && <p className="mt-1 text-[9px] font-bold text-[#087a55]">+{event.sponsors.length - 1} logo tài trợ</p>}
       </div>
       <div className="text-right">
@@ -507,6 +546,20 @@ function OwnedEventCard({ event }: { event: OwnedEvent }) {
         <span className="text-[9px] uppercase text-mute-600">{event.status === "draft" ? "Sắp diễn ra" : event.status === "running" ? "Đang đánh" : "Đã xong"}</span>
       </div>
     </Link>
+    {event.status === "finished" && event.relation === "owner" && (
+      <div className="border-t border-line px-3 py-2 text-right">
+        <button
+          type="button"
+          disabled={copying}
+          onClick={copy}
+          className="font-display text-[9px] font-extrabold uppercase text-[#087a55] disabled:opacity-50"
+        >
+          {copying ? "Đang sao chép…" : "Sao chép sự kiện"}
+        </button>
+        {copyError && <p className="mt-1 text-[10px] text-accent-700">{copyError}</p>}
+      </div>
+    )}
+    </div>
   );
 }
 
@@ -514,7 +567,12 @@ function CreateEvent() {
   const router = useRouter();
   const account = useAccount();
   const [name, setName] = useState("");
+  const [venueAddress, setVenueAddress] = useState("");
   const [courts, setCourts] = useState(2);
+  const [expectedPlayers, setExpectedPlayers] = useState(8);
+  const [targetGamesPerPlayer, setTargetGamesPerPlayer] = useState(6);
+  const [estimatedMatchMinutes, setEstimatedMatchMinutes] = useState(15);
+  const [courtTurnoverMinutes, setCourtTurnoverMinutes] = useState(3);
   const [pointsTo, setPointsTo] = useState(11);
   const [winBy2, setWinBy2] = useState(true);
   const [playerPassword, setPlayerPassword] = useState("");
@@ -524,6 +582,13 @@ function CreateEvent() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const schedule = scheduledAtFromInputs(scheduledDate, scheduledTime);
+  const estimate = estimateEvent({
+    players: expectedPlayers,
+    courts,
+    targetGamesPerPlayer,
+    matchMinutes: estimatedMatchMinutes,
+    turnoverMinutes: courtTurnoverMinutes,
+  });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -539,7 +604,12 @@ function CreateEvent() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name,
+          venueAddress,
           courts,
+          expectedPlayers,
+          targetGamesPerPlayer,
+          estimatedMatchMinutes,
+          courtTurnoverMinutes,
           pointsTo,
           winBy2,
           playerPassword,
@@ -573,11 +643,21 @@ function CreateEvent() {
           {account.data?.enabled && <a href={signInHref("/")} className="inline-flex min-h-tap items-center bg-[#087a55] px-4 font-display text-[10px] font-extrabold uppercase text-white">Đăng nhập Google</a>}
         </div>
       ) : <form onSubmit={submit} className="space-y-4">
-        <Field label="Tên buổi đánh">
+        <Field label="Tên sự kiện">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Tối thứ ba sân Hoa Lư"
+            className={`${inputClass} !bg-paper`}
+          />
+        </Field>
+
+        <Field label="Địa chỉ sân" hint="Tùy chọn, tối đa 200 ký tự.">
+          <input
+            value={venueAddress}
+            onChange={(event) => setVenueAddress(event.target.value)}
+            maxLength={200}
+            placeholder="123 Nguyễn Du, Quận 1"
             className={`${inputClass} !bg-paper`}
           />
         </Field>
@@ -610,6 +690,16 @@ function CreateEvent() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
+          <Field label="Số người dự kiến">
+            <input
+              type="number"
+              min={4}
+              max={200}
+              value={expectedPlayers}
+              onChange={(event) => setExpectedPlayers(Number(event.target.value))}
+              className={`${inputClass} !bg-paper tabular-nums`}
+            />
+          </Field>
           <Field label="Số sân">
             <input
               type="number"
@@ -617,6 +707,16 @@ function CreateEvent() {
               max={8}
               value={courts}
               onChange={(e) => setCourts(Number(e.target.value))}
+              className={`${inputClass} !bg-paper tabular-nums`}
+            />
+          </Field>
+          <Field label="Trận/người mong muốn">
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={targetGamesPerPlayer}
+              onChange={(event) => setTargetGamesPerPlayer(Number(event.target.value))}
               className={`${inputClass} !bg-paper tabular-nums`}
             />
           </Field>
@@ -631,6 +731,45 @@ function CreateEvent() {
             />
           </Field>
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Phút mỗi trận">
+            <input
+              type="number"
+              min={5}
+              max={180}
+              value={estimatedMatchMinutes}
+              onChange={(event) => setEstimatedMatchMinutes(Number(event.target.value))}
+              className={`${inputClass} !bg-paper tabular-nums`}
+            />
+          </Field>
+          <Field label="Phút đổi sân/xếp trận">
+            <input
+              type="number"
+              min={0}
+              max={60}
+              value={courtTurnoverMinutes}
+              onChange={(event) => setCourtTurnoverMinutes(Number(event.target.value))}
+              className={`${inputClass} !bg-paper tabular-nums`}
+            />
+          </Field>
+        </div>
+
+        {estimate && (
+          <div className="border-l-4 border-[#087a55] bg-paper p-3 text-xs leading-relaxed">
+            <p className="font-display text-[11px] font-extrabold uppercase text-[#087a55]">
+              Ước tính {estimate.totalMatches} trận · {formatEstimatedDuration(estimate.durationMinutes)}
+            </p>
+            <p className="mt-1 text-mute-600">
+              Khoảng {estimate.minGamesPerPlayer}–{estimate.maxGamesPerPlayer} trận/người, {estimate.usableCourts} sân sử dụng,
+              {" "}{estimate.waves} lượt sân; thời gian chờ trung bình khoảng {estimate.averageWaitMinutes} phút.
+            </p>
+            <p className="mt-1 text-[10px] text-mute-600">
+              Dựa trên {estimatedMatchMinutes} phút/trận và {courtTurnoverMinutes} phút đổi sân. Người đến muộn,
+              nghỉ hoặc trận kéo dài sẽ làm thay đổi thực tế; ước tính không tác động thuật toán công bằng.
+            </p>
+          </div>
+        )}
 
         <label className="flex items-center gap-3 text-sm">
           <input
@@ -656,8 +795,8 @@ function CreateEvent() {
         </Field>
 
         <Field
-          label="Mật khẩu chủ sự kiện"
-          hint="Dùng để xếp lịch, duyệt người, mở khoá kết quả. Đừng chia sẻ rộng."
+          label="Mật khẩu điều hành"
+          hint="Quyền dự phòng để phối hợp tại sân; không quản lý Phó, tài trợ, giải thưởng hay kết thúc sớm."
         >
           <input
             type="password"

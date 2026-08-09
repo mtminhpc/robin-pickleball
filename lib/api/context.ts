@@ -9,10 +9,23 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { Actor, EventState, Player } from "../domain/types";
-import type { Role } from "../domain/commands";
-import { cookieName, sessionSecret, verifySession } from "../auth/session";
+import {
+  capabilitiesForRole,
+  roleLabel,
+  type EventCapabilities,
+  type Role,
+} from "../domain/commands";
+import { cookieName, sessionSecret, verifySession, type SessionRole } from "../auth/session";
 import { deviceIdFromRequest } from "../identity/device-token";
-import { readEvent, type CachedEvent } from "../sheets/cache";
+import {
+  getEventStaffRepo,
+  invalidateEventStaff,
+  readAccount,
+  readEvent,
+  readEventAuthVersion,
+  readEventStaff,
+  type CachedEvent,
+} from "../sheets/cache";
 import type { EventRecord } from "../sheets/repo";
 import { currentUserId } from "./user";
 
@@ -20,6 +33,8 @@ export interface RequestContext {
   code: string;
   event: CachedEvent;
   role: Role;
+  capabilities: EventCapabilities;
+  roleLabel: string;
   deviceId: string;
   /** Tài khoản đang đăng nhập, `null` với phần lớn người ra sân. */
   userId: string | null;
@@ -50,11 +65,15 @@ export interface RequestContext {
  */
 export function roleFor(
   record: Pick<EventRecord, "ownerUserId">,
-  sessionRole: Role | null,
+  sessionRole: SessionRole | "viewer" | null,
   userId: string | null,
+  isManager = false,
 ): Role {
-  if (userId && record.ownerUserId && userId === record.ownerUserId) return "admin";
-  return sessionRole ?? "viewer";
+  if (userId && record.ownerUserId && userId === record.ownerUserId) return "owner";
+  if (userId && isManager) return "manager";
+  if (sessionRole === "admin") return record.ownerUserId ? "operator" : "admin";
+  if (sessionRole === "player") return "player";
+  return "viewer";
 }
 
 /** Chủ buổi đánh nhờ tài khoản. Quyền này không mượn được như mật khẩu. */
@@ -80,7 +99,7 @@ export async function resolveContext(
     return fail(404, `Không tìm thấy sự kiện có mã ${code}. Kiểm tra lại mã hoặc đường dẫn.`);
   }
 
-  const session = verifySession(
+  const rawSession = verifySession(
     request.cookies.get(cookieName(code))?.value,
     code,
     sessionSecret(),
@@ -89,18 +108,46 @@ export async function resolveContext(
   // Chỉ đọc cookie đã ký, không đọc bảng tài khoản: đây là đường bị gọi nhiều
   // nhất trong cả ứng dụng, mỗi điện thoại đang mở app hỏi lại vài giây một lần.
   const userId = currentUserId(request);
-  const role = roleFor(event.record, session?.role ?? null, userId);
+  const account = userId ? await readAccount(userId) : null;
+  const staff = account ? await readEventStaff(code) : [];
+  let membership = account
+    ? staff.find(
+        (member) =>
+          member.userId === account.account.userId ||
+          member.email === account.account.email.toLowerCase(),
+      ) ?? null
+    : null;
+  if (membership?.status === "pending" && account) {
+    membership = await getEventStaffRepo().activate(
+      membership,
+      {
+        userId: account.account.userId,
+        displayName: account.account.displayName,
+      },
+      Date.now(),
+    );
+    invalidateEventStaff(code);
+  }
+  const currentPasswordVersion =
+    rawSession?.role === "admin" ? await readEventAuthVersion(code) : 0;
+  const session =
+    rawSession?.role === "admin" && (rawSession.pv ?? 0) !== currentPasswordVersion
+      ? null
+      : rawSession;
+  const role = roleFor(event.record, session?.role ?? null, userId, Boolean(membership));
   const me = findMyPlayer(event.state, deviceId, userId);
 
   return {
     code,
     event,
     role,
+    capabilities: capabilitiesForRole(role),
+    roleLabel: roleLabel(role),
     deviceId,
     userId,
     ownerByAccount: isOwnerByAccount(event.record, userId),
     me,
-    actor: buildActor(role, deviceId, me),
+    actor: buildActor(role, deviceId, me, account?.account.displayName, userId),
   };
 }
 
@@ -133,11 +180,31 @@ export function findMyPlayer(
  * `ref` là mã thiết bị chứ không phải mã người chơi: khi ai đó nhập điểm thay
  * cho trận của người khác thì vẫn phải chính máy đó mới được sửa lại.
  */
-function buildActor(role: Role, deviceId: string, me: Player | null): Actor {
+function buildActor(
+  role: Role,
+  deviceId: string,
+  me: Player | null,
+  accountName?: string,
+  userId?: string | null,
+): Actor {
+  const privileged =
+    role === "owner" ||
+    role === "manager" ||
+    role === "operator" ||
+    role === "admin";
   return {
-    kind: role === "admin" ? "admin" : "player",
-    label: me?.name ?? (role === "admin" ? "chủ sự kiện" : "người chơi"),
-    ref: deviceId || undefined,
+    kind: privileged ? "admin" : "player",
+    label:
+      role === "owner"
+        ? `Chủ sự kiện${accountName ? ` · ${accountName}` : ""}`
+        : role === "manager"
+          ? `Phó sự kiện${accountName ? ` · ${accountName}` : ""}`
+          : role === "operator"
+            ? "Điều hành bằng mật khẩu"
+            : role === "admin"
+              ? "Quản trị sự kiện cũ"
+              : me?.name ?? "người chơi",
+    ref: userId || deviceId || undefined,
   };
 }
 

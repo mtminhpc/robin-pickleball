@@ -11,13 +11,16 @@
  * khoản.
  */
 
-import type { Role } from "../domain/commands";
 import { readPayload, signPayload } from "./hmac";
 export { sessionSecret } from "./secret";
 
+export type SessionRole = "player" | "admin";
+
 export interface SessionPayload {
   code: string;
-  role: Role;
+  role: SessionRole;
+  /** Phiên admin trước v0.6 không có trường này được hiểu là phiên bản 0. */
+  pv?: number;
   /** Thời điểm hết hạn, tính bằng giây. */
   exp: number;
 }
@@ -55,10 +58,16 @@ export function verifySession(
   return payload;
 }
 
-export function newSession(code: string, role: Role, now = Date.now()): SessionPayload {
+export function newSession(
+  code: string,
+  role: SessionRole,
+  now = Date.now(),
+  passwordVersion = 0,
+): SessionPayload {
   return {
     code,
     role,
+    ...(role === "admin" ? { pv: passwordVersion } : {}),
     exp: Math.floor(now / 1000) + SESSION_TTL_SECONDS,
   };
 }

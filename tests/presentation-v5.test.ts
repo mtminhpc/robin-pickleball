@@ -123,12 +123,22 @@ describe("trao giải v0.5", () => {
 });
 
 describe("ảnh sự kiện và tương thích snapshot", () => {
-  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAACXBIWXMAAAPoAAAD6AG1e1JrAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA6AwBPAABo9vSmwAAAABJRU5ErkJggg==";
   it("đối chiếu magic bytes và chặn SVG/GIF hoặc ảnh giả nhãn", () => {
     expect(validateEventImageDataUri(png)?.mime).toBe("image/png");
     expect(validateEventImageDataUri("data:image/png;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==")).toBeNull();
     expect(validateEventImageDataUri("data:image/gif;base64,R0lGODlh")).toBeNull();
     expect(validateEventImageDataUri("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=")).toBeNull();
+  });
+
+  it("chặn ảnh sai kích thước 256×256 và ảnh vượt 512 KB", () => {
+    const source = Buffer.from(png.slice(png.indexOf(",") + 1), "base64");
+    const wrongSize = Buffer.from(source);
+    wrongSize.writeUInt32BE(257, 16);
+    expect(validateEventImageDataUri(`data:image/png;base64,${wrongSize.toString("base64")}`)).toBeNull();
+
+    const oversized = Buffer.concat([source, Buffer.alloc(512 * 1024 + 1 - source.length)]);
+    expect(validateEventImageDataUri(`data:image/png;base64,${oversized.toString("base64")}`)).toBeNull();
   });
 
   it("asset tách khỏi trạng thái, xoá mềm và không đọc chéo sự kiện", async () => {
@@ -140,12 +150,22 @@ describe("ảnh sự kiện và tương thích snapshot", () => {
     expect(await repo.get("V5", "logo")).toBeNull();
   });
 
-  it("snapshot v0.4 tự có scheduledAt và presentation mà không mất tỷ số", () => {
+  it("snapshot cũ tự có trường v0.5/v0.6 mà không reset dữ liệu", () => {
     const old = emptyState("OLD") as EventState;
     delete (old.config as Partial<EventState["config"]>).scheduledAt;
+    delete (old.config as Partial<EventState["config"]>).venueAddress;
+    delete (old.config as Partial<EventState["config"]>).expectedPlayers;
+    delete (old.config as Partial<EventState["config"]>).targetGamesPerPlayer;
+    delete (old.config as Partial<EventState["config"]>).estimatedMatchMinutes;
+    delete (old.config as Partial<EventState["config"]>).courtTurnoverMinutes;
     delete (old as Partial<EventState>).presentation;
     const upgraded = withEventDefaults(old);
     expect(upgraded.config.scheduledAt).toBeNull();
+    expect(upgraded.config.venueAddress).toBe("");
+    expect(upgraded.config.expectedPlayers).toBe(8);
+    expect(upgraded.config.targetGamesPerPlayer).toBe(6);
+    expect(upgraded.config.estimatedMatchMinutes).toBe(15);
+    expect(upgraded.config.courtTurnoverMinutes).toBe(3);
     expect(upgraded.presentation).toEqual({ sponsorLogoShape: "square", sponsors: [], awards: [] });
     expect(upgraded.players).toBe(old.players);
   });

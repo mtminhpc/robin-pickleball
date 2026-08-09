@@ -3,16 +3,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail, isResponse, readJson, resolveContext } from "@/lib/api/context";
 import { redactEventState } from "@/lib/api/public-state";
 import { validateEventImageDataUri } from "@/lib/assets/event-image";
+import { validImageEditMetadata, type ImageEditMetadata } from "@/lib/assets/edit-metadata";
 import type { Command } from "@/lib/domain/commands";
+import { commandPrecondition } from "@/lib/domain/precondition";
 import type { AwardKind, SponsorLogoShape, SponsorTier, TrophyMode } from "@/lib/domain/types";
 import { getEventAssetRepo, getRepo, invalidateEvent, withEventLock } from "@/lib/sheets/cache";
 
 type Body =
   | { action: "setShape"; shape: SponsorLogoShape }
-  | { action: "upsertSponsor"; id?: string; name?: string; tier?: SponsorTier; tierLabel?: string; order?: number; image?: string }
+  | { action: "upsertSponsor"; id?: string; name?: string; tier?: SponsorTier; tierLabel?: string; order?: number; image?: string; editMetadata?: ImageEditMetadata }
   | { action: "removeSponsor"; id?: string }
   | { action: "reorderSponsors"; ids?: string[] }
-  | { action: "upsertAward"; id?: string; kind?: AwardKind; label?: string; recipientIds?: string[]; trophyMode?: TrophyMode; image?: string; removeImage?: boolean }
+  | { action: "upsertAward"; id?: string; kind?: AwardKind; label?: string; recipientIds?: string[]; trophyMode?: TrophyMode; image?: string; editMetadata?: ImageEditMetadata; removeImage?: boolean }
   | { action: "removeAward"; id?: string };
 
 export async function POST(
@@ -58,11 +60,11 @@ export async function POST(
       let assetId = old?.assetId ?? "";
       if (body.image) {
         const image = validateEventImageDataUri(body.image);
-        if (!image) return fail(400, "Logo phải là PNG, JPEG hoặc WebP hợp lệ và không quá 128×128 sau khi thu nhỏ.");
+        if (!image || !validImageEditMetadata(body.editMetadata)) return fail(400, "Logo hoặc thông số cắt ảnh không hợp lệ.");
         assetId = randomUUID();
         addedAssetId = assetId;
         oldAssetId = old?.assetId ?? null;
-        await assets.put({ eventCode: code, assetId, kind: "sponsor", ...image, createdBy: ctx.userId, createdAt: now, updatedAt: now });
+        await assets.put({ eventCode: code, assetId, kind: "sponsor", ...image, metadata: body.editMetadata, createdBy: ctx.userId, createdAt: now, updatedAt: now });
       }
       if (!assetId) return fail(400, "Hãy chọn ảnh logo.");
       command = {
@@ -87,11 +89,11 @@ export async function POST(
       let trophyAssetId = body.removeImage ? undefined : old?.trophyAssetId;
       if (body.image) {
         const image = validateEventImageDataUri(body.image);
-        if (!image) return fail(400, "Ảnh cúp phải là PNG, JPEG hoặc WebP hợp lệ và không quá 128×128 sau khi thu nhỏ.");
+        if (!image || !validImageEditMetadata(body.editMetadata)) return fail(400, "Ảnh cúp hoặc thông số cắt ảnh không hợp lệ.");
         trophyAssetId = randomUUID();
         addedAssetId = trophyAssetId;
         oldAssetId = old?.trophyAssetId ?? null;
-        await assets.put({ eventCode: code, assetId: trophyAssetId, kind: "trophy", ...image, createdBy: ctx.userId, createdAt: now, updatedAt: now });
+        await assets.put({ eventCode: code, assetId: trophyAssetId, kind: "trophy", ...image, metadata: body.editMetadata, createdBy: ctx.userId, createdAt: now, updatedAt: now });
       } else if (body.removeImage) {
         oldAssetId = old?.trophyAssetId ?? null;
       }
@@ -110,18 +112,25 @@ export async function POST(
       return fail(400, "Thao tác trình bày không hợp lệ.");
     }
 
+    const commandId = `presentation-${randomUUID()}`;
     const result = await repo.append(code, {
-      id: `presentation-${randomUUID()}`,
+      id: commandId,
       at: now,
       actor: ctx.actor,
       command,
+      precondition: commandPrecondition(loaded.state, command),
     }, loaded);
     if (!result.ok) {
       if (addedAssetId) await assets.deactivate(code, addedAssetId, Date.now());
       return fail(409, result.error);
     }
+    const verified = await repo.load(code);
+    if (!verified?.state.appliedCommandIds.includes(commandId)) {
+      if (addedAssetId) await assets.deactivate(code, addedAssetId, Date.now());
+      return fail(409, "Xung đột dữ liệu: nhà tài trợ hoặc giải thưởng vừa được thiết bị khác thay đổi.");
+    }
     if (oldAssetId && oldAssetId !== addedAssetId) await assets.deactivate(code, oldAssetId, Date.now());
     invalidateEvent(code);
-    return NextResponse.json({ state: redactEventState(result.state, ctx.deviceId), seq: result.seq });
+    return NextResponse.json({ state: redactEventState(verified.state, ctx.deviceId, ctx.userId), seq: verified.state.seq });
   });
 }

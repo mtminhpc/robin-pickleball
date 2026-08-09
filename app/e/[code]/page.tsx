@@ -99,17 +99,18 @@ export default function LivePage() {
             view.current.map((match) => (
               <MatchCard
                 key={match.id}
+                eventCode={code}
                 match={match}
                 state={state}
                 actor={{
-                  kind: data.role === "admin" ? "admin" : "player",
+                  kind: data.capabilities.canEditAnyScore ? "admin" : "player",
                   label: "",
                   ref: data.actorRef || undefined,
                 }}
                 canEnterScore={canEnterScore}
                 pendingScore={pendingScoreFor(match.id, queue.queued)}
                 onEnterScore={setScoring}
-                onCancel={data.role === "admin" ? setCancelling : undefined}
+                onCancel={data.capabilities.canManageSchedule ? setCancelling : undefined}
               />
             ))
           )}
@@ -136,7 +137,7 @@ export default function LivePage() {
             <>
               <SectionHead n="03">Vòng sau</SectionHead>
               {view.next.map((m) => (
-                <NextUpRow key={m.id} match={m} state={state} />
+                <NextUpRow key={m.id} match={m} state={state} code={code} />
               ))}
               <Link href={`/e/${code}/schedule`} className="mt-3 inline-block">
                 <Button tone="ghost" className="px-0">
@@ -176,15 +177,15 @@ export default function LivePage() {
  * người còn nửa dưới chỉ có chữ thì đọc ra như một chỗ bị hỏng, chứ không ra như
  * một lựa chọn.
  */
-function NextUpRow({ match, state }: { match: Match; state: EventState }) {
+function NextUpRow({ match, state, code }: { match: Match; state: EventState; code: string }) {
   return (
     <div className="flex items-center gap-3 border-b border-line py-3.5 text-[13px]">
       <span className="w-4 flex-none font-display text-[11px] font-extrabold text-mute-600">
         {match.court}
       </span>
-      <NextUpTeam ids={match.teamA} state={state} />
+      <NextUpTeam ids={match.teamA} state={state} code={code} />
       <span className="text-[10px] tracking-[0.1em] text-mute-600">VS</span>
-      <NextUpTeam ids={match.teamB} state={state} align="right" />
+      <NextUpTeam ids={match.teamB} state={state} code={code} align="right" />
     </div>
   );
 }
@@ -192,10 +193,12 @@ function NextUpRow({ match, state }: { match: Match; state: EventState }) {
 function NextUpTeam({
   ids,
   state,
+  code,
   align = "left",
 }: {
   ids: readonly [PlayerId, PlayerId];
   state: EventState;
+  code: string;
   align?: "left" | "right";
 }) {
   const players = ids.map((id) => state.players.find((p) => p.id === id) ?? null);
@@ -211,7 +214,7 @@ function NextUpTeam({
             key={ids[i]}
             name={p?.name ?? ids[i]!}
             avatarId={p?.avatarId}
-            userId={p?.userId}
+            src={`/api/events/${code}/players/${ids[i]}/avatar`}
             size="xs"
           />
         ))}

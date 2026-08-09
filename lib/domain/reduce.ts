@@ -9,6 +9,7 @@
 
 import type { Command, CommandEnvelope, PlayerSeed } from "./commands";
 import { err, ok, type Result } from "./commands";
+import { preconditionStillHolds } from "./precondition";
 import { firstOpenRound, firstUnplayedRound, roundIsPlayed } from "./rounds";
 import type {
   EventState,
@@ -24,6 +25,7 @@ import {
   DEFAULT_CONFIG,
   closePresence,
   emptyPresentation,
+  isAvailableAt,
   isFrozen,
   openPresence,
   withEventDefaults,
@@ -280,7 +282,7 @@ function dropFutureMatches(
 }
 
 function newMatch(
-  seed: { id: string; round: number; court: number },
+  seed: { id: string; round: number; court: number; courtWave?: number },
   teamA: [PlayerId, PlayerId],
   teamB: [PlayerId, PlayerId],
   at: number,
@@ -289,6 +291,7 @@ function newMatch(
     id: seed.id,
     round: seed.round,
     court: seed.court,
+    courtWave: seed.courtWave ?? 1,
     teamA,
     teamB,
     status: "scheduled",
@@ -296,6 +299,7 @@ function newMatch(
     pinned: false,
     edits: [],
     createdAt: at,
+    startedAt: null,
   };
 }
 
@@ -307,6 +311,15 @@ function applyInPlace(
 ): Result<null> {
   const { command: c, at, actor } = envelope;
 
+  if (
+    envelope.precondition &&
+    !preconditionStillHolds(state, envelope.command, envelope.precondition)
+  ) {
+    return err(
+      "Xung đột dữ liệu: tỷ số, vị trí hoặc người chơi đích đã được thiết bị khác thay đổi.",
+    );
+  }
+
   // Sau khi chốt chỉ phần trình bày còn được sửa: nhà tài trợ có thể được
   // nghiệm thu lại và giải thưởng chỉ được trao sau thời điểm này.
   const allowedAfterFinish = new Set([
@@ -317,6 +330,8 @@ function applyInPlace(
     "ReorderSponsors",
     "UpsertAward",
     "RemoveAward",
+    "EditResult",
+    "RevertResult",
   ]);
   if (state.status === "finished" && !allowedAfterFinish.has(c.type)) {
     return err("Sự kiện đã kết thúc, không thể thay đổi.");
@@ -333,6 +348,8 @@ function applyInPlace(
     }
 
     case "UpdateConfig": {
+      const invalid = validateConfigPatch(c.patch);
+      if (invalid) return err(invalid);
       state.config = { ...state.config, ...c.patch };
       return ok(null);
     }
@@ -761,6 +778,20 @@ function applyInPlace(
 
       const fromRound = m.round;
       const fromCourt = m.court;
+      for (const [candidate, nextRound] of [
+        [m, c.toRound],
+        ...(other ? ([[other, fromRound]] as const) : []),
+      ] as ReadonlyArray<readonly [Match, number]>) {
+        for (const id of [...candidate.teamA, ...candidate.teamB]) {
+          const player = findPlayer(state, id);
+          if (!player || player.status !== "active") {
+            return err(`${player?.name ?? id} hiện không có mặt để thi đấu.`);
+          }
+          if (!isAvailableAt(player, nextRound)) {
+            return err(`${player.name} đã khai không có mặt ở vòng ${nextRound}.`);
+          }
+        }
+      }
       m.round = c.toRound;
       m.court = c.toCourt;
       m.pinned = true;
@@ -773,6 +804,77 @@ function applyInPlace(
       }
       state.matches.sort((a, b) => a.round - b.round || a.court - b.court);
       state.lastRound = state.matches.reduce((n, x) => Math.max(n, x.round), 0);
+      return ok(null);
+    }
+
+    case "PromoteMatch": {
+      const m = findMatch(state, c.matchId);
+      if (!m) return err("Không tìm thấy trận.");
+      if (m.status !== "scheduled") return err("Chỉ đưa lên được trận chưa đánh.");
+      if (c.toRound < 1) return err("Không có vòng nào trước vòng 1.");
+      if (c.toCourt < 1 || c.toCourt > state.config.courts) {
+        return err("Sân đích không hợp lệ.");
+      }
+      if (m.round <= c.toRound) return err("Chỉ đưa được một trận tương lai lên sớm hơn.");
+
+      const participants = new Set([...m.teamA, ...m.teamB]);
+      for (const id of participants) {
+        const player = findPlayer(state, id);
+        if (!player || player.status !== "active") {
+          return err(`${player?.name ?? id} hiện không có mặt để thi đấu.`);
+        }
+        if (!isAvailableAt(player, c.toRound)) {
+          return err(`${player.name} đã khai không có mặt ở vòng ${c.toRound}.`);
+        }
+      }
+
+      const sameRound = state.matches.filter(
+        (other) =>
+          other.id !== m.id &&
+          other.round === c.toRound &&
+          other.status !== "cancelled" &&
+          other.status !== "abandoned",
+      );
+      for (const other of sameRound) {
+        if ([...other.teamA, ...other.teamB].some((id) => participants.has(id))) {
+          const id = [...other.teamA, ...other.teamB].find((p) => participants.has(p));
+          return err(`${findPlayer(state, id!)?.name ?? id} đã có trận trong vòng ${c.toRound}.`);
+        }
+      }
+
+      const playingOnCourt = state.matches.some(
+        (other) =>
+          other.id !== m.id &&
+          other.court === c.toCourt &&
+          (other.status === "playing" ||
+            (other.round === c.toRound && other.status === "scheduled")),
+      );
+      if (playingOnCourt) return err(`Sân ${c.toCourt} chưa trống để nhận trận khác.`);
+
+      const occupiedWaves = sameRound
+        .filter((other) => other.court === c.toCourt)
+        .map((other) => other.courtWave ?? 1);
+      m.round = c.toRound;
+      m.court = c.toCourt;
+      m.courtWave = Math.max(0, ...occupiedWaves) + 1;
+      m.pinned = true;
+      if (c.startNow) {
+        const busyPlayer = state.matches.find(
+          (other) =>
+            other.id !== m.id &&
+            other.status === "playing" &&
+            [...other.teamA, ...other.teamB].some((id) => participants.has(id)),
+        );
+        if (busyPlayer) return err("Có người trong trận này đang thi đấu ở sân khác.");
+        m.status = "playing";
+        m.startedAt = at;
+      }
+      state.matches.sort(
+        (a, b) =>
+          a.round - b.round ||
+          (a.courtWave ?? 1) - (b.courtWave ?? 1) ||
+          a.court - b.court,
+      );
       return ok(null);
     }
 
@@ -862,7 +964,35 @@ function applyInPlace(
       const m = findMatch(state, c.matchId);
       if (!m) return err("Không tìm thấy trận.");
       if (m.status !== "scheduled") return err("Trận này không ở trạng thái chờ đánh.");
+      const participants = new Set([...m.teamA, ...m.teamB]);
+      for (const id of participants) {
+        const player = findPlayer(state, id);
+        if (!player || player.status !== "active") {
+          return err(`${player?.name ?? id} hiện không có mặt để thi đấu.`);
+        }
+        if (!isAvailableAt(player, m.round)) {
+          return err(`${player.name} đã khai không có mặt ở vòng ${m.round}.`);
+        }
+      }
+      const logicalClash = state.matches.find(
+        (other) =>
+          other.id !== m.id &&
+          other.round === m.round &&
+          other.status !== "cancelled" &&
+          other.status !== "abandoned" &&
+          [...other.teamA, ...other.teamB].some((id) => participants.has(id)),
+      );
+      if (logicalClash) return err("Có người đã có một trận khác trong cùng vòng logic.");
+      const clash = state.matches.find(
+        (other) =>
+          other.id !== m.id &&
+          other.status === "playing" &&
+          (other.court === m.court ||
+            [...other.teamA, ...other.teamB].some((id) => participants.has(id))),
+      );
+      if (clash) return err("Sân hoặc người chơi đang bận ở một trận khác.");
       m.status = "playing";
+      m.startedAt = at;
       return ok(null);
     }
 
@@ -919,14 +1049,45 @@ function applyInPlace(
       if (!m) return err("Không tìm thấy trận.");
       if (!m.result) return err("Trận này chưa có kết quả.");
       const from = { scoreA: m.result.scoreA, scoreB: m.result.scoreB };
-      m.result = null;
-      m.status = "scheduled";
-      m.edits.push({ at, by: actor, from, to: null, note: c.note ?? "Gỡ kết quả" });
+      const previousEdit = [...m.edits].reverse().find((edit) => edit.from && edit.to);
+      if (previousEdit?.from) {
+        m.result = { ...m.result, ...previousEdit.from };
+        m.status = "submitted";
+        m.edits.push({ at, by: actor, from, to: previousEdit.from, note: c.note ?? "Hoàn tác lần sửa gần nhất" });
+      } else {
+        m.result = null;
+        m.status = state.status === "finished" ? "cancelled" : "scheduled";
+        if (state.status === "finished") m.cancelReason = "Gỡ kết quả sau khi sự kiện kết thúc";
+        m.edits.push({ at, by: actor, from, to: null, note: c.note ?? "Gỡ kết quả" });
+      }
       return ok(null);
     }
   }
 
   return exhaustive(c);
+}
+
+function validateConfigPatch(patch: Partial<EventState["config"]>): string | null {
+  if (patch.name !== undefined && (patch.name.trim().length < 2 || patch.name.length > 80)) {
+    return "Tên sự kiện phải từ 2 đến 80 ký tự.";
+  }
+  if (patch.venueAddress !== undefined && patch.venueAddress.length > 200) {
+    return "Địa chỉ sân tối đa 200 ký tự.";
+  }
+  const ranges: Array<[unknown, number, number, string]> = [
+    [patch.courts, 1, 8, "Số sân"],
+    [patch.expectedPlayers, 4, 200, "Số người dự kiến"],
+    [patch.targetGamesPerPlayer, 1, 50, "Số trận mỗi người"],
+    [patch.estimatedMatchMinutes, 5, 180, "Thời lượng trận"],
+    [patch.courtTurnoverMinutes, 0, 60, "Thời gian đổi sân"],
+  ];
+  for (const [value, min, max, label] of ranges) {
+    if (value === undefined) continue;
+    if (!Number.isInteger(value) || Number(value) < min || Number(value) > max) {
+      return `${label} không hợp lệ.`;
+    }
+  }
+  return null;
 }
 
 function exhaustive(c: never): Result<null> {

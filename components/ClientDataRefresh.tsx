@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { del, keys } from "idb-keyval";
 import { APP_VERSION } from "@/lib/version";
 import { refreshLocalDataVersion } from "@/lib/client-data-version";
 
@@ -12,8 +13,8 @@ import { refreshLocalDataVersion } from "@/lib/client-data-version";
  * - cookie thiết bị và phiên đăng nhập;
  * - hàng đợi thao tác chưa gửi trong IndexedDB.
  *
- * Những thứ được làm mới: khoá `rp_` tạm từ phiên bản cũ, sessionStorage và
- * Cache Storage. Sau đó máy đã từng dùng app tải lại một lần để mọi component
+ * Những thứ được làm mới: khoá `rp_` tạm từ phiên bản cũ, public snapshot trong
+ * IndexedDB, sessionStorage và Cache Storage. Sau đó máy đã từng dùng app tải lại một lần để mọi component
  * đều khởi động từ mã và cache của phiên bản mới.
  */
 export function ClientDataRefresh() {
@@ -35,12 +36,25 @@ export function ClientDataRefresh() {
       // Như trên: dọn được phần nào thì dọn, không chặn lượt mở trang.
     }
 
-    void clearBrowserCaches().finally(() => {
+    void Promise.all([clearBrowserCaches(), clearTemporaryIndexedDb()]).finally(() => {
       if (result.shouldReload) window.location.reload();
     });
   }, []);
 
   return null;
+}
+
+async function clearTemporaryIndexedDb(): Promise<void> {
+  try {
+    const all = await keys();
+    await Promise.all(
+      all
+        .filter((key): key is string => typeof key === "string" && key.startsWith("rp_event_snapshot_"))
+        .map((key) => del(key)),
+    );
+  } catch {
+    // Không xoá `rp_queue_`: đó là lệnh người dùng chưa gửi, không phải cache.
+  }
 }
 
 async function clearBrowserCaches(): Promise<void> {

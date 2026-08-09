@@ -27,17 +27,25 @@ export function SponsorStrip({ code }: { code: string }) {
   const shape = data?.state.presentation.sponsorLogoShape ?? "square";
   if (sponsors.length === 0) return null;
 
-  const visible = sponsors.slice(0, 4);
+  const visible = sponsors.slice(0, 6);
   return (
     <>
       <section aria-label="Nhà tài trợ" className="border-b border-white/10 bg-[#151313] px-4 py-3 text-white lg:px-10">
         <div className="mx-auto flex max-w-5xl items-center gap-3 overflow-hidden">
           <p className="hidden shrink-0 font-display text-[8px] font-extrabold uppercase tracking-[0.18em] text-mute-500 sm:block">Đồng hành</p>
           <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-            {visible.map((sponsor) => <SponsorLogo key={sponsor.id} code={code} sponsor={sponsor} shape={shape} compact />)}
+            {visible.map((sponsor, index) => (
+              <div key={sponsor.id} className={index < 3 ? "block" : index === 3 ? "hidden sm:block" : "hidden lg:block"}>
+                <SponsorLogo code={code} sponsor={sponsor} shape={shape} compact />
+              </div>
+            ))}
           </div>
-          {sponsors.length > 4 && (
-            <button type="button" onClick={() => setOpen(true)} className="min-h-10 shrink-0 border-l border-white/20 pl-3 font-display text-[9px] font-extrabold uppercase tracking-wide text-white hover:text-accent-400">
+          {sponsors.length > 3 && (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className={`min-h-10 shrink-0 border-l border-white/20 pl-3 font-display text-[9px] font-extrabold uppercase tracking-wide text-white hover:text-accent-400 ${sponsors.length <= 4 ? "sm:hidden" : sponsors.length <= 6 ? "lg:hidden" : ""}`}
+            >
               Tất cả ({sponsors.length})
             </button>
           )}

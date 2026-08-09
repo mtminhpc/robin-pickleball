@@ -172,8 +172,8 @@ describe("quyền chủ theo tài khoản", () => {
   const anonymous = { ownerUserId: "" };
 
   it("chủ theo tài khoản thắng cookie chế độ xem", () => {
-    expect(roleFor(owned, "viewer", "u-nam")).toBe("admin");
-    expect(roleFor(owned, null, "u-nam")).toBe("admin");
+    expect(roleFor(owned, "viewer", "u-nam")).toBe("owner");
+    expect(roleFor(owned, null, "u-nam")).toBe("owner");
   });
 
   it("tài khoản khác vẫn chỉ là người xem", () => {

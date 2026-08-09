@@ -531,6 +531,13 @@ function eventRow(record: EventRecord, state: EventState): string[] {
 }
 
 function logRow(seq: number, envelope: CommandEnvelope): string[] {
+  const payload = envelope.precondition
+    ? {
+        __envelope: 1,
+        command: envelope.command,
+        precondition: envelope.precondition,
+      }
+    : envelope.command;
   return [
     String(seq),
     new Date(envelope.at).toISOString(),
@@ -539,7 +546,7 @@ function logRow(seq: number, envelope: CommandEnvelope): string[] {
     envelope.actor.ref ?? "",
     envelope.id,
     envelope.command.type,
-    JSON.stringify(envelope.command),
+    JSON.stringify(payload),
   ];
 }
 
@@ -547,6 +554,15 @@ function parseLogRow(row: string[]): CommandEnvelope | null {
   const [, ts, kind, label, ref, id, , payload] = row;
   if (!id || !payload) return null;
   try {
+    const parsed = JSON.parse(payload) as
+      | CommandEnvelope["command"]
+      | {
+          __envelope: 1;
+          command: CommandEnvelope["command"];
+          precondition: CommandEnvelope["precondition"];
+        };
+    const wrapped =
+      typeof parsed === "object" && parsed !== null && "__envelope" in parsed;
     return {
       id,
       at: ts ? Date.parse(ts) : 0,
@@ -555,7 +571,8 @@ function parseLogRow(row: string[]): CommandEnvelope | null {
         label: label ?? "",
         ref: ref || undefined,
       },
-      command: JSON.parse(payload),
+      command: wrapped ? parsed.command : parsed,
+      ...(wrapped && parsed.precondition ? { precondition: parsed.precondition } : {}),
     };
   } catch {
     return null;

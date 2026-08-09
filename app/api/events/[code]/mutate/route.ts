@@ -19,13 +19,16 @@ import {
 } from "@/lib/domain/commands";
 import { nextScheduleCommand } from "@/lib/domain/autoplan";
 import { apply } from "@/lib/domain/reduce";
+import { commandPrecondition } from "@/lib/domain/precondition";
 import { canEditResult } from "@/lib/domain/rules";
 import { fail, isResponse, readJson, resolveContext } from "@/lib/api/context";
 import { redactEventState } from "@/lib/api/public-state";
 import { getRepo, invalidateEvent, withEventLock } from "@/lib/sheets/cache";
+import { validateMove, validatePromoteMatch } from "@/lib/scheduler/validate";
 
 interface MutateBody {
   commandId?: string;
+  baseRevision?: number;
   command?: Command;
 }
 
@@ -47,7 +50,7 @@ export async function POST(
 
   const parsed = await readJson<MutateBody>(request);
   if (!parsed.ok) return parsed.response;
-  const { commandId, command } = parsed.body;
+  const { commandId, command, baseRevision } = parsed.body;
 
   if (!commandId || !command?.type) {
     return fail(400, "Thiếu lệnh hoặc mã lệnh.");
@@ -73,8 +76,44 @@ export async function POST(
     if (!loaded) return { ok: false as const, error: `Không tìm thấy sự kiện ${code}.` };
 
     const now = Date.now();
+    if (stamped.type === "PromoteMatch") {
+      const validation = validatePromoteMatch(
+        loaded.state,
+        stamped.matchId,
+        stamped.toRound,
+        stamped.toCourt,
+        stamped.startNow,
+        now,
+      );
+      if (validation.severity === "block") {
+        return {
+          ok: false as const,
+          error: validation.notes.find((note) => note.severity === "block")?.message ?? "Không thể dời trận này.",
+        };
+      }
+    } else if (stamped.type === "ReorderMatch") {
+      const validation = validateMove(
+        loaded.state,
+        stamped.matchId,
+        stamped.toRound,
+        stamped.toCourt,
+        now,
+      );
+      if (validation.severity === "block") {
+        return {
+          ok: false as const,
+          error: validation.notes.find((note) => note.severity === "block")?.message ?? "Không thể đổi vị trí hai trận này.",
+        };
+      }
+    }
     const envelopes: CommandEnvelope[] = [
-      { id: commandId, at: now, actor: ctx.actor, command: stamped },
+      {
+        id: commandId,
+        at: now,
+        actor: ctx.actor,
+        command: stamped,
+        precondition: commandPrecondition(loaded.state, stamped),
+      },
     ];
 
     // Xếp lịch phải nhìn trạng thái SAU khi áp lệnh, không phải trước.
@@ -94,15 +133,33 @@ export async function POST(
       });
     }
 
-    return repo.commitMany(code, envelopes, loaded);
+    const committed = await repo.commitMany(code, envelopes, loaded);
+    if (!committed.ok) return committed;
+
+    // Không báo "đã lưu" chỉ vì batch update không ném lỗi. Đọc lại nguồn append-only và
+    // kiểm chứng đúng commandId đã xuất hiện; snapshot có bị request khác ghi đè thì load sẽ
+    // tự dựng lại từ log trước khi trả về.
+    const verified = await repo.load(code);
+    if (!verified?.state.appliedCommandIds.includes(commandId)) {
+      return {
+        ok: false as const,
+        error: "Máy chủ chưa kiểm chứng được thay đổi trong nhật ký. Dữ liệu sẽ được tải lại trước khi thử tiếp.",
+      };
+    }
+    return {
+      ...committed,
+      state: verified.state,
+      rebased: typeof baseRevision === "number" && baseRevision !== loaded.state.processed,
+    };
   });
 
   if (!result.ok) return fail(409, result.error);
 
   invalidateEvent(code);
   return NextResponse.json({
-    state: redactEventState(result.state, ctx.deviceId),
+    state: redactEventState(result.state, ctx.deviceId, ctx.userId),
     seq: result.seq,
+    rebased: "rebased" in result ? result.rebased : false,
   });
 }
 
@@ -146,6 +203,9 @@ function checkPermission(
   command: Command,
   ctx: Extract<Awaited<ReturnType<typeof resolveContext>>, { role: string }>,
 ): string | null {
+  if (command.type === "SwapRounds") {
+    return "Bản mới không còn dời cả vòng. Hãy đưa một trận hợp lệ lên sân vừa trống.";
+  }
   if (
     [
       "SetSponsorLogoShape",
@@ -155,7 +215,7 @@ function checkPermission(
       "UpsertAward",
       "RemoveAward",
     ].includes(command.type) &&
-    !ctx.ownerByAccount
+    !ctx.capabilities.canManagePresentation
   ) {
     return "Chỉ tài khoản đã tạo sự kiện mới quản lý nhà tài trợ và giải thưởng.";
   }
@@ -173,8 +233,32 @@ function checkPermission(
   if (command.type === "EditResult" || command.type === "RevertResult") {
     const match = ctx.event.state.matches.find((m) => m.id === command.matchId);
     if (!match) return "Không tìm thấy trận.";
-    const verdict = canEditResult(match, ctx.actor, Date.now(), ctx.event.state.config);
-    return verdict.allowed ? null : verdict.reason;
+    const now = Date.now();
+    if (ctx.event.state.status === "finished") {
+      if (ctx.role !== "owner") {
+        return "Sau khi sự kiện kết thúc, chỉ Chủ sự kiện được sửa kết quả.";
+      }
+      if (!(command.note ?? "").trim()) {
+        return "Cần ghi lý do khi sửa hoặc hoàn tác kết quả sau khi sự kiện kết thúc.";
+      }
+      return null;
+    }
+    // Operator mang nhãn điều hành trong log nhưng không nhờ `ActorKind=admin` để vượt cửa sổ
+    // tự sửa. Chỉ Chủ/Phó có capability riêng mới được sửa bất kỳ kết quả nào.
+    const selfVerdict = canEditResult(
+      match,
+      { ...ctx.actor, kind: "player" },
+      now,
+      ctx.event.state.config,
+    );
+    if (selfVerdict.allowed) return null;
+    if (ctx.capabilities.canEditAnyScore) {
+      if (!(command.note ?? "").trim()) {
+        return "Cần ghi lý do khi sửa hoặc hoàn tác kết quả đã chốt.";
+      }
+      return null;
+    }
+    return selfVerdict.reason;
   }
 
   const target = "playerId" in command ? command.playerId : null;

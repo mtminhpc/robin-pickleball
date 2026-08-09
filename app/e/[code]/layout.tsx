@@ -12,10 +12,16 @@ import { cookies } from "next/headers";
 import { cookieName, sessionSecret, verifySession } from "@/lib/auth/session";
 import { USER_COOKIE, verifyUserSession } from "@/lib/auth/user-session";
 import { findMyPlayer, isOwnerByAccount, roleFor } from "@/lib/api/context";
+import { capabilitiesForRole, roleLabel } from "@/lib/domain/commands";
 import { DEVICE_COOKIE } from "@/lib/identity/device";
 import { verifyDeviceToken } from "@/lib/identity/device-token";
 import { publicEventSnapshot } from "@/lib/api/public-state";
-import { readEvent } from "@/lib/sheets/cache";
+import {
+  readAccount,
+  readEvent,
+  readEventAuthVersion,
+  readEventStaff,
+} from "@/lib/sheets/cache";
 import { EventShell } from "@/components/EventShell";
 
 export default async function EventLayout({
@@ -32,7 +38,7 @@ export default async function EventLayout({
   if (!event) notFound();
 
   const jar = await cookies();
-  const session = verifySession(
+  const rawSession = verifySession(
     jar.get(cookieName(code))?.value,
     code,
     sessionSecret(),
@@ -51,17 +57,37 @@ export default async function EventLayout({
     sessionSecret(),
   )?.uid ?? null;
 
+  const account = userId ? await readAccount(userId) : null;
+  const staff = account ? await readEventStaff(code) : [];
+  const isManager = account
+    ? staff.some(
+        (member) =>
+          member.userId === account.account.userId ||
+          member.email === account.account.email.toLowerCase(),
+      )
+    : false;
+  const authVersion =
+    rawSession?.role === "admin" ? await readEventAuthVersion(code) : 0;
+  const session =
+    rawSession?.role === "admin" && (rawSession.pv ?? 0) !== authVersion
+      ? null
+      : rawSession;
+
   // Cùng một hàm với `resolveContext`, không phải bản chép tay. Xem docblock của
   // `roleFor` để biết vì sao đó là điều kiện bắt buộc chứ không phải cho gọn.
-  const role = roleFor(event.record, session?.role ?? null, userId);
+  const role = roleFor(event.record, session?.role ?? null, userId, isManager);
 
   return (
     <EventShell
       code={code}
+      initialIdentity={userId ?? "anonymous"}
       initial={{
-        ...publicEventSnapshot(event.state, deviceId),
+        ...publicEventSnapshot(event.state, deviceId, userId),
         role,
+        capabilities: capabilitiesForRole(role),
+        roleLabel: roleLabel(role),
         myPlayerId: findMyPlayer(event.state, deviceId, userId)?.id ?? null,
+        myPlayerHasAccount: Boolean(findMyPlayer(event.state, deviceId, userId)?.userId),
         requiresPlayerPassword: event.record.playerPassHash !== "",
         ownerByAccount: isOwnerByAccount(event.record, userId),
         ownerClaimable: event.record.ownerUserId === "",

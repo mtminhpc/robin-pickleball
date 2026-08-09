@@ -18,6 +18,8 @@ import { Avatar } from "@/components/Avatar";
 import { AvatarPicker } from "@/components/AvatarPicker";
 import { Button, Card, Dialog, Empty, Field, inputClass, Tag } from "@/components/ui";
 import { useEffect } from "react";
+import { estimateEvent, formatEstimatedDuration } from "@/lib/domain/estimate";
+import { scheduledAtFromInputs } from "@/lib/scheduled-at";
 
 export default function ClubPage() {
   const { id } = useParams<{ id: string }>();
@@ -136,6 +138,8 @@ export default function ClubPage() {
         <CreateFromClubDialog
           clubId={club.id}
           clubName={club.name}
+          expectedCount={Math.max(4, members.length)}
+          defaultCourts={club.settings.defaultCourts}
           onClose={() => setCreating(false)}
         />
       )}
@@ -316,10 +320,14 @@ function EditMemberDialog({
 function CreateFromClubDialog({
   clubId,
   clubName,
+  expectedCount,
+  defaultCourts,
   onClose,
 }: {
   clubId: string;
   clubName: string;
+  expectedCount: number;
+  defaultCourts: number;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -328,19 +336,30 @@ function CreateFromClubDialog({
     [],
   );
   const [name, setName] = useState(`${clubName} ${today}`);
+  const [venueAddress, setVenueAddress] = useState("");
+  const [expectedPlayers, setExpectedPlayers] = useState(expectedCount);
+  const [courts, setCourts] = useState(defaultCourts);
+  const [targetGamesPerPlayer, setTargetGamesPerPlayer] = useState(6);
+  const [estimatedMatchMinutes, setEstimatedMatchMinutes] = useState(15);
+  const [courtTurnoverMinutes, setCourtTurnoverMinutes] = useState(3);
+  const [scheduledTime, setScheduledTime] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [playerPassword, setPlayerPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const schedule = scheduledAtFromInputs(scheduledDate, scheduledTime);
+  const estimate = estimateEvent({ players: expectedPlayers, courts, targetGamesPerPlayer, matchMinutes: estimatedMatchMinutes, turnoverMinutes: courtTurnoverMinutes });
 
   async function submit() {
+    if (schedule.error) { setError(schedule.error); return; }
     setPending(true);
     setError(null);
     try {
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, clubId, adminPassword, playerPassword }),
+        body: JSON.stringify({ name, venueAddress, clubId, courts, expectedPlayers, targetGamesPerPlayer, estimatedMatchMinutes, courtTurnoverMinutes, scheduledAt: schedule.value, adminPassword, playerPassword }),
       });
       const body = (await res.json()) as { code?: string; error?: string };
       if (!res.ok || !body.code) throw new Error(body.error ?? "Không tạo được buổi đánh.");
@@ -358,14 +377,38 @@ function CreateFromClubDialog({
           Cả danh bạ sẽ được thêm sẵn vào buổi này ở trạng thái <strong>đã mời</strong>.
           Ai xác nhận đi thì điểm danh ở trang Người chơi, không cần gõ lại tên ai.
         </p>
-        <Field label="Tên buổi đánh">
+        <Field label="Tên sự kiện">
           <input
             className={inputClass}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
         </Field>
-        <Field label="Mật khẩu chủ sự kiện" hint="Để xếp lịch, duyệt người, mở khoá điểm.">
+        <Field label="Địa chỉ sân"><input className={inputClass} value={venueAddress} maxLength={200} onChange={(event) => setVenueAddress(event.target.value)} /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Giờ bắt đầu"><input type="time" step={60} className={inputClass} value={scheduledTime} onChange={(event) => setScheduledTime(event.target.value)} /></Field>
+          <Field label="Ngày diễn ra"><input type="date" className={inputClass} value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} /></Field>
+          <Field label="Số người dự kiến"><input type="number" min={4} max={200} className={inputClass} value={expectedPlayers} onChange={(event) => setExpectedPlayers(Number(event.target.value))} /></Field>
+          <Field label="Số sân"><input type="number" min={1} max={8} className={inputClass} value={courts} onChange={(event) => setCourts(Number(event.target.value))} /></Field>
+          <Field label="Trận/người"><input type="number" min={1} max={50} className={inputClass} value={targetGamesPerPlayer} onChange={(event) => setTargetGamesPerPlayer(Number(event.target.value))} /></Field>
+          <Field label="Phút/trận"><input type="number" min={5} max={180} className={inputClass} value={estimatedMatchMinutes} onChange={(event) => setEstimatedMatchMinutes(Number(event.target.value))} /></Field>
+          <Field label="Phút đổi sân"><input type="number" min={0} max={60} className={inputClass} value={courtTurnoverMinutes} onChange={(event) => setCourtTurnoverMinutes(Number(event.target.value))} /></Field>
+        </div>
+        {schedule.error && <p className="text-xs text-accent-700">{schedule.error}</p>}
+        {estimate && (
+          <div className="border-l-4 border-accent bg-surface p-3 text-xs leading-relaxed">
+            <p className="font-semibold">Ước tính {estimate.totalMatches} trận · {formatEstimatedDuration(estimate.durationMinutes)}</p>
+            <p className="mt-1 text-mute-600">
+              Khoảng {estimate.minGamesPerPlayer}–{estimate.maxGamesPerPlayer} trận/người, {estimate.usableCourts} sân sử dụng,
+              {" "}{estimate.waves} lượt sân; chờ trung bình khoảng {estimate.averageWaitMinutes} phút.
+            </p>
+            <p className="mt-1 text-[10px] text-mute-600">
+              Dựa trên {estimatedMatchMinutes} phút/trận và {courtTurnoverMinutes} phút đổi sân. Người đến muộn,
+              nghỉ hoặc trận kéo dài sẽ làm thay đổi thực tế; ước tính không tác động thuật toán công bằng.
+            </p>
+          </div>
+        )}
+        <Field label="Mật khẩu điều hành" hint="Quyền dự phòng để phối hợp tại sân; không quản lý Phó, tài trợ hoặc kết thúc sớm.">
           <input
             className={inputClass}
             type="password"

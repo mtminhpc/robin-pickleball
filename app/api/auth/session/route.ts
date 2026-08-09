@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       avatarId: me.account.avatarId,
       picture: me.account.prefs.picture ?? "",
       /** Có ảnh tự tải lên hay chưa — để biết có hiện nút Xoá ảnh không. */
-      hasPhoto: Boolean(me.account.prefs.photo),
+      hasPhoto: Boolean(me.account.prefs.photoAssetId || me.account.prefs.photo),
       devices: me.devices.length,
       isAppAdmin: isAppAdminEmail(me.account.email),
     },

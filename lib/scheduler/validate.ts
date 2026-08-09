@@ -9,7 +9,7 @@
 import { apply } from "../domain/reduce";
 import { isAvailableAt } from "../domain/types";
 import type { EventState, PlayerId, PresenceSpan } from "../domain/types";
-import { achievableStreakCap } from "./metrics";
+import { achievableStreakCap, buildHistory } from "./metrics";
 
 export type Severity = "ok" | "warn" | "block";
 
@@ -81,15 +81,11 @@ export function validateMove(
     const name = nameOf.get(id) ?? id;
 
     if (a.longestPlayStreak > b.longestPlayStreak && a.longestPlayStreak > soft) {
-      // Cố ý chỉ cảnh báo chứ không chặn, kể cả khi vượt trần cứng. Trần chuỗi
-      // là mức bộ xếp lịch cố giữ, không phải luật chơi — mà người đang bấm nút
-      // là chủ sự kiện, họ có lý do ngoài sân mà phần mềm không biết (ai đó phải
-      // về sớm chẳng hạn). `block` ở đây chỉ dành cho việc máy chủ sẽ từ chối
-      // thật, để hai chữ đó còn giữ được nghĩa.
+      const blocked = a.longestPlayStreak > hard;
       notes.push({
-        severity: "warn",
+        severity: blocked ? "block" : "warn",
         message:
-          a.longestPlayStreak > hard
+          blocked
             ? `${name} sẽ phải đánh ${a.longestPlayStreak} vòng liên tiếp — quá trần ${hard} vòng.`
             : `${name} sẽ phải đánh ${a.longestPlayStreak} vòng liên tiếp.`,
       });
@@ -101,6 +97,34 @@ export function validateMove(
       });
     }
   }
+
+  const prefixRound = Math.min(match.round, toRound);
+  const beforeGap = playedPrefixGap(state, prefixRound);
+  const afterGap = playedPrefixGap(after, prefixRound);
+  if (afterGap > beforeGap && afterGap > 1) {
+    notes.push({
+      severity: "block",
+      message: `Đổi vị trí làm chênh số trận trong tiền tố tăng từ ${beforeGap} lên ${afterGap}.`,
+    });
+  }
+  const diversity = diversityDelta(state, after, matchId, prefixRound);
+  if (diversity > 0) {
+    notes.push({
+      severity: "warn",
+      message: `Độ lặp đồng đội/đối thủ trong phần lịch sớm tăng ${diversity} lượt.`,
+    });
+  }
+  const courtDelta = courtImbalanceDelta(state, after, affected, prefixRound);
+  if (courtDelta > 0) {
+    notes.push({
+      severity: "warn",
+      message: `Độ lệch phân bổ sân trong phần lịch sớm tăng ${courtDelta} lượt.`,
+    });
+  }
+  notes.push({
+    severity: "ok",
+    message: `Đã đối chiếu deficit/catch-up của những người bị ảnh hưởng (tổng ưu tiên ${catchUpPriority(state, affected).toFixed(2)}).`,
+  });
 
   if (notes.length === 0) {
     notes.push({ severity: "ok", message: "Không ai bị ảnh hưởng xấu." });
@@ -117,6 +141,184 @@ export function validateMove(
       : "ok";
 
   return { severity, notes, preview: severity === "block" ? null : after };
+}
+
+/**
+ * Kiểm tra dời một trận tương lai lên lượt sân bổ sung của vòng hiện tại.
+ * Khác dời tay cũ, vi phạm trần chuỗi hoặc chênh số trận là lỗi cứng: không có
+ * nút cưỡng ép vì bốn người được ưu tiên lúc này lấy trực tiếp lượt của người khác.
+ */
+export function validatePromoteMatch(
+  state: EventState,
+  matchId: string,
+  toRound: number,
+  toCourt: number,
+  startNow: boolean,
+  now: number,
+): MoveValidation {
+  const outcome = apply(state, {
+    id: `preview-promote-${matchId}-${toRound}-${toCourt}`,
+    at: now,
+    actor: { kind: "admin", label: "xem trước" },
+    command: { type: "PromoteMatch", matchId, toRound, toCourt, startNow },
+  });
+  if (!outcome.ok) {
+    return { severity: "block", notes: [{ severity: "block", message: outcome.error }], preview: null };
+  }
+
+  const after = outcome.value;
+  const match = state.matches.find((item) => item.id === matchId)!;
+  const affected = [...match.teamA, ...match.teamB];
+  const beforeProjection = projectFairness(state, affected);
+  const afterProjection = projectFairness(after, affected);
+  const names = new Map(state.players.map((player) => [player.id, player.name] as const));
+  const { hard } = streakCaps(state);
+  const notes: ValidationNote[] = [];
+
+  for (const id of affected) {
+    const before = beforeProjection.get(id);
+    const later = afterProjection.get(id);
+    if (!before || !later) continue;
+    if (later.longestPlayStreak > before.longestPlayStreak && later.longestPlayStreak > hard) {
+      notes.push({
+        severity: "block",
+        message: `${names.get(id) ?? id} sẽ phải đánh ${later.longestPlayStreak} vòng liên tiếp, vượt trần công bằng ${hard}.`,
+      });
+    }
+  }
+
+  const beforeGap = playedPrefixGap(state, toRound);
+  const afterGap = playedPrefixGap(after, toRound);
+  if (afterGap > beforeGap && afterGap > 1) {
+    notes.push({
+      severity: "block",
+      message: `Dời trận làm chênh số trận trong tiền tố tăng từ ${beforeGap} lên ${afterGap}.`,
+    });
+  }
+  const diversity = diversityDelta(state, after, matchId, toRound);
+  if (diversity > 0) {
+    notes.push({
+      severity: "warn",
+      message: `Độ lặp đồng đội/đối thủ trong phần lịch sớm tăng ${diversity} lượt; hệ thống sẽ bù ở lịch tương lai chưa chốt.`,
+    });
+  }
+  const courtDelta = courtImbalanceDelta(state, after, affected, toRound);
+  if (courtDelta > 0) {
+    notes.push({
+      severity: "warn",
+      message: `Độ lệch phân bổ sân của bốn người tăng ${courtDelta} lượt; lịch tương lai sẽ ưu tiên bù sân ít được chơi.`,
+    });
+  }
+  const priority = catchUpPriority(state, affected);
+  notes.push({
+    severity: "ok",
+    message: `Đã đối chiếu deficit/catch-up hiện tại của bốn người (tổng ưu tiên ${priority.toFixed(2)}).`,
+  });
+  if (notes.length === 0) {
+    notes.push({ severity: "ok", message: "Trận hợp lệ để đưa lên; không trùng người/sân và không làm xấu chênh số trận." });
+  }
+  notes.push({ severity: "ok", message: "Cặp đấu giữ nguyên; chỉ lịch tương lai chưa chốt được xếp bù lại." });
+  const severity: Severity = notes.some((note) => note.severity === "block")
+    ? "block"
+    : notes.some((note) => note.severity === "warn") ? "warn" : "ok";
+  return { severity, notes, preview: severity === "block" ? null : after };
+}
+
+export function suggestedPromotions(
+  state: EventState,
+  toRound: number,
+  toCourt: number,
+  now: number,
+): Array<{ matchId: string; validation: MoveValidation }> {
+  return state.matches
+    .filter((match) => match.status === "scheduled" && match.round > toRound)
+    .map((match) => ({
+      matchId: match.id,
+      validation: validatePromoteMatch(state, match.id, toRound, toCourt, false, now),
+    }))
+    .filter((item) => item.validation.severity !== "block")
+    .sort((a, b) => {
+      const severity = Number(a.validation.severity === "warn") - Number(b.validation.severity === "warn");
+      if (severity !== 0) return severity;
+      const am = state.matches.find((match) => match.id === a.matchId)!;
+      const bm = state.matches.find((match) => match.id === b.matchId)!;
+      const priority = catchUpPriority(state, [...bm.teamA, ...bm.teamB]) -
+        catchUpPriority(state, [...am.teamA, ...am.teamB]);
+      if (priority !== 0) return priority;
+      return am.round - bm.round || am.court - bm.court;
+    });
+}
+
+function playedPrefixGap(state: EventState, round: number): number {
+  const counts = state.players
+    .filter((player) => player.status === "active" && isAvailableAt(player, round))
+    .map((player) => state.matches.filter(
+      (match) =>
+        match.round <= round &&
+        match.status !== "cancelled" &&
+        match.status !== "abandoned" &&
+        [...match.teamA, ...match.teamB].includes(player.id),
+    ).length);
+  return counts.length === 0 ? 0 : Math.max(...counts) - Math.min(...counts);
+}
+
+function diversityDelta(before: EventState, after: EventState, matchId: string, round: number): number {
+  const target = before.matches.find((match) => match.id === matchId);
+  if (!target) return 0;
+  const repetitions = (state: EventState) => {
+    const partner = new Map<string, number>();
+    const opponent = new Map<string, number>();
+    for (const match of state.matches.filter((item) => item.round <= round && item.status !== "cancelled")) {
+      for (const team of [match.teamA, match.teamB]) {
+        const key = [...team].sort().join(":");
+        partner.set(key, (partner.get(key) ?? 0) + 1);
+      }
+      for (const left of match.teamA) for (const right of match.teamB) {
+        const key = [left, right].sort().join(":");
+        opponent.set(key, (opponent.get(key) ?? 0) + 1);
+      }
+    }
+    return [...partner.values(), ...opponent.values()].reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+  };
+  return Math.max(0, repetitions(after) - repetitions(before));
+}
+
+/** Độ lệch sân lớn nhất của nhóm trong tiền tố vừa được rút ngắn. */
+function courtImbalanceDelta(
+  before: EventState,
+  after: EventState,
+  ids: PlayerId[],
+  round: number,
+): number {
+  const spread = (state: EventState, id: PlayerId) => {
+    const uses = Array.from({ length: Math.max(1, state.config.courts) }, () => 0);
+    for (const match of state.matches) {
+      if (
+        match.round > round ||
+        match.status === "cancelled" ||
+        match.status === "abandoned" ||
+        ![...match.teamA, ...match.teamB].includes(id)
+      ) continue;
+      uses[Math.min(uses.length - 1, Math.max(0, match.court - 1))]! += 1;
+    }
+    return Math.max(...uses) - Math.min(...uses);
+  };
+  return Math.max(
+    0,
+    ...ids.map((id) => spread(after, id) - spread(before, id)),
+  );
+}
+
+/** Ưu tiên thật mà scheduler dùng: suất kỳ vọng + credit đuổi kịp − số trận. */
+function catchUpPriority(state: EventState, ids: PlayerId[]): number {
+  const activeIds = state.players
+    .filter((player) => player.status === "active")
+    .map((player) => player.id);
+  const history = buildHistory(state, activeIds);
+  return ids.reduce((sum, id) => {
+    const index = history.index.get(id);
+    return sum + (index === undefined ? 0 : history.deficit[index]!);
+  }, 0);
 }
 
 /**

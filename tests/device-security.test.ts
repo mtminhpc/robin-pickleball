@@ -44,6 +44,7 @@ describe("trạng thái công khai không phát mã thiết bị", () => {
       avatarId: "a01",
       status: "active",
       deviceId: VICTIM_DEVICE,
+      userId: "private-user-id-123",
       presence: [{ from: 1, to: null }],
       catchUpCredit: 0,
       addedAt: 1,
@@ -72,6 +73,8 @@ describe("trạng thái công khai không phát mã thiết bị", () => {
           to: { scoreA: 11, scoreB: 7 },
         },
       ],
+      courtWave: 1,
+      startedAt: null,
       createdAt: 1,
     };
     state.players = [player];
@@ -83,10 +86,12 @@ describe("trạng thái công khai không phát mã thiết bị", () => {
     expect(snapshot.claimedPlayerIds).toEqual(["p1"]);
     expect(snapshot.actorRef).toBe("self");
     expect(snapshot.state.players[0]?.deviceId).toBeUndefined();
+    expect(snapshot.state.players[0]?.userId).toBeUndefined();
     expect(snapshot.state.matches[0]?.result?.submittedBy.ref).toBe("self");
     expect(snapshot.state.matches[0]?.edits[0]?.by.ref).toBeUndefined();
     expect(json).not.toContain(VICTIM_DEVICE);
     expect(json).not.toContain("admin-device-87654321");
+    expect(json).not.toContain("private-user-id-123");
     // Hàm lược chỉ tạo bản công khai, không được làm hỏng ảnh chụp trong cache.
     expect(state.players[0]?.deviceId).toBe(VICTIM_DEVICE);
   });

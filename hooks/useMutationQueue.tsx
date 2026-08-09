@@ -33,7 +33,7 @@ import {
 import type { Command } from "@/lib/domain/commands";
 import type { EventState } from "@/lib/domain/types";
 
-export type SaveStatus = "idle" | "saving" | "saved" | "error";
+export type SaveStatus = "idle" | "processing" | "saving" | "saved" | "error" | "conflict";
 
 export interface QueuedCommand {
   id: string;
@@ -41,6 +41,8 @@ export interface QueuedCommand {
   command: Command;
   createdAt: number;
   attempts: number;
+  /** Revision công khai tại thời điểm người dùng bấm, dùng để phát hiện thao tác chen ngang. */
+  baseRevision: number;
 }
 
 export interface FailedCommand {
@@ -101,11 +103,13 @@ function supersedeKey(command: Command): string | null {
 export function MutationQueueProvider({
   code,
   onApplied,
+  baseRevision,
   children,
 }: {
   code: string;
   /** Trạng thái mới nhất máy chủ trả về, để cập nhật màn hình ngay. */
   onApplied: (state: EventState) => void;
+  baseRevision: number;
   children: ReactNode;
 }) {
   const [queued, setQueued] = useState<QueuedCommand[]>([]);
@@ -201,7 +205,11 @@ export function MutationQueueProvider({
       const res = await fetch(`/api/events/${next.code}/mutate`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ commandId: next.id, command: next.command }),
+        body: JSON.stringify({
+          commandId: next.id,
+          baseRevision: next.baseRevision ?? 0,
+          command: next.command,
+        }),
       });
 
       if (res.ok) {
@@ -235,7 +243,7 @@ export function MutationQueueProvider({
       ]);
       sending.current = false;
       if (remaining > 0) scheduleFlush(0);
-      else setStatus("idle");
+      else setStatus(res.status === 409 ? "conflict" : "idle");
       return;
     } catch {
       // Mất mạng hoặc máy chủ trục trặc. Giữ nguyên lệnh và thử lại sau.
@@ -277,6 +285,7 @@ export function MutationQueueProvider({
         command,
         createdAt: Date.now(),
         attempts: 0,
+        baseRevision,
       });
 
       setQueued((q) => {
@@ -297,9 +306,9 @@ export function MutationQueueProvider({
         }
         return [...q, make()];
       });
-      setStatus("saving");
+      setStatus("processing");
     },
-    [code],
+    [baseRevision, code],
   );
 
   const retryNow = useCallback(() => {

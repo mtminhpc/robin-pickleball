@@ -1,5 +1,6 @@
-/** Chừa biên dưới giới hạn 50.000 ký tự của một ô Google Sheets. */
-export const EVENT_ASSET_MAX_CHARS = 45_000;
+/** Trần sản phẩm; repository chia data URI qua 16 ô Google Sheet. */
+export const EVENT_ASSET_MAX_BYTES = 512 * 1024;
+export const EVENT_ASSET_MAX_CHARS = 700_000;
 export const EVENT_ASSET_MIMES = ["image/png", "image/jpeg", "image/webp"] as const;
 export type EventAssetMime = (typeof EVENT_ASSET_MIMES)[number];
 
@@ -18,8 +19,68 @@ export function validateEventImageDataUri(input: unknown): ValidEventImage | nul
   } catch {
     return null;
   }
-  if (bytes.length < 12 || !magicMatches(mime, bytes)) return null;
+  if (bytes.length < 12 || bytes.length > EVENT_ASSET_MAX_BYTES || !magicMatches(mime, bytes)) return null;
+  const dimensions = imageDimensions(mime, bytes);
+  if (!dimensions || dimensions.width !== 256 || dimensions.height !== 256) return null;
   return { mime, dataUri: input };
+}
+
+function imageDimensions(
+  mime: EventAssetMime,
+  bytes: Uint8Array,
+): { width: number; height: number } | null {
+  if (mime === "image/png") {
+    if (bytes.length < 24) return null;
+    return {
+      width: readBe32(bytes, 16),
+      height: readBe32(bytes, 20),
+    };
+  }
+  if (mime === "image/jpeg") {
+    let offset = 2;
+    while (offset + 8 < bytes.length) {
+      if (bytes[offset] !== 0xff) return null;
+      const marker = bytes[offset + 1]!;
+      const length = (bytes[offset + 2]! << 8) | bytes[offset + 3]!;
+      if (length < 2) return null;
+      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+        return {
+          height: (bytes[offset + 5]! << 8) | bytes[offset + 6]!,
+          width: (bytes[offset + 7]! << 8) | bytes[offset + 8]!,
+        };
+      }
+      offset += 2 + length;
+    }
+    return null;
+  }
+  const chunk = String.fromCharCode(...bytes.slice(12, 16));
+  if (chunk === "VP8X" && bytes.length >= 30) {
+    return {
+      width: 1 + readLe24(bytes, 24),
+      height: 1 + readLe24(bytes, 27),
+    };
+  }
+  if (chunk === "VP8 " && bytes.length >= 30 && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+    return {
+      width: (bytes[26]! | (bytes[27]! << 8)) & 0x3fff,
+      height: (bytes[28]! | (bytes[29]! << 8)) & 0x3fff,
+    };
+  }
+  if (chunk === "VP8L" && bytes.length >= 25 && bytes[20] === 0x2f) {
+    return {
+      width: 1 + bytes[21]! + ((bytes[22]! & 0x3f) << 8),
+      height: 1 + (bytes[22]! >> 6) + (bytes[23]! << 2) + ((bytes[24]! & 0x0f) << 10),
+    };
+  }
+  return null;
+}
+
+function readBe32(bytes: Uint8Array, offset: number): number {
+  return (((bytes[offset]! << 24) >>> 0) + (bytes[offset + 1]! << 16) + (bytes[offset + 2]! << 8) + bytes[offset + 3]!) >>> 0;
+}
+
+function readLe24(bytes: Uint8Array, offset: number): number {
+  return bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16);
 }
 
 function magicMatches(mime: EventAssetMime, bytes: Uint8Array): boolean {

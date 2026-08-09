@@ -16,12 +16,15 @@
  * dòng nào: chúng vốn đã không quan tâm tài khoản kia từ đâu ra.
  */
 
+import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { checkPhotoDataUri } from "@/lib/avatars/photo";
+import { validateEventImageDataUri } from "@/lib/assets/event-image";
+import { validImageEditMetadata, type ImageEditMetadata } from "@/lib/assets/edit-metadata";
 import type { CommandEnvelope } from "@/lib/domain/commands";
 import { fail, isResponse, readJson, resolveContext } from "@/lib/api/context";
 import {
   getAccountRepo,
+  getAccountAssetRepo,
   getRepo,
   invalidateAccount,
   invalidateEvent,
@@ -30,6 +33,7 @@ import {
 
 interface Body {
   photo?: unknown;
+  editMetadata?: ImageEditMetadata;
 }
 
 export async function PUT(
@@ -46,15 +50,22 @@ export async function PUT(
   // Kiểm khuôn và kích thước TRƯỚC khi chạm bảng tính, y như `/api/me/avatar`:
   // đường này gọi thẳng bằng `curl` được, và một chuỗi vài megabyte lọt xuống
   // Sheets sẽ làm hỏng cả dòng tài khoản.
-  const checked = checkPhotoDataUri(parsed.body.photo);
-  if (!checked.ok) return fail(400, checked.error);
-  const photo = parsed.body.photo as string;
+  const checked = validateEventImageDataUri(parsed.body.photo);
+  if (!checked || !validImageEditMetadata(parsed.body.editMetadata)) {
+    return fail(400, "Ảnh đại diện hoặc thông số cắt ảnh không hợp lệ.");
+  }
+  const assetId = randomUUID();
+  const now = Date.now();
 
   if (player.userId) {
-    const updated = await getAccountRepo().updatePrefs(player.userId, { photo });
+    const account = await getAccountRepo().byId(player.userId);
+    if (!account) return fail(404, "Không tìm thấy tài khoản gắn với tên này.");
+    await getAccountAssetRepo().put({ userId: player.userId, assetId, kind: "avatar", ...checked, metadata: parsed.body.editMetadata!, active: true, createdAt: now, updatedAt: now });
+    const updated = await getAccountRepo().updatePrefs(player.userId, { photoAssetId: assetId, photo: undefined });
     if (!updated) return fail(404, "Không tìm thấy tài khoản gắn với tên này.");
+    if (account.prefs.photoAssetId) await getAccountAssetRepo().deactivate(player.userId, account.prefs.photoAssetId, now);
     invalidateAccount(player.userId);
-    return NextResponse.json({ saved: true, userId: player.userId });
+    return NextResponse.json({ saved: true });
   }
 
   // Chưa có chỗ nào để cất ảnh thì lập một tài khoản vãng lai, rồi trỏ ô tên vào
@@ -65,13 +76,14 @@ export async function PUT(
     avatarId: player.avatarId,
     at: Date.now(),
   });
-  await getAccountRepo().updatePrefs(guest.userId, { photo });
+  await getAccountAssetRepo().put({ userId: guest.userId, assetId, kind: "avatar", ...checked, metadata: parsed.body.editMetadata!, active: true, createdAt: now, updatedAt: now });
+  await getAccountRepo().updatePrefs(guest.userId, { photoAssetId: assetId, photo: undefined });
   invalidateAccount(guest.userId);
 
   const linked = await link(code, player.id, guest.userId);
   if (!linked.ok) return fail(409, linked.error);
 
-  return NextResponse.json({ saved: true, userId: guest.userId });
+  return NextResponse.json({ saved: true });
 }
 
 export async function DELETE(
@@ -88,10 +100,13 @@ export async function DELETE(
 
   // `undefined` là xoá hẳn khoá chứ không ghi chuỗi rỗng. `picture` giữ nguyên,
   // nên người có tài khoản Google xoá ảnh tự tải lên là quay về ảnh Google.
+  const account = await getAccountRepo().byId(player.userId);
   const updated = await getAccountRepo().updatePrefs(player.userId, {
     photo: undefined,
+    photoAssetId: undefined,
   });
   if (!updated) return fail(404, "Không tìm thấy tài khoản gắn với tên này.");
+  if (account?.prefs.photoAssetId) await getAccountAssetRepo().deactivate(player.userId, account.prefs.photoAssetId, Date.now());
 
   invalidateAccount(player.userId);
   return NextResponse.json({ removed: true });
@@ -102,9 +117,11 @@ export async function DELETE(
 /**
  * Tìm người chơi và xét quyền.
  *
- * Được đổi ảnh của một ô tên khi là **chủ sự kiện**, hoặc khi ô tên đó **chính
- * là mình**. `ctx.me` do máy chủ tính từ cookie đã ký (tài khoản trước, máy sau
- * — xem `findMyPlayer`), nên không khai man được.
+ * Người chơi luôn được đổi ảnh của chính mình. Đội điều hành chỉ được đặt ảnh hộ
+ * cho ô tên vãng lai; nếu ô tên đã gắn với một tài khoản Google có email thì hồ
+ * sơ toàn cục đó chỉ chính chủ tài khoản được sửa. `ctx.me` do máy chủ tính từ
+ * cookie đã ký (tài khoản trước, máy sau — xem `findMyPlayer`), nên không khai
+ * man được.
  */
 async function resolve(
   request: NextRequest,
@@ -119,13 +136,26 @@ async function resolve(
   const player = ctx.event.state.players.find((p) => p.id === playerId);
   if (!player) return fail(404, "Không tìm thấy người chơi trong buổi này.");
 
-  if (ctx.role !== "admin" && ctx.me?.id !== player.id) {
+  if (!ctx.capabilities.canManagePlayers && ctx.me?.id !== player.id) {
     return fail(
       403,
       ctx.me
         ? "Chỉ đổi được ảnh của chính bạn. Chủ sự kiện đổi được cho mọi người."
         : "Chưa nhận ra bạn là ai trong buổi này. Vào trang Tham gia để nhận tên của bạn.",
     );
+  }
+
+  // Quyền điều hành một buổi không phải quyền sửa hồ sơ Google toàn cục của
+  // người khác. Chủ/Phó/người giữ mật khẩu chỉ đặt hộ ảnh cho tài khoản vãng
+  // lai; người đã có email Google phải tự đổi ảnh của chính mình.
+  if (ctx.me?.id !== player.id && player.userId) {
+    const linked = await getAccountRepo().byId(player.userId);
+    if (linked?.email) {
+      return fail(
+        403,
+        "Ảnh của tài khoản Google chỉ chính người đó được thay đổi. Đội điều hành chỉ đặt hộ ảnh cho người chơi vãng lai.",
+      );
+    }
   }
 
   return { code, player, ctx };

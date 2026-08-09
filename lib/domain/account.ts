@@ -63,6 +63,8 @@ export interface AccountPrefs {
    * Giới hạn độ dài ở `MAX_PHOTO_CHARS` trong [../avatars/photo.ts](../avatars/photo.ts).
    */
   photo?: string;
+  /** Ảnh mới nằm ở `account_assets`; `photo` chỉ còn để đọc dữ liệu v0.5.x. */
+  photoAssetId?: string;
 }
 
 /** Một cái điện thoại đã nhận là của ai. */

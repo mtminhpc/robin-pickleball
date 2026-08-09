@@ -4,7 +4,7 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Phiên bản v0.5.1 · Trạng thái: đồng bộ đa thiết bị và nhận lại buổi cũ.** Ứng dụng
+> **Phiên bản v0.6.0 · Trạng thái: điều hành nhiều tài khoản, media và đồng bộ nhanh.** Ứng dụng
 > chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
 > bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
 > tuần và tháng, đăng nhập Google, sự kiện đã tạo, nhà tài trợ và Bảng vàng.
@@ -30,13 +30,14 @@ Muốn thử ngay với CLB, sân và 11 người mẫu đã lưu sẵn thì dù
 npm run dev:test   # tạo nếu thiếu, sau đó mở http://localhost:3000
 ```
 
-Vào sân bằng mã `TEST11` để thử logic 4–11 người, hoặc `TESTV5` để xem đủ dải
-tài trợ và Bảng vàng; mật khẩu người chơi `test1234`, quản trị `admin1234`.
+Vào sân bằng mã `TEST11` để thử logic 4–11 người, `TESTV5` để xem đủ dải
+tài trợ/Bảng vàng, hoặc `TESTV6` để thử đội điều hành, ảnh nhiều tỷ lệ, ước tính và
+dời từng trận; mật khẩu người chơi `test1234`, điều hành `admin1234`.
 Lệnh này luôn dùng `.data/test-sandbox.json`, kể cả máy đã cấu hình Google Sheet;
 chạy lại không nhân đôi hay reset buổi đang thử và không đụng dữ liệu thật.
 
 ```bash
-npm test                  # 524 bài kiểm thử
+npm test                  # 560 bài kiểm thử
 npm run scenarios         # 152 lượt thực chiến 4–11 người
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
@@ -51,6 +52,13 @@ npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 > tệp khoá thứ hai: hai tệp khoá cho cùng một dự án thì sớm muộn cũng lệch nhau,
 > và khi đó máy này cài ra một bộ thư viện còn máy kia ra bộ khác.
 
+> **Lưu ý nâng lên v0.6.0:** mỗi sự kiện có một Chủ và tối đa năm Phó; mật khẩu cũ
+> trở thành quyền điều hành giới hạn sau khi sự kiện có Chủ tài khoản. Chuyển tab dùng
+> snapshot IndexedDB đã lược dữ liệu nhạy cảm + ETag, nhưng điểm số/điểm danh/dời trận
+> vẫn gửi ngay lên máy chủ. Ảnh mới chỉ lưu bản WebP/PNG 256×256 đã xử lý cùng metadata;
+> ảnh cũ vẫn đọc được tới khi người dùng lưu lại. Snapshot cũ chỉ được bổ sung mặc định,
+> không reset sự kiện, tỷ số, tài khoản, CLB hoặc dữ liệu TEST.
+>
 > **Lưu ý nâng lên v0.5.1:** “Gần đây” hiện ngay từ máy rồi đồng bộ qua tài khoản
 > Google; buổi cũ chưa có chủ có thể gắn lại bằng mật khẩu chủ trong trang Quản
 > lý. Tạo buổi dùng hai ô Giờ bắt đầu và Ngày diễn ra. Không có bước nào xoá sự
@@ -72,14 +80,14 @@ npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 
 ## Dùng ở sân thế nào
 
-1. Chủ sân tạo buổi đánh, đặt hai mật khẩu: một cho người chơi (nhập điểm), một
-   cho mình (xếp lịch, duyệt người, mở khoá).
+1. Chủ sự kiện đăng nhập Google để tạo buổi, đặt mật khẩu người chơi và mật khẩu
+   điều hành dự phòng; có thể mời tối đa năm Phó bằng email Google.
 2. Chiếu mã QR ở trang Quản lý. Mọi người quét, gõ tên, chọn ảnh đại diện.
 3. Bấm **Bắt đầu** → hệ thống xếp lịch. Từ lúc này ai vào thêm đều phải chờ duyệt.
 4. Đánh xong mỗi trận thì bấm nhập tỷ số. Có bước xác nhận hiện to tên bốn người
    để không nhập nhầm trận. Lưu xong là khoá lại.
-5. Bấm nhầm thì tự sửa được trong 2 phút; sau đó cần mật khẩu chủ sân. Mọi lần
-   sửa hiện công khai trên thẻ trận.
+5. Bấm nhầm thì người vừa nhập tự sửa được trong cửa sổ hiện có; sau đó Chủ/Phó
+   sửa với lý do bắt buộc. Sau khi kết thúc chỉ Chủ được sửa. Mọi lần sửa còn trong log.
 
 ## Công bằng được định nghĩa thế nào
 
@@ -131,22 +139,18 @@ sổ sáu vòng phía trước. Mọi định nghĩa công bằng nằm gọn tr
 3. Không ai phải ngồi chờ quá lâu
 4. Càng nhiều bạn đôi và đối thủ khác nhau càng tốt
 
-### Dời lịch bằng tay
+### Dời một trận lên sân trống
 
-Nút **Sớm hơn / Muộn hơn** đổi chỗ **cả hai vòng** cho nhau chứ không nhấc riêng một
-trận sang chỗ khác. Lý do là số học: lịch round robin thì vòng nào cũng kín sân, nên
-nhét thêm bốn người vào một vòng là có kẻ phải đánh hai trận — đo trên lịch thật thì
-cách dời từng trận hỏng 22 trên 24 lần. Đổi cả vòng thì luôn làm được, và không ai
-thêm hay bớt trận nào, không ai đổi bạn đôi; chỉ thứ tự trước sau thay đổi.
+Khi một sân xong sớm, Chủ/Phó/người điều hành có thể chọn **một trận tương lai hợp
+lệ** để đưa lên lượt sân bổ sung của vòng hiện tại. Cặp đấu giữ nguyên; nếu vị trí
+tương lai đã có trận thì chỉ hai trận cụ thể hoán đổi, không dời cả vòng.
 
-Trước khi đổi, hộp xác nhận chạy `validateRoundSwap` ngay trên trình duyệt và nói rõ
-ai sẽ phải đánh liên tiếp mấy vòng. Vượt trần chỉ là **cảnh báo**, không phải chặn:
-trần chuỗi là mức thuật toán cố giữ chứ không phải luật chơi, mà chủ sự kiện có lý do
-ngoài sân mà phần mềm không biết.
-
-Hai vòng gần nhất được coi là đã chốt và không đổi nữa — người chơi nhìn lịch để canh
-giờ nghỉ, nên nó phải đứng yên. Các vòng xa hơn được xếp lại mỗi lần để tin tức mới
-(ai vừa vào, ai vừa về) kịp phản ánh.
+Máy chủ kiểm lại ngay trước khi ghi: sân và người không đang bận, cả bốn người còn
+có mặt, không ai đánh hai lần trong logical round, không vượt hard consecutive và
+không làm chênh số trận xấu đi. Trận không đạt bị chặn, không có nút cưỡng ép; giao
+diện xếp các ứng viên hợp lệ theo thứ tự công bằng. Sau đó chỉ phần lịch tương lai
+chưa chốt được xếp bù. Lệnh `SwapRounds` cũ vẫn phát lại để dữ liệu lịch sử không hỏng,
+nhưng giao diện v0.6.0 không còn phát sinh lệnh này.
 
 Khi ràng buộc bất khả thi về mặt toán học — 16 người trên 4 sân thì không ai nghỉ
 được — ứng dụng **nói thẳng** thay vì im lặng vi phạm, và tự nhắm tới mức tốt nhất

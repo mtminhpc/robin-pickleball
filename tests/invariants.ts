@@ -48,7 +48,7 @@ export function assertScheduleValid(state: EventState): void {
     );
 
     const seen = new Map<PlayerId, number>();
-    const courts = new Set<number>();
+    const courts = new Set<string>();
 
     for (const m of inRound) {
       const quad = [...m.teamA, ...m.teamB];
@@ -59,8 +59,9 @@ export function assertScheduleValid(state: EventState): void {
 
       for (const id of quad) seen.set(id, (seen.get(id) ?? 0) + 1);
 
-      expect(courts.has(m.court), `vòng ${round} xếp trùng sân ${m.court}`).toBe(false);
-      courts.add(m.court);
+      const courtSlot = `${m.court}:${m.courtWave ?? 1}`;
+      expect(courts.has(courtSlot), `vòng ${round} xếp trùng sân ${m.court}, lượt ${m.courtWave ?? 1}`).toBe(false);
+      courts.add(courtSlot);
     }
 
     const duplicates = [...seen.entries()].filter(([, c]) => c > 1);

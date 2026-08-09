@@ -61,6 +61,7 @@ export default function StandingsPage() {
         {table.main.map((row) => (
           <StandingRowView
             key={row.playerId}
+            code={state.code}
             row={row}
             player={state.players.find((p) => p.id === row.playerId)}
             awards={state.presentation.awards.filter((award) => award.recipientIds.includes(row.playerId))}
@@ -77,11 +78,12 @@ export default function StandingsPage() {
             {table.provisional.map((row) => (
               <StandingRowView
                 key={row.playerId}
+                code={state.code}
                 row={row}
                 player={state.players.find((p) => p.id === row.playerId)}
                 awards={state.presentation.awards.filter((award) => award.recipientIds.includes(row.playerId))}
                 action={
-                  role === "admin" && state.status === "running" ? (
+                  data.capabilities.canEditAnyScore && state.status === "running" ? (
                     <Button
                       tone="neutral"
                       className="min-h-10 flex-none px-3"
@@ -238,11 +240,13 @@ function Td({ children, mute }: { children: React.ReactNode; mute?: boolean }) {
 }
 
 function StandingRowView({
+  code,
   row,
   player,
   action,
   awards = [],
 }: {
+  code: string;
   row: StandingRow;
   /**
    * Người chơi tương ứng, để lấy ảnh. `StandingRow` cố ý không mang ảnh: nó là
@@ -261,7 +265,7 @@ function StandingRowView({
       <Avatar
         name={row.name}
         avatarId={player?.avatarId}
-        userId={player?.userId}
+        src={player ? `/api/events/${code}/players/${player.id}/avatar` : undefined}
         size="sm"
         dimmed={row.hasLeft}
       />

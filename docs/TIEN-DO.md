@@ -1,6 +1,6 @@
 # Tiến độ dự án
 
-Cập nhật: 09/08/2026 · nhánh `codex/v0.5.1-cross-device-history` ·
+Cập nhật: 09/08/2026 · nhánh `codex/v0.6.0-media-cache-copy` ·
 **đích Production: https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
@@ -15,8 +15,8 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.5.1 — đồng bộ đa thiết bị và nhận lại buổi cũ`.**
-Không còn phần mã nào đang làm dở trong đợt này.
+**Phiên bản hiện tại: `v0.6.0 — điều hành nhiều tài khoản, media và đồng bộ nhanh`.**
+Mã tính năng đã hoàn tất; cổng phát hành phải được ghi lại ở mục v0.6.0 dưới đây.
 
 | | |
 |---|---|
@@ -27,9 +27,52 @@ Không còn phần mã nào đang làm dở trong đợt này.
 | GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-`npm test` 524 bài xanh, `npm run scenarios` chạy 152 lượt/0 vấn đề,
-`npm run typecheck` và `npm run build` sạch. Không có
-việc nào đang dở dang giữa chừng trong mã.
+Các cổng trên mã phát hành đã xanh: `npm test` 560/560; `npm run scenarios`
+152 lượt/0 vấn đề; `npm run typecheck` và `npm run build` sạch. Smoke test bằng
+Chrome 390×844 và Edge 1440×1000; API TESTV6 trả 200, ETag trả 304, public state
+không có `userId`/`deviceId`, SHA kho TEST giữ nguyên.
+
+### Ghi chú khoá phiên Codex 09/08/2026 — v0.6.0
+
+- Một sự kiện có đúng một Chủ và tối đa năm Phó (kể cả pending). `event_staff` lưu
+  mời/kích hoạt/thu hồi append-only; email chỉ ở API Chủ-only. Mật khẩu điều hành là
+  quyền dự phòng giới hạn; `event_auth` tăng version để đổi mật khẩu vô hiệu phiên cũ.
+- `capabilitiesForRole` là nguồn chuẩn cho lịch, điểm, kết thúc, nhân sự, trình bày,
+  mật khẩu và sao chép. App admin vẫn chỉ quản quota. Nhật ký hiển thị
+  `Chủ sự kiện · Tên`, `Phó sự kiện · Tên` hoặc `Điều hành bằng mật khẩu`, không
+  phát email/user ID/device ID/actor ref.
+- `EventConfig` có `venueAddress`, `expectedPlayers`, `targetGamesPerPlayer`,
+  `estimatedMatchMinutes`, `courtTurnoverMinutes`; snapshot cũ tự nhận mặc định.
+  Form tính trực tiếp tổng trận/lượt sân/giờ phút theo công thức đã chốt.
+- `POST /api/events/[code]/copy` chỉ Chủ + finished, kiểm quota và idempotency bền
+  trong `event_copies`. Player ID/asset ID được tạo mới; không chép lịch, kết quả,
+  bảng hạng, giải, ngày giờ, hiện diện, quyền hoặc mật khẩu.
+- Editor ảnh chung xử lý contain/cover, kéo/pinch, zoom, xoay, reset và trim nền
+  trong. Đầu vào bị chặn MIME/magic byte/kích thước; đầu ra 256×256 WebP hoặc PNG,
+  tối đa 512 KB và chỉ lưu bản đã xử lý + metadata. Data URI được chia qua 16 ô
+  `data_1…data_16` để không vượt giới hạn 50.000 ký tự của một ô Google Sheet;
+  cột `data_uri` cũ vẫn đọc được để bảo toàn ảnh v0.5.x.
+- `EventProvider` sống xuyên layout năm tab. Cache IndexedDB mang
+  `eventCode + userId/anonymous + schema`, chỉ chứa public snapshot đã hạ quyền;
+  ETag/304 có `Vary: Cookie`, BroadcastChannel và poll thích ứng. Không dùng service
+  worker cho API quyền. Mutation quan trọng gửi ngay; cấu hình văn bản debounce 750 ms.
+- Mỗi command có `commandId`, `baseRevision` và precondition của đúng thực thể đích
+  ghi trong log. Khi hai Vercel instance cùng sửa một tỷ số/vị trí, replay chỉ nhận
+  lệnh trước; lệnh sau 409. Hai lệnh độc lập vẫn cùng áp dụng.
+- `PromoteMatch` dời đúng một trận lên `courtWave` bổ sung và giữ nguyên cặp đấu.
+  Máy chủ chặn trùng sân/người, vắng/nghỉ/rời, trùng logical round, hard streak và
+  chênh số trận; giao diện chỉ đề xuất ứng viên hợp lệ. Nút đổi cả vòng đã bỏ, nhưng
+  `SwapRounds` cũ vẫn replay được để bảo toàn log.
+- Khi đổi hai vị trí tương lai, giao diện và `ReorderMatch` chỉ hoán đổi đúng hai
+  trận cụ thể; không phát sinh `SwapRounds` mới và không đổi cả vòng.
+- Chủ/Phó/người điều hành chỉ đặt ảnh hộ tài khoản vãng lai. Ảnh của tài khoản
+  Google toàn cục chỉ chính người đó được đổi, tránh quyền sự kiện lan sang hồ sơ.
+- Kho bền vững giữ `TEST11`, `TESTV5`, CLB/sân/11 người và thêm `TESTV6` cho staff,
+  media nhiều tỷ lệ, ước tính, sao chép và dời trận. Seed idempotent, không đụng
+  Google Sheet thật. Hai ZIP Claude Design tiếp tục untracked, không sửa/xoá/commit.
+- Các tệp trọng tâm: `lib/domain/commands.ts`, `lib/domain/precondition.ts`,
+  `lib/domain/reduce.ts`, `lib/scheduler/validate.ts`, `lib/sheets/event-staff.ts`,
+  `components/ImageEditor.tsx`, `hooks/useEventState.tsx`, `hooks/useMutationQueue.tsx`.
 
 ### Ghi chú khoá phiên Codex 09/08/2026 — v0.5.1
 
@@ -900,12 +943,10 @@ gia, và ô nhập mật khẩu có thêm dòng *"Bạn tạo buổi này mà qu
   khoản vừa đăng nhập đã làm; nhưng hai email Google khác nhau vẫn là hai
   `userId` độc lập. Gộp an toàn cần một luồng xác nhận quyền sở hữu riêng, không
   dùng lại `LinkAccount` và không làm trong đợt danh tính người chơi này.
-- **Mời đồng chủ sự kiện.** Quyền chủ hiện gắn với đúng một tài khoản
-  (`ownerUserId`) cộng với mật khẩu. Việc cho phép chủ mời tài khoản khác cùng
-  làm chủ — hữu ích khi hôm đó bận, nhờ người khác chạy buổi — đã được cân nhắc
-  và bỏ, vì nó cần một bảng phân quyền riêng chứ không nhét thêm được vào một ô.
-  Đừng dựng lại mà chưa hỏi lại: mật khẩu chủ sự kiện đã giải quyết được phần
-  lớn tình huống ấy rồi.
+- **Nhiều đồng chủ ngang quyền.** v0.6.0 vẫn cố ý không cho nhiều Chủ cùng quyền
+  đổi mật khẩu/kết thúc sớm. Thay vào đó là một Chủ duy nhất + tối đa năm Phó có
+  ma trận quyền riêng trong `event_staff`; quyết định cũ “chỉ dùng mật khẩu” đã
+  được yêu cầu v0.6.0 thay thế và không còn là hướng dẫn hiện hành.
 - **Ảnh đại diện trong bảng Công bằng và hộp nhập tỷ số.** Bảng Công bằng là để
   quét mắt theo cột số, thêm ảnh vào làm nó chật. Riêng bước xác nhận trong hộp
   nhập tỷ số thì ảnh **sẽ có ích thật** — đó là chỗ bắt lỗi "nhập đúng tỷ số vào

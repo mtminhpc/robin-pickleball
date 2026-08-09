@@ -103,6 +103,8 @@ describe("khoá và sửa kết quả", () => {
       status: "submitted",
       pinned: false,
       edits: [],
+      courtWave: 1,
+      startedAt: null,
       createdAt: 0,
       result: {
         scoreA: 11,
@@ -342,6 +344,8 @@ describe("bảng xếp hạng", () => {
       status: "submitted",
       pinned: false,
       edits: [],
+      courtWave: 1,
+      startedAt: null,
       createdAt: 0,
       result: {
         scoreA,

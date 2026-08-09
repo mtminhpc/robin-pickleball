@@ -91,14 +91,10 @@ export default function JoinPage() {
             <PhotoPicker
               name={mine.name}
               avatarId={mine.avatarId}
-              photoSrc={
-                mine.userId
-                  ? `/api/avatar/${encodeURIComponent(mine.userId)}`
-                  : undefined
-              }
+              photoSrc={`/api/events/${code}/players/${mine.id}/avatar`}
               endpoint={`/api/events/${code}/players/${mine.id}/photo`}
               canEdit
-              hasPhoto={Boolean(mine.userId)}
+              hasPhoto
             />
           </div>
           <div>
@@ -192,7 +188,7 @@ export default function JoinPage() {
                 <Avatar
                   name={p.name}
                   avatarId={p.avatarId}
-                  userId={p.userId}
+                  src={`/api/events/${code}/players/${p.id}/avatar`}
                   size="sm"
                 />
                 {p.name}

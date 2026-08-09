@@ -15,7 +15,7 @@
  */
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useAccount } from "@/hooks/useAccount";
 import { EventProvider, useEvent, type EventSnapshot } from "@/hooks/useEventState";
@@ -27,14 +27,16 @@ import { SponsorStrip } from "@/components/SponsorStrip";
 export function EventShell({
   code,
   initial,
+  initialIdentity,
   children,
 }: {
   code: string;
   initial: EventSnapshot;
+  initialIdentity: string;
   children: ReactNode;
 }) {
   return (
-    <EventProvider code={code} initial={initial}>
+    <EventProvider code={code} initial={initial} initialIdentity={initialIdentity}>
       <ShellInner code={code}>{children}</ShellInner>
     </EventProvider>
   );
@@ -42,14 +44,27 @@ export function EventShell({
 
 function ShellInner({ code, children }: { code: string; children: ReactNode }) {
   const { data, applyServerState } = useEvent();
+  const router = useRouter();
 
   // Ghi nhớ để trang chủ gợi ý lại ở lần mở sau, khỏi phải nhớ mã sáu ký tự.
   useEffect(() => {
     if (data) rememberEvent(code, data.state.config.name);
   }, [code, data]);
 
+  // Nạp trước mã JavaScript của năm màn hình; EventProvider giữ nguyên state nên
+  // chuyển tab chỉ đổi phần nội dung, không gọi lại toàn bộ snapshot.
+  useEffect(() => {
+    for (const tab of ["", "/standings", "/schedule", "/players", "/admin"]) {
+      router.prefetch(`/e/${code}${tab}`);
+    }
+  }, [code, router]);
+
   return (
-    <MutationQueueProvider code={code} onApplied={applyServerState}>
+    <MutationQueueProvider
+      code={code}
+      onApplied={applyServerState}
+      baseRevision={data?.state.processed ?? 0}
+    >
       <SyncAccount />
       <div className="mx-auto flex min-h-dvh w-full max-w-[78.75rem]">
         <SideBar code={code} />
@@ -91,7 +106,7 @@ function SyncAccount() {
 
   const signedIn = Boolean(account.data?.user);
   const me = data?.state.players.find((p) => p.id === data.myPlayerId) ?? null;
-  const needsLink = signedIn && me !== null && !me.userId;
+  const needsLink = signedIn && me !== null && !data?.myPlayerHasAccount;
   const playerId = me?.id ?? null;
 
   useEffect(() => {
@@ -125,7 +140,7 @@ function useActive(code: string) {
 function SideBar({ code }: { code: string }) {
   const { data } = useEvent();
   const isActive = useActive(code);
-  const isAdmin = data?.role === "admin";
+  const isAdmin = Boolean(data?.capabilities.canOpenAdmin);
 
   return (
     <aside className="hidden w-[14.5rem] flex-none flex-col bg-ink text-mute-200 lg:flex">
@@ -182,7 +197,7 @@ function SideBar({ code }: { code: string }) {
 function TabBar({ code }: { code: string }) {
   const { data } = useEvent();
   const isActive = useActive(code);
-  const isAdmin = data?.role === "admin";
+  const isAdmin = Boolean(data?.capabilities.canOpenAdmin);
 
   return (
     <nav className="sticky bottom-0 z-30 flex bg-ink lg:hidden">
@@ -243,8 +258,7 @@ function Band({ code }: { code: string }) {
           <p className="mt-2 font-display text-display lg:text-[2.875rem]">{title}</p>
           <p className="mt-2 text-[11px] text-mute-400">
             {state.config.courts} sân
-            {role === "admin" && " · bạn là chủ sự kiện"}
-            {role === "viewer" && " · chế độ xem"}
+            {` · ${data.roleLabel.toLowerCase()}`}
           </p>
         </div>
         <div className="flex-none text-right lg:hidden">

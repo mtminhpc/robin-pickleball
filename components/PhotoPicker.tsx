@@ -18,9 +18,10 @@
  * nhớ, và chờ một vòng mạng chỉ để thấy đúng tấm mình vừa chọn là chờ vô ích.
  */
 
-import { useRef, useState } from "react";
-import { shrinkToDataUri } from "@/lib/avatars/resize";
+import { useState } from "react";
 import { Avatar } from "@/components/Avatar";
+import { ImageEditor, type ImageEditorValue } from "@/components/ImageEditor";
+import { Button, Dialog } from "@/components/ui";
 
 export function PhotoPicker({
   name,
@@ -45,39 +46,37 @@ export function PhotoPicker({
   /** Gọi sau khi lưu hoặc xoá xong, để bên ngoài tải lại phần của nó. */
   onChanged?: () => void;
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
-
   const [preview, setPreview] = useState<string | null>(null);
   const [bust, setBust] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [edited, setEdited] = useState<ImageEditorValue | null>(null);
 
   const src =
     preview ??
     (photoSrc ? `${photoSrc}${bust > 0 ? `?v=${bust}` : ""}` : undefined);
 
-  const pick = async (file: File | undefined) => {
-    if (!file) return;
+  const save = async () => {
+    if (!edited) return;
     setBusy(true);
     setError(null);
     try {
-      const photo = await shrinkToDataUri(file);
       const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ photo }),
+        body: JSON.stringify({ photo: edited.image, editMetadata: edited.editMetadata }),
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? "Không lưu được ảnh.");
-      setPreview(photo);
+      setPreview(edited.image);
+      setEditing(false);
+      setEdited(null);
       onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không lưu được ảnh.");
     } finally {
       setBusy(false);
-      // Xoá giá trị ô chọn tệp, nếu không thì chọn lại đúng tấm vừa lỗi sẽ không
-      // kích hoạt `change` lần nữa và người dùng tưởng nút hỏng.
-      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -106,17 +105,10 @@ export function PhotoPicker({
         <Avatar name={name} avatarId={avatarId} src={src} size={size} dimmed={busy} />
         {canEdit && (
           <div className="flex flex-col items-start gap-1">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => pick(e.target.files?.[0])}
-            />
             <button
               type="button"
               disabled={busy}
-              onClick={() => fileRef.current?.click()}
+              onClick={() => setEditing(true)}
               className="eyebrow min-h-9 text-accent-700 underline underline-offset-4 disabled:opacity-40"
             >
               {busy ? "Đang lưu…" : hasPhoto || preview ? "Đổi ảnh" : "Tải ảnh lên"}
@@ -135,6 +127,16 @@ export function PhotoPicker({
         )}
       </div>
       {error && <p className="mt-2 bg-accent p-2 text-xs text-paper">{error}</p>}
+      <Dialog open={editing} onClose={() => setEditing(false)} title="Chỉnh ảnh đại diện">
+        <div className="space-y-4">
+          <h2 className="text-lg uppercase">Chỉnh ảnh đại diện</h2>
+          <ImageEditor label="Chọn ảnh" defaultFit="cover" shape="round" required onChange={(value, reason) => { setEdited(value); setError(reason ?? null); }} />
+          <div className="flex gap-2">
+            <Button type="button" tone="ghost" full onClick={() => setEditing(false)}>Huỷ</Button>
+            <Button type="button" tone="primary" full disabled={busy || !edited} onClick={() => void save()}>{busy ? "Đang lưu…" : "Lưu ảnh"}</Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

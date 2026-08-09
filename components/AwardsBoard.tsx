@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { AwardKind, EventAward, EventState, TrophyMode } from "@/lib/domain/types";
-import { shrinkEventAsset } from "@/lib/assets/resize";
+import { ImageEditor, type ImageEditorValue } from "@/components/ImageEditor";
 import { useEvent } from "@/hooks/useEventState";
 import { Button, Dialog, Field, inputClass } from "@/components/ui";
 
@@ -77,18 +77,17 @@ function Trophy({ code, award }: { code: string; award: EventAward }) {
 }
 
 function AwardDialog({ open, award, state, busy, onClose, onSave }: { open: boolean; award: EventAward | null; state: EventState; busy: boolean; onClose: () => void; onSave: (body: object) => Promise<void> }) {
-  const fileRef = useRef<HTMLInputElement>(null);
   const [kind, setKind] = useState<AwardKind>(award?.kind ?? "champion");
   const [label, setLabel] = useState(award?.label ?? "Vô địch");
   const [recipientIds, setRecipientIds] = useState<string[]>(award?.recipientIds ?? []);
   const [trophyMode, setTrophyMode] = useState<TrophyMode>(award?.trophyMode ?? "framed");
-  const [image, setImage] = useState<string | undefined>();
+  const [edited, setEdited] = useState<ImageEditorValue | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const chooseKind = (next: AwardKind) => { setKind(next); setLabel(KIND_LABEL[next]); };
   return (
     <Dialog open={open} onClose={onClose} title={award ? "Sửa giải" : "Trao giải"}>
-      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void onSave({ id: award?.id, kind, label, recipientIds, trophyMode, image, removeImage }); }}>
+      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void onSave({ id: award?.id, kind, label, recipientIds, trophyMode, ...edited, removeImage }); }}>
         <h2 className="text-lg uppercase">{award ? "Sửa giải" : "Trao giải"}</h2>
         <Field label="Bậc giải"><select value={kind} onChange={(event) => chooseKind(event.target.value as AwardKind)} className={inputClass}><option value="champion">Vô địch / Giải nhất</option><option value="runnerUp">Á quân / Giải nhì</option><option value="third">Giải ba</option><option value="encouragement">Khuyến khích</option><option value="custom">Giải tự đặt</option></select></Field>
         {kind === "champion" && <Field label="Tên hiển thị"><select value={label} onChange={(event) => setLabel(event.target.value)} className={inputClass}><option>Vô địch</option><option>Giải nhất</option></select></Field>}
@@ -96,8 +95,8 @@ function AwardDialog({ open, award, state, busy, onClose, onSave }: { open: bool
         {kind === "custom" && <Field label="Tên giải"><input value={label} onChange={(event) => setLabel(event.target.value)} minLength={2} required className={inputClass} /></Field>}
         <fieldset><legend className="mb-2 text-xs text-mute-700">Người nhận (chọn nhiều để đồng giải)</legend><div className="max-h-44 divide-y divide-line overflow-auto border border-line">{state.players.map((player) => <label key={player.id} className="flex min-h-11 items-center gap-3 px-3 text-sm"><input type="checkbox" checked={recipientIds.includes(player.id)} onChange={(event) => setRecipientIds((current) => event.target.checked ? [...current, player.id] : current.filter((id) => id !== player.id))} className="size-5 accent-accent" />{player.name}</label>)}</div></fieldset>
         <Field label="Kiểu cúp"><select value={trophyMode} onChange={(event) => setTrophyMode(event.target.value as TrophyMode)} className={inputClass}><option value="framed">Trong khung</option><option value="transparent">Nền trong</option></select></Field>
-        <Field label="Ảnh cúp tùy chọn" hint="Bỏ trống để dùng cúp mặc định."><input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={async (event) => { setImageError(null); setRemoveImage(false); try { const selected = event.target.files?.[0]; if (selected) setImage(await shrinkEventAsset(selected)); } catch (reason) { setImageError(reason instanceof Error ? reason.message : "Không đọc được ảnh."); } }} /></Field>
-        {award?.trophyAssetId && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={removeImage} onChange={(event) => { setRemoveImage(event.target.checked); if (event.target.checked) setImage(undefined); }} />Bỏ ảnh cúp tùy chỉnh</label>}
+        <ImageEditor label="Ảnh cúp tùy chọn" defaultFit="contain" shape={trophyMode === "transparent" ? "transparent" : "square"} onChange={(value, reason) => { setEdited(value); setImageError(reason ?? null); if (value) setRemoveImage(false); }} />
+        {award?.trophyAssetId && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={removeImage} onChange={(event) => { setRemoveImage(event.target.checked); if (event.target.checked) setEdited(null); }} />Bỏ ảnh cúp tùy chỉnh</label>}
         {imageError && <p className="text-sm text-accent-700">{imageError}</p>}
         <div className="flex gap-2"><Button type="button" tone="ghost" full onClick={onClose}>Huỷ</Button><Button type="submit" tone="primary" full disabled={busy || recipientIds.length === 0 || Boolean(imageError)}>{busy ? "Đang lưu…" : "Lưu giải"}</Button></div>
       </form>

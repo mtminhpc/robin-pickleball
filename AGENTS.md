@@ -6,13 +6,26 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 
 ## Trạng thái đã chốt
 
-- Phiên bản mã hiện tại: `v0.5.1`, nhánh phát hành
-  `codex/v0.5.1-cross-device-history`. Tag/Production phải cùng trỏ bản đã qua cổng
+- Phiên bản mã hiện tại: `v0.6.0`, nhánh phát hành
+  `codex/v0.6.0-media-cache-copy`. Tag/Production phải cùng trỏ bản đã qua cổng
   kiểm định; xem huy hiệu dưới phải giao diện để biết commit đang chạy.
 - Production: https://robin-pickleball.vercel.app
-- Mốc Production trước đợt này là deployment `dpl_3Dzh1cnnvZRoBk3oTg6qGeG48hFc`,
-  HTML `v0.5.0 · 6a1e4d4`. Không được nhầm mốc cũ này với việc v0.5.1 đã deploy;
-  sau khi đẩy `main` phải kiểm alias và huy hiệu lại.
+- Mốc Production trước đợt này là `v0.5.1 · a54125f`; sau khi đẩy `main` phải kiểm
+  alias và huy hiệu lại, không coi push nhánh tính năng là đã phát hành.
+- Bản `v0.6.0` có 1 Chủ + tối đa 5 Phó + mật khẩu điều hành giới hạn; phân quyền
+  tập trung bằng capability. `event_staff`/`event_auth` là append-only. Chủ/Phó sửa
+  điểm đã chốt phải có lý do; sau khi kết thúc chỉ Chủ được sửa.
+- Lịch nay dời một trận bằng `PromoteMatch`, không còn nút đổi cả vòng. Máy chủ kiểm
+  trùng người/sân, hiện diện, logical round, chuỗi liên tiếp và chênh số trận; log cũ
+  `SwapRounds` vẫn phát lại. Mỗi mutation có điều kiện đích trong log để hai Vercel
+  instance cùng sửa một trận chỉ có một lệnh thắng.
+- Form tách tên/địa chỉ, có ước tính số trận/thời lượng. Sự kiện finished sao chép
+  cấu hình/roster/tài trợ với idempotency nhưng không chép điểm, giải, lịch, quyền hay
+  mật khẩu. Media dùng editor chung 256×256; avatar mới nằm trong `account_assets`.
+- `EventProvider` sống xuyên tab, cache công khai đã lược trong IndexedDB, ETag/304,
+  BroadcastChannel và poll thích ứng. Không cache API quyền bằng service worker.
+- Quyền quản lý người chơi không cho phép sửa ảnh hồ sơ Google toàn cục của người
+  khác; đội điều hành chỉ được đặt ảnh hộ tài khoản vãng lai.
 - Bản `v0.5.0` dựng sát handoff Claude Design v3: trang chủ bốn tab, danh sách
   sự kiện theo tài khoản, quota, tài trợ ba hình dạng, Bảng vàng/trao giải và
   kết thúc bình thường. Toàn bộ 513 bài test xanh; 152 lượt mô phỏng 4–11
@@ -24,17 +37,21 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
   được ghi. Hai ô giờ/ngày thay `datetime-local`. Cổng cuối: 524 bài test,
   152 lượt công bằng, build và typecheck sạch.
 - Kho thử bền vững nằm ở `.data/test-sandbox.json`: chạy `npm run dev:test`, vào mã
-  `TEST11` để thử công bằng hoặc `TESTV5` để xem tài trợ/Bảng vàng; mật khẩu
-  người chơi `test1234`, quản trị `admin1234`. Chạy lại không reset dữ liệu và
+  `TEST11` để thử công bằng, `TESTV5` để xem tài trợ/Bảng vàng hoặc `TESTV6` để thử
+  đội điều hành/media/dời trận; mật khẩu người chơi `test1234`, điều hành
+  `admin1234`. Chạy lại không reset dữ liệu và
   không đụng Google Sheet.
-- Trên máy này CLB TEST có mã mời `H9DFHG`, 11 người TEST; SHA-256 hiện tại là
-  `FAF9167333BA9C5CD1C72065C82F06393650F133F90B7000D2EEA099565254DA`. Bốn probe
+- Trên máy này CLB TEST có mã mời `H9DFHG`, 11 người TEST; SHA-256 sau khi thêm
+  `TESTV6` là `6DD0194AE0FC81784CEA39301D8DD372B7AFD9FDCE738243088CCB5D5A20754D`. Bốn probe
   cũ của phiên đánh giá bảo mật đã nằm trong log; probe v0.4.1 bị 403 và không ghi thêm.
+- Cổng v0.6.0: 560/560 test, 152 lượt công bằng/0 vấn đề, typecheck/build sạch;
+  Chrome điện thoại và Edge desktop tải TESTV6 đúng, ETag 304, public state không
+  phát `userId`/`deviceId` và kho TEST không đổi SHA.
 - Nhánh mặc định có các commit tài liệu bàn giao sau commit/tag production. Chênh
   lệch tài liệu đó với `main` là có chủ ý, không phải mã runtime còn làm dở.
 - `EventState.presentation` chỉ giữ metadata/`assetId`; byte logo/cúp nằm trong
-  tab `event_assets`. Quota nằm ở `app_event_limits`; vé chống tạo đồng thời nằm
-  ở `app_event_reservations`.
+  tab `event_assets`; avatar mới nằm trong `account_assets`. Quota nằm ở
+  `app_event_limits`; vé chống tạo đồng thời nằm ở `app_event_reservations`.
 - App admin chỉ quản quota: `mtminhpc@gmail.com`, `prolathevt02@gmail.com`.
   Tuyệt đối không dùng cờ app admin để cấp quyền vào sự kiện người khác.
 

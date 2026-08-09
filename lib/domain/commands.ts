@@ -36,6 +36,7 @@ export interface MatchSeed {
   id: MatchId;
   round: number;
   court: number;
+  courtWave?: number;
   teamA: [PlayerId, PlayerId];
   teamB: [PlayerId, PlayerId];
 }
@@ -157,6 +158,14 @@ export type Command =
   | { type: "SetSchedule"; fromRound: number; matches: MatchSeed[] }
   /** Admin dời một trận sang vòng/sân khác. Trận đó thành "ghim". */
   | { type: "ReorderMatch"; matchId: MatchId; toRound: number; toCourt: number }
+  /** Đưa đúng một trận tương lai lên sân vừa trống, không dời cả vòng. */
+  | {
+      type: "PromoteMatch";
+      matchId: MatchId;
+      toRound: number;
+      toCourt: number;
+      startNow: boolean;
+    }
   /**
    * Đổi chỗ toàn bộ hai vòng cho nhau.
    *
@@ -213,6 +222,18 @@ export interface CommandEnvelope {
   at: number;
   actor: Actor;
   command: Command;
+  /**
+   * Dấu vân tay của đúng phần trạng thái mà lệnh sắp sửa.
+   *
+   * Khóa trong bộ nhớ chỉ bảo vệ một Vercel instance. Khi hai instance cùng đọc một snapshot,
+   * cả hai vẫn có thể nối thêm log. Dấu này được ghi cùng lệnh để lúc phát lại, lệnh tới sau bị
+   * từ chối nếu tỷ số/vị trí/người chơi đích đã đổi; lệnh độc lập không bị chặn chỉ vì revision
+   * toàn sự kiện đã tăng.
+   */
+  precondition?: {
+    version: 1;
+    fingerprint: string;
+  };
 }
 
 /** Các lệnh chỉ chủ sự kiện được phép gửi. */
@@ -237,6 +258,7 @@ export const ADMIN_ONLY: readonly CommandType[] = [
   "GrantCatchUp",
   "SetSchedule",
   "ReorderMatch",
+  "PromoteMatch",
   "SwapRounds",
   "PinMatch",
   "CancelMatch",
@@ -291,7 +313,133 @@ export const SELF_SERVICE: readonly CommandType[] = [
   "DeclareAvailability",
 ];
 
-export type Role = "viewer" | "player" | "admin";
+/**
+ * Vai trò hiệu lực trong một sự kiện.
+ *
+ * `admin` chỉ còn dành cho sự kiện legacy chưa gắn tài khoản chủ. Cookie mật khẩu
+ * của sự kiện đã có chủ được hạ xuống `operator`; không dùng `admin` làm tên gọi
+ * chung cho mọi quyền quản trị nữa.
+ */
+export type Role =
+  | "viewer"
+  | "player"
+  | "operator"
+  | "manager"
+  | "owner"
+  | "admin";
+
+export interface EventCapabilities {
+  canOpenAdmin: boolean;
+  canManagePlayers: boolean;
+  canManageSchedule: boolean;
+  canEditAnyScore: boolean;
+  canFinishNormally: boolean;
+  canEndEarly: boolean;
+  canManageConfig: boolean;
+  canManageStaff: boolean;
+  canManagePresentation: boolean;
+  canChangePasswords: boolean;
+  canCopyEvent: boolean;
+}
+
+const NO_CAPABILITIES: EventCapabilities = {
+  canOpenAdmin: false,
+  canManagePlayers: false,
+  canManageSchedule: false,
+  canEditAnyScore: false,
+  canFinishNormally: false,
+  canEndEarly: false,
+  canManageConfig: false,
+  canManageStaff: false,
+  canManagePresentation: false,
+  canChangePasswords: false,
+  canCopyEvent: false,
+};
+
+export function capabilitiesForRole(role: Role): EventCapabilities {
+  if (role === "owner") {
+    return Object.fromEntries(
+      Object.keys(NO_CAPABILITIES).map((key) => [key, true]),
+    ) as unknown as EventCapabilities;
+  }
+  // `admin` is the compatibility role for an ownerless legacy event. It keeps
+  // full match/event operation until ownership is claimed, but must not gain
+  // account-only powers such as staff, presentation, password or copy.
+  if (role === "admin") {
+    return {
+      ...NO_CAPABILITIES,
+      canOpenAdmin: true,
+      canManagePlayers: true,
+      canManageSchedule: true,
+      canEditAnyScore: true,
+      canFinishNormally: true,
+      canEndEarly: true,
+      canManageConfig: true,
+    };
+  }
+  if (role === "manager") {
+    return {
+      ...NO_CAPABILITIES,
+      canOpenAdmin: true,
+      canManagePlayers: true,
+      canManageSchedule: true,
+      canEditAnyScore: true,
+      canFinishNormally: true,
+    };
+  }
+  if (role === "operator") {
+    return {
+      ...NO_CAPABILITIES,
+      canOpenAdmin: true,
+      canManagePlayers: true,
+      canManageSchedule: true,
+    };
+  }
+  return NO_CAPABILITIES;
+}
+
+export function roleLabel(role: Role): string {
+  if (role === "owner") return "Chủ sự kiện";
+  if (role === "manager") return "Phó sự kiện";
+  if (role === "operator") return "Điều hành bằng mật khẩu";
+  if (role === "admin") return "Quản trị sự kiện cũ";
+  if (role === "player") return "Người chơi";
+  return "Chế độ xem";
+}
+
+const OWNER_ONLY = new Set<CommandType>([
+  "UpdateConfig",
+  "EndEventEarly",
+  "SetSponsorLogoShape",
+  "UpsertSponsor",
+  "RemoveSponsor",
+  "ReorderSponsors",
+  "UpsertAward",
+  "RemoveAward",
+]);
+
+const MANAGER_ONLY = new Set<CommandType>([
+  "StartEvent",
+  "FinishEvent",
+  "RemovePlayer",
+  "GrantCatchUp",
+  "SwapRounds",
+]);
+
+const OPERATOR_COMMANDS = new Set<CommandType>([
+  "AddPlayer",
+  "MarkArrived",
+  "ApproveJoin",
+  "RejectJoin",
+  "PausePlayer",
+  "ResumePlayer",
+  "SetSchedule",
+  "ReorderMatch",
+  "PromoteMatch",
+  "PinMatch",
+  "CancelMatch",
+  "AbandonMatch",
+]);
 
 /**
  * `EditResult` có luật riêng nên không nằm trong hai danh sách trên: trong cửa sổ
@@ -299,10 +447,15 @@ export type Role = "viewer" | "player" | "admin";
  * Xem `canEditResult` trong `rules.ts`.
  */
 export function isAllowedForRole(type: CommandType, role: Role): boolean {
-  if (role === "admin") return true;
+  if (role === "owner" || role === "admin") return true;
   if (PUBLIC_COMMANDS.includes(type)) return true;
   if (role === "viewer") return false;
-  return !ADMIN_ONLY.includes(type);
+  if (!ADMIN_ONLY.includes(type)) return true;
+  if (role === "manager") return !OWNER_ONLY.has(type);
+  if (role === "operator") {
+    return !OWNER_ONLY.has(type) && !MANAGER_ONLY.has(type) && OPERATOR_COMMANDS.has(type);
+  }
+  return false;
 }
 
 /**
@@ -319,7 +472,7 @@ export function isAllowedForActor(
   myPlayerId: string | null,
   targetPlayerId: string | null,
 ): boolean {
-  if (role === "admin") return true;
+  if (role === "owner" || role === "admin") return true;
   if (SELF_SERVICE.includes(type)) {
     return Boolean(myPlayerId && targetPlayerId && myPlayerId === targetPlayerId);
   }

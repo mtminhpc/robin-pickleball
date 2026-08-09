@@ -17,7 +17,7 @@ import {
 import type { CommandEnvelope } from "@/lib/domain/commands";
 import { emptyState } from "@/lib/domain/reduce";
 import { DEFAULT_CONFIG, type EventConfig } from "@/lib/domain/types";
-import { getAppEventLimitRepo, getEventCreationReservationRepo, getRepo, invalidateEvent, withAccountLock } from "@/lib/sheets/cache";
+import { getAppEventLimitRepo, getEventCreationReservationRepo, getEventStaffRepo, getRepo, invalidateEvent, withAccountLock } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
 import {
   activeMembers,
@@ -32,12 +32,17 @@ import { DEFAULT_EVENT_LIMIT, isAppAdminEmail } from "@/lib/domain/app-admin";
 
 interface CreateBody {
   name?: string;
+  venueAddress?: string;
   /** Tạo từ một câu lạc bộ: cả danh bạ được thêm sẵn vào buổi này. */
   clubId?: string;
   courts?: number;
   pointsTo?: number;
   winBy2?: boolean;
   scheduledAt?: number | null;
+  expectedPlayers?: number;
+  targetGamesPerPlayer?: number;
+  estimatedMatchMinutes?: number;
+  courtTurnoverMinutes?: number;
   playerPassword?: string;
   adminPassword?: string;
 }
@@ -45,14 +50,25 @@ interface CreateBody {
 export async function GET(request: NextRequest) {
   const user = await currentUser(request);
   if (!user || !user.account.email) return fail(401, "Hãy đăng nhập Google để xem các trận đã tạo.");
-  const events = await getRepo().listByOwner(user.account.userId);
+  const repo = getRepo();
+  const events = await repo.listByOwner(user.account.userId);
+  const assignedCodes = await getEventStaffRepo().eventCodesFor({
+    userId: user.account.userId,
+    email: user.account.email,
+  });
+  const ownedCodes = new Set(events.map((item) => item.record.code));
+  const assigned = (await repo.listByCodes(assignedCodes)).filter(
+    (item) => !ownedCodes.has(item.record.code),
+  );
   const quota = await quotaFor(user.account.email, events.filter((item) => item.state.status !== "finished").length);
   return NextResponse.json({
     quota,
-    events: events
-      .map(({ record, state }) => ({
+    events: [...events.map((item) => ({ ...item, relation: "owner" as const })), ...assigned.map((item) => ({ ...item, relation: "manager" as const }))]
+      .map(({ record, state, relation }) => ({
         code: record.code,
         name: state.config.name || record.name,
+        venueAddress: state.config.venueAddress,
+        relation,
         status: state.status,
         scheduledAt: state.config.scheduledAt,
         createdAt: state.createdAt,
@@ -81,6 +97,9 @@ export async function POST(request: NextRequest) {
 
   const name = (body.name ?? "").trim();
   if (name.length < 2) return fail(400, "Đặt tên cho buổi đánh (ít nhất 2 ký tự).");
+  if (name.length > 80) return fail(400, "Tên sự kiện tối đa 80 ký tự.");
+  const venueAddress = (body.venueAddress ?? "").trim();
+  if (venueAddress.length > 200) return fail(400, "Địa chỉ sân tối đa 200 ký tự.");
 
   const courts = Math.round(body.courts ?? DEFAULT_CONFIG.courts);
   if (courts < 1 || courts > 8) return fail(400, "Số sân phải từ 1 đến 8.");
@@ -90,17 +109,34 @@ export async function POST(request: NextRequest) {
 
   const adminPassword = body.adminPassword ?? "";
   if (adminPassword.length < 4) {
-    return fail(400, "Mật khẩu chủ sự kiện phải ít nhất 4 ký tự.");
+    return fail(400, "Mật khẩu điều hành phải ít nhất 4 ký tự.");
   }
   // Mật khẩu người chơi để trống nghĩa là ai có đường dẫn cũng nhập điểm được.
   // Hợp lý với nhóm quen nhau, nên cho phép chứ không ép đặt.
   const playerPassword = body.playerPassword ?? "";
+  const scheduledAt = validScheduledAt(body.scheduledAt);
+  if (body.scheduledAt !== null && body.scheduledAt !== undefined && scheduledAt === null) {
+    return fail(400, "Ngày giờ dự kiến không hợp lệ.");
+  }
+
+  const expectedPlayers = boundedInteger(body.expectedPlayers, DEFAULT_CONFIG.expectedPlayers, 4, 200);
+  const targetGamesPerPlayer = boundedInteger(body.targetGamesPerPlayer, DEFAULT_CONFIG.targetGamesPerPlayer, 1, 50);
+  const estimatedMatchMinutes = boundedInteger(body.estimatedMatchMinutes, DEFAULT_CONFIG.estimatedMatchMinutes, 5, 180);
+  const courtTurnoverMinutes = boundedInteger(body.courtTurnoverMinutes, DEFAULT_CONFIG.courtTurnoverMinutes, 0, 60);
+  if ([expectedPlayers, targetGamesPerPlayer, estimatedMatchMinutes, courtTurnoverMinutes].some((value) => value === null)) {
+    return fail(400, "Thông số ước tính thi đấu không hợp lệ.");
+  }
 
   const config: EventConfig = {
     ...DEFAULT_CONFIG,
     name,
-    scheduledAt: validScheduledAt(body.scheduledAt),
+    venueAddress,
+    scheduledAt,
     courts,
+    expectedPlayers: expectedPlayers!,
+    targetGamesPerPlayer: targetGamesPerPlayer!,
+    estimatedMatchMinutes: estimatedMatchMinutes!,
+    courtTurnoverMinutes: courtTurnoverMinutes!,
     scoring: { pointsTo, winBy2: body.winBy2 ?? DEFAULT_CONFIG.scoring.winBy2 },
   };
 
@@ -183,7 +219,7 @@ export async function POST(request: NextRequest) {
     now,
   );
 
-    const actor = { kind: "admin", label: "chủ sự kiện" } as const;
+    const actor = { kind: "admin", label: `Chủ sự kiện · ${user.account.displayName}` } as const;
     const envelopes: CommandEnvelope[] = [
     {
       id: `create-${code}`,
@@ -236,7 +272,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ code, name, invited: roster.length });
     response.cookies.set(
     cookieName(code),
-    signSession(newSession(code, "admin", now), sessionSecret()),
+    signSession(newSession(code, "admin", now, 0), sessionSecret()),
     {
       httpOnly: true,
       sameSite: "lax",
@@ -247,6 +283,16 @@ export async function POST(request: NextRequest) {
   );
     return response;
   });
+}
+
+function boundedInteger(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number | null {
+  const numeric = Math.round(value === undefined ? fallback : Number(value));
+  return Number.isFinite(numeric) && numeric >= min && numeric <= max ? numeric : null;
 }
 
 function validScheduledAt(value: unknown): number | null {

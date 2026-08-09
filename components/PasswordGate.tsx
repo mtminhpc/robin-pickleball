@@ -55,7 +55,7 @@ export function PasswordGate({ code }: { code: string }) {
     <Card className="p-4">
       <form onSubmit={submit} className="space-y-3">
         <p className="text-sm text-mute-800">
-          Bạn đang ở chế độ xem. Nhập mật khẩu để nhập điểm.
+          Bạn đang ở chế độ xem. Nhập mật khẩu người chơi hoặc mật khẩu điều hành.
         </p>
         <div className="flex gap-2">
           <input
@@ -78,7 +78,7 @@ export function PasswordGate({ code }: { code: string }) {
           với `AccountBar`. */}
       {account.data?.enabled && !account.data.user && (
         <p className="mt-3 border-t border-line pt-3 text-xs text-mute-700">
-          Bạn tạo buổi này mà quên mật khẩu?{" "}
+          Bạn tạo buổi này mà quên mật khẩu điều hành?{" "}
           <a
             href={signInHref(pathname)}
             className="font-semibold text-accent-700 underline underline-offset-4"

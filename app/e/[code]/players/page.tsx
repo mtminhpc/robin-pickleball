@@ -69,8 +69,8 @@ export default function PlayersPage() {
   }, [data]);
 
   if (!data) return null;
-  const { state, role } = data;
-  const isAdmin = role === "admin";
+  const { state } = data;
+  const isAdmin = data.capabilities.canManagePlayers;
   const waiting = state.players.filter((p) => p.status === "pendingApproval");
 
   return (
@@ -157,6 +157,7 @@ export default function PlayersPage() {
               {group.players.map((p) => (
                 <PlayerRow
                   key={p.id}
+                  code={code}
                   player={p}
                   isAdmin={isAdmin}
                   // Máy chủ đã tính sẵn `myPlayerId` có xét cả tài khoản lẫn máy.
@@ -176,7 +177,7 @@ export default function PlayersPage() {
 
         {!isAdmin && (
           <p className="pt-6 text-center text-[11px] text-mute-600">
-            Cần mật khẩu chủ sự kiện để thêm, duyệt hoặc sửa danh sách. Mã buổi
+            Cần quyền Chủ, Phó hoặc mật khẩu điều hành để thêm, duyệt hoặc sửa danh sách. Mã buổi
             đánh: <span className="font-semibold">{code}</span>
           </p>
         )}
@@ -223,6 +224,7 @@ export default function PlayersPage() {
 }
 
 function PlayerRow({
+  code,
   player,
   isAdmin,
   isMe,
@@ -231,6 +233,7 @@ function PlayerRow({
   onRemove,
   onDeclare,
 }: {
+  code: string;
   player: Player;
   isAdmin: boolean;
   isMe: boolean;
@@ -247,7 +250,7 @@ function PlayerRow({
       <Avatar
         name={player.name}
         avatarId={player.avatarId}
-        userId={player.userId}
+        src={`/api/events/${code}/players/${player.id}/avatar`}
         dimmed={dimmed}
         size="sm"
       />
@@ -422,14 +425,10 @@ function EditDialog({
           <PhotoPicker
             name={player.name}
             avatarId={player.avatarId}
-            photoSrc={
-              player.userId
-                ? `/api/avatar/${encodeURIComponent(player.userId)}`
-                : undefined
-            }
+            photoSrc={`/api/events/${code}/players/${player.id}/avatar`}
             endpoint={`/api/events/${code}/players/${player.id}/photo`}
             canEdit
-            hasPhoto={Boolean(player.userId)}
+            hasPhoto
           />
         </div>
 

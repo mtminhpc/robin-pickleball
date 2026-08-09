@@ -8,17 +8,19 @@
  * là mời gọi tai nạn.
  */
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { firstUnplayedRound } from "@/lib/domain/rounds";
-import { eventQueryKey, useEvent } from "@/hooks/useEventState";
+import { eventQueryPrefix, useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { signInHref, useAccount } from "@/hooks/useAccount";
 import { rememberEvent } from "@/lib/identity/device";
 import { PasswordGate } from "@/components/PasswordGate";
 import { Button, Card, Dialog, Empty, Field, inputClass } from "@/components/ui";
 import { SponsorManager } from "@/components/SponsorManager";
+import { estimateEvent, formatEstimatedDuration } from "@/lib/domain/estimate";
+import type { EventConfig } from "@/lib/domain/types";
 
 export default function AdminPage() {
   const { code } = useParams<{ code: string }>();
@@ -27,13 +29,13 @@ export default function AdminPage() {
   const [ending, setEnding] = useState(false);
 
   if (!data) return null;
-  const { state, role } = data;
+  const { state, capabilities } = data;
 
-  if (role !== "admin") {
+  if (!capabilities.canOpenAdmin) {
     return (
       <div className="space-y-4">
         <p className="text-sm text-mute-700">
-          Trang này cần mật khẩu chủ sự kiện.
+          Trang này cần quyền Chủ, Phó hoặc mật khẩu điều hành.
         </p>
         <PasswordGate code={code} />
       </div>
@@ -49,7 +51,7 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-5 pb-4">
-      {state.status === "draft" && (
+      {state.status === "draft" && (data.role === "owner" || data.role === "manager" || data.role === "admin") && (
         <Card className="space-y-3 p-5">
           <h2 className="font-semibold">Bắt đầu buổi đánh</h2>
           <p className="text-sm text-mute-700">
@@ -71,60 +73,24 @@ export default function AdminPage() {
 
       <OwnershipSection code={code} eventName={state.config.name} />
 
-      {data.ownerByAccount && <PasswordSection code={code} />}
+      {capabilities.canManageStaff && <EventStaffSection code={code} />}
 
-      <SponsorManager code={code} />
+      {capabilities.canChangePasswords && <PasswordSection code={code} />}
 
-      <Card className="space-y-4 p-5">
-        <h2 className="font-semibold">Cấu hình</h2>
-        <Field
-          label="Số sân"
-          hint="Đổi giữa chừng thì phần lịch chưa đánh sẽ được xếp lại."
-        >
-          <input
-            type="number"
-            min={1}
-            max={8}
-            defaultValue={state.config.courts}
-            onBlur={(e) => {
-              const courts = Number(e.target.value);
-              if (courts >= 1 && courts <= 8 && courts !== state.config.courts) {
-                queue.send({ type: "UpdateConfig", patch: { courts } });
-              }
-            }}
-            className={inputClass}
-          />
-        </Field>
+      {capabilities.canManagePresentation && <SponsorManager code={code} />}
 
-        <label className="flex items-start gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={state.config.countPartialMatches}
-            onChange={(e) =>
-              queue.send({
-                type: "UpdateConfig",
-                patch: { countPartialMatches: e.target.checked },
-              })
-            }
-            className="mt-0.5 h-5 w-5 shrink-0 accent-accent"
-          />
-          <span>
-            Tính trận dở dang vào bảng xếp hạng
-            <span className="block text-xs text-mute-600">
-              Trận bị bỏ giữa chừng nhưng có ghi tỷ số.
-            </span>
-          </span>
-        </label>
-      </Card>
+      {state.status === "finished" && capabilities.canCopyEvent && <CopyEventSection code={code} />}
+
+      {capabilities.canManageConfig && <EventConfigSection config={state.config} />}
 
       <LogSection />
 
-      {state.status === "running" && (
+      {state.status === "running" && (capabilities.canFinishNormally || capabilities.canEndEarly) && (
         <Card className="space-y-3 border-line p-5">
           <h2 className={`font-semibold ${openMatches > 0 ? "text-accent-700" : ""}`}>
             {openMatches > 0 ? "Kết thúc sớm" : "Hoàn tất buổi đánh"}
           </h2>
-          {openMatches > 0 ? (
+          {openMatches > 0 && capabilities.canEndEarly ? (
             <>
               <p className="text-sm text-mute-700">
                 Huỷ toàn bộ trận chưa đánh và chốt bảng xếp hạng. Không mở lại được.
@@ -132,11 +98,15 @@ export default function AdminPage() {
               </p>
               <Button tone="danger" full onClick={() => setEnding(true)}>Kết thúc sớm</Button>
             </>
-          ) : (
+          ) : openMatches === 0 && capabilities.canFinishNormally ? (
             <>
               <p className="text-sm text-mute-700">Không còn trận nào chờ hoặc đang đánh. Bạn có thể chốt kết quả bình thường để mở phần Trao giải.</p>
               <Button tone="primary" full onClick={() => queue.send({ type: "FinishEvent" })}>Hoàn tất &amp; mở trao giải</Button>
             </>
+          ) : (
+            <p className="text-sm text-mute-700">
+              Chỉ Chủ sự kiện được kết thúc sớm khi vẫn còn trận mở.
+            </p>
           )}
         </Card>
       )}
@@ -150,6 +120,224 @@ export default function AdminPage() {
         }}
       />
     </div>
+  );
+}
+
+function EventConfigSection({ config }: { config: EventConfig }) {
+  const queue = useMutationQueue();
+  const [name, setName] = useState(config.name);
+  const [venueAddress, setVenueAddress] = useState(config.venueAddress);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPatch = useRef<Partial<EventConfig>>({});
+  const sendRef = useRef(queue.send);
+  sendRef.current = queue.send;
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (Object.keys(pendingPatch.current).length > 0) {
+      sendRef.current({ type: "UpdateConfig", patch: pendingPatch.current });
+      pendingPatch.current = {};
+    }
+  }, []);
+  const debounce = (patch: Partial<EventConfig>) => {
+    pendingPatch.current = { ...pendingPatch.current, ...patch };
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      queue.send({ type: "UpdateConfig", patch: pendingPatch.current });
+      pendingPatch.current = {};
+    }, 750);
+  };
+  const numberField = (
+    key: "courts" | "expectedPlayers" | "targetGamesPerPlayer" | "estimatedMatchMinutes" | "courtTurnoverMinutes",
+    label: string,
+    min: number,
+    max: number,
+  ) => (
+    <Field label={label}>
+      <input type="number" min={min} max={max} defaultValue={config[key]} onBlur={(event) => {
+        const value = Math.round(Number(event.target.value));
+        if (Number.isFinite(value) && value >= min && value <= max && value !== config[key]) {
+          queue.send({ type: "UpdateConfig", patch: { [key]: value } });
+        }
+      }} className={inputClass} />
+    </Field>
+  );
+  const estimate = estimateEvent({
+    players: config.expectedPlayers,
+    courts: config.courts,
+    targetGamesPerPlayer: config.targetGamesPerPlayer,
+    matchMinutes: config.estimatedMatchMinutes,
+    turnoverMinutes: config.courtTurnoverMinutes,
+  });
+  return (
+    <Card className="space-y-4 p-5">
+      <h2 className="font-semibold">Thông tin & cấu hình</h2>
+      <Field label="Tên sự kiện"><input value={name} maxLength={80} onChange={(event) => { const value = event.target.value; setName(value); if (value.trim().length >= 2) debounce({ name: value.trim() }); }} className={inputClass} /></Field>
+      <Field label="Địa chỉ sân"><input value={venueAddress} maxLength={200} onChange={(event) => { const value = event.target.value; setVenueAddress(value); debounce({ venueAddress: value.trim() }); }} className={inputClass} /></Field>
+      <div className="grid grid-cols-2 gap-3">
+        {numberField("courts", "Số sân", 1, 8)}
+        {numberField("expectedPlayers", "Số người dự kiến", 4, 200)}
+        {numberField("targetGamesPerPlayer", "Trận/người", 1, 50)}
+        {numberField("estimatedMatchMinutes", "Phút/trận", 5, 180)}
+        {numberField("courtTurnoverMinutes", "Phút đổi sân", 0, 60)}
+      </div>
+      {estimate && <p className="border-l-4 border-accent bg-surface p-3 text-xs">Ước tính {estimate.totalMatches} trận · {formatEstimatedDuration(estimate.durationMinutes)} · chờ trung bình {estimate.averageWaitMinutes} phút.</p>}
+      <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={config.countPartialMatches} onChange={(event) => queue.send({ type: "UpdateConfig", patch: { countPartialMatches: event.target.checked } })} className="mt-0.5 size-5 shrink-0 accent-accent" /><span>Tính trận dở dang vào bảng xếp hạng<span className="block text-xs text-mute-600">Trận bị bỏ giữa chừng nhưng có ghi tỷ số.</span></span></label>
+    </Card>
+  );
+}
+
+function CopyEventSection({ code }: { code: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const copyKey = useRef<string | null>(null);
+  const copy = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/events/${code}/copy`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idempotencyKey: copyKey.current ??= crypto.randomUUID() }),
+      });
+      const body = await response.json() as { code?: string; error?: string };
+      if (!response.ok || !body.code) throw new Error(body.error ?? "Không sao chép được sự kiện.");
+      copyKey.current = null;
+      router.push(`/e/${body.code}/players`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Không sao chép được sự kiện.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="space-y-3 p-5">
+      <h2 className="font-semibold">Sao chép sự kiện</h2>
+      <p className="text-sm text-mute-700">
+        Giữ cấu hình, địa chỉ, danh sách mời và nhà tài trợ. Không sao chép lịch, điểm, giải thưởng,
+        ngày giờ hoặc mật khẩu. Bản sao mới tính vào hạn mức sự kiện.
+      </p>
+      <Button full disabled={busy} onClick={copy}>{busy ? "Đang sao chép…" : "Tạo bản sao"}</Button>
+      {error && <p className="text-xs text-accent-700">{error}</p>}
+    </Card>
+  );
+}
+
+interface StaffMemberView {
+  staffId: string;
+  email: string;
+  displayName: string;
+  status: "pending" | "active";
+  createdAt: number;
+}
+
+function EventStaffSection({ code }: { code: string }) {
+  const account = useAccount();
+  const client = useQueryClient();
+  const [email, setEmail] = useState("");
+  const staff = useQuery<{ max: number; members: StaffMemberView[] }>({
+    queryKey: ["event-staff", code],
+    queryFn: async () => {
+      const response = await fetch(`/api/events/${code}/staff`);
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Không tải được đội điều hành.");
+      return body;
+    },
+    staleTime: 30_000,
+  });
+  const change = useMutation({
+    mutationFn: async (input: { email?: string; removeId?: string }) => {
+      const response = await fetch(
+        input.removeId
+          ? `/api/events/${code}/staff/${input.removeId}`
+          : `/api/events/${code}/staff`,
+        input.removeId
+          ? { method: "DELETE" }
+          : {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ email: input.email }),
+            },
+      );
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Không cập nhật được đội điều hành.");
+      return body;
+    },
+    onSuccess: () => {
+      setEmail("");
+      void client.invalidateQueries({ queryKey: ["event-staff", code] });
+      void client.invalidateQueries({ queryKey: eventQueryPrefix(code) });
+    },
+  });
+
+  const members = staff.data?.members ?? [];
+  return (
+    <Card className="space-y-4 p-5">
+      <div>
+        <p className="eyebrow text-accent">Đội điều hành</p>
+        <h2 className="mt-1 font-semibold">Chủ chính và Phó sự kiện</h2>
+        <p className="mt-1 text-xs leading-relaxed text-mute-600">
+          Tối đa {staff.data?.max ?? 5} Phó. Phó được vận hành trận và kết thúc bình thường,
+          nhưng không đổi mật khẩu, tài trợ, giải thưởng hoặc kết thúc sớm.
+        </p>
+      </div>
+
+      <div className="border border-line bg-surface p-3 text-sm">
+        <strong>Chủ sự kiện</strong>
+        <p className="mt-1 truncate text-xs text-mute-600">
+          {account.data?.user?.displayName} · {account.data?.user?.email}
+        </p>
+      </div>
+
+      <form
+        className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (email.trim()) change.mutate({ email: email.trim() });
+        }}
+      >
+        <input
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="email.pho@gmail.com"
+          className={inputClass}
+          maxLength={254}
+          required
+        />
+        <Button type="submit" disabled={change.isPending || members.length >= (staff.data?.max ?? 5)}>
+          Mời Phó
+        </Button>
+      </form>
+
+      {staff.isLoading && <p className="text-sm text-mute-600">Đang tải đội điều hành…</p>}
+      {staff.error && <p className="text-sm text-accent-700">{(staff.error as Error).message}</p>}
+      {change.error && <p className="text-sm text-accent-700">{(change.error as Error).message}</p>}
+      {members.length > 0 && (
+        <div className="divide-y divide-line border-y border-line">
+          {members.map((member) => (
+            <div key={member.staffId} className="flex items-center gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">
+                  {member.displayName || member.email}
+                </p>
+                <p className="truncate text-xs text-mute-600">
+                  {member.email} · {member.status === "active" ? "Đang hoạt động" : "Chờ đăng nhập"}
+                </p>
+              </div>
+              <Button
+                tone="neutral"
+                className="min-h-10 px-3"
+                disabled={change.isPending}
+                onClick={() => change.mutate({ removeId: member.staffId })}
+              >
+                Thu hồi
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -176,7 +364,7 @@ function OwnershipSection({
       <Card className="space-y-3 border-accent-600 p-5">
         <h2 className="text-balance font-semibold">Buổi cũ chưa gắn tài khoản</h2>
         <p className="text-pretty text-sm text-mute-700">
-          Đăng nhập Google rồi nhập lại mật khẩu chủ để buổi này xuất hiện trong
+          Đăng nhập Google rồi nhập lại mật khẩu điều hành cũ để buổi này xuất hiện trong
           “Các trận đã tạo” trên mọi thiết bị.
         </p>
         {account.data?.enabled && (
@@ -213,7 +401,7 @@ function OwnershipSection({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["owned-events", user.userId] }),
         queryClient.invalidateQueries({ queryKey: ["recent-events", user.userId] }),
-        queryClient.invalidateQueries({ queryKey: eventQueryKey(code) }),
+        queryClient.invalidateQueries({ queryKey: eventQueryPrefix(code) }),
       ]);
       refresh();
     } catch {
@@ -238,7 +426,7 @@ function OwnershipSection({
         </p>
       ) : (
         <form onSubmit={claim} className="space-y-3">
-          <Field label="Nhập lại mật khẩu chủ sự kiện">
+          <Field label="Nhập lại mật khẩu điều hành cũ">
             <input
               type="password"
               autoComplete="current-password"
@@ -462,7 +650,7 @@ function PasswordSection({ code }: { code: string }) {
       </div>
 
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Mật khẩu chủ sự kiện mới" hint="Để trống nếu không đổi.">
+        <Field label="Mật khẩu điều hành mới" hint="Để trống nếu không đổi; đổi mật khẩu sẽ vô hiệu mọi phiên dùng mật khẩu cũ.">
           <input
             type="password"
             value={adminPassword}

@@ -18,12 +18,14 @@ import { ClubRepo } from "../lib/sheets/clubs";
 import { LocalFileSheetsClient } from "../lib/sheets/local";
 import { EventRepo } from "../lib/sheets/repo";
 import { EventAssetRepo } from "../lib/sheets/event-assets";
+import { EventStaffRepo } from "../lib/sheets/event-staff";
 
 export const TEST_DATA_PATH = resolve(
   process.env.ROBIN_TEST_DATA_PATH ?? ".data/test-sandbox.json",
 );
 export const TEST_EVENT_CODE = "TEST11";
 export const TEST_V5_EVENT_CODE = "TESTV5";
+export const TEST_V6_EVENT_CODE = "TESTV6";
 export const TEST_PLAYER_PASSWORD = "test1234";
 export const TEST_ADMIN_PASSWORD = "admin1234";
 
@@ -48,6 +50,7 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
   const clubs = new ClubRepo(sheets);
   const events = new EventRepo(sheets);
   const assets = new EventAssetRepo(sheets);
+  const staff = new EventStaffRepo(sheets);
   const now = Date.now();
 
   const mine = await clubs.forDevice(OWNER_DEVICE);
@@ -287,10 +290,73 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
     v5 = await events.load(TEST_V5_EVENT_CODE);
   }
 
+  // TESTV6 đang chạy, một sân vừa trống: dùng để thử Phó sự kiện, editor ảnh,
+  // ước tính và đưa đúng một trận tương lai lên mà không đổi cả vòng.
+  let v6 = await events.load(TEST_V6_EVENT_CODE);
+  if (!v6) {
+    const record = await events.create({
+      code: TEST_V6_EVENT_CODE,
+      clubId: club.id,
+      name: "SÂN TEST V6 · ĐIỀU HÀNH & DỜI TRẬN",
+      status: "draft",
+      ownerUserId: "test-owner",
+      playerPassHash: "",
+      adminPassHash: await hashPassword(TEST_ADMIN_PASSWORD),
+    }, now + 300);
+    const actor = { kind: "admin", label: "Chủ sự kiện · TEST Chủ sân", ref: "test-owner" } as const;
+    const members = loadedClub.members.filter((member) => member.status === "active").slice(0, 8);
+    const png256 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAACXBIWXMAAAPoAAAD6AG1e1JrAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA6AwBPAABo9vSmwAAAABJRU5ErkJggg==";
+    const crops = [
+      { x: 0, y: 64, width: 512, height: 128 },
+      { x: 64, y: 0, width: 128, height: 512 },
+      { x: 0, y: 0, width: 256, height: 256 },
+    ];
+    for (let index = 0; index < crops.length; index++) {
+      await assets.put({
+        eventCode: TEST_V6_EVENT_CODE,
+        assetId: `testv6-logo-${index + 1}`,
+        kind: "sponsor",
+        mime: "image/png",
+        dataUri: png256,
+        metadata: { fit: "contain", zoom: 1, offsetX: 0, offsetY: 0, rotation: 0, trim: index === 2, crop: crops[index]!, output: { width: 256, height: 256 } },
+        createdBy: "test-owner",
+        createdAt: now + 301 + index,
+        updatedAt: now + 301 + index,
+      });
+    }
+    const commands: CommandEnvelope[] = [{
+      id: "testv6-create", at: now + 300, actor,
+      command: { type: "CreateEvent", code: TEST_V6_EVENT_CODE, clubId: club.id, config: { ...DEFAULT_CONFIG, name: "SÂN TEST V6 · ĐIỀU HÀNH & DỜI TRẬN", venueAddress: "123 Sân TEST, Việt Nam", courts: 1, expectedPlayers: 8, targetGamesPerPlayer: 6, estimatedMatchMinutes: 15, courtTurnoverMinutes: 3 } },
+    }, ...members.map((member, index) => ({
+      id: `testv6-player-${index + 1}`, at: now + 310 + index, actor,
+      command: { type: "AddPlayer" as const, player: { id: `testv6-p${index + 1}`, name: member.displayName, avatarId: member.avatarId, ...(index < 2 ? { userId: `test-user-${index + 1}` } : {}) }, asActive: true },
+    })), {
+      id: "testv6-start", at: now + 320, actor, command: { type: "StartEvent" },
+    }, {
+      id: "testv6-schedule", at: now + 321, actor, command: { type: "SetSchedule", fromRound: 1, matches: [
+        { id: "testv6-m1", round: 1, court: 1, teamA: ["testv6-p1", "testv6-p2"], teamB: ["testv6-p3", "testv6-p4"] },
+        { id: "testv6-m2", round: 2, court: 1, teamA: ["testv6-p5", "testv6-p6"], teamB: ["testv6-p7", "testv6-p8"] },
+        { id: "testv6-m3", round: 3, court: 1, teamA: ["testv6-p1", "testv6-p5"], teamB: ["testv6-p2", "testv6-p6"] },
+      ] },
+    }, {
+      id: "testv6-score", at: now + 322, actor, command: { type: "SubmitResult", matchId: "testv6-m1", scoreA: 11, scoreB: 7, irregular: false },
+    }, {
+      id: "testv6-shape", at: now + 323, actor, command: { type: "SetSponsorLogoShape", shape: "square" },
+    }, ...crops.map((_, index) => ({
+      id: `testv6-sponsor-${index + 1}`, at: now + 324 + index, actor,
+      command: { type: "UpsertSponsor" as const, sponsor: { id: `testv6-sponsor-${index + 1}`, name: `TEST LOGO ${index === 0 ? "NGANG" : index === 1 ? "DỌC" : "TRONG"}`, tier: index === 0 ? "diamond" as const : index === 1 ? "gold" as const : "custom" as const, ...(index === 2 ? { tierLabel: "Media TEST" } : {}), assetId: `testv6-logo-${index + 1}`, order: index } },
+    }))];
+    const committed = await events.commitMany(TEST_V6_EVENT_CODE, commands, { record, state: fold(TEST_V6_EVENT_CODE, []).state, repaired: false, skipped: [] });
+    if (!committed.ok) throw new Error(committed.error);
+    await staff.invite({ eventCode: TEST_V6_EVENT_CODE, email: "pho.test@example.com", grantedBy: "test-owner", at: now + 330 });
+    v6 = await events.load(TEST_V6_EVENT_CODE);
+  }
+
   console.log(`Đã giữ dữ liệu TEST tại: ${path}`);
   console.log(`CLB: ${club.name} · mã mời ${club.inviteCode}`);
   console.log(`Sân/sự kiện: ${event?.state.config.name ?? TEST_EVENT_CODE} · mã ${TEST_EVENT_CODE}`);
   console.log(`Trưng bày v0.5: ${v5?.state.config.name ?? TEST_V5_EVENT_CODE} · mã ${TEST_V5_EVENT_CODE}`);
+  console.log(`Điều hành v0.6: ${v6?.state.config.name ?? TEST_V6_EVENT_CODE} · mã ${TEST_V6_EVENT_CODE}`);
   console.log(`Người chơi: ${loadedClub.members.filter((m) => m.status === "active").length}`);
   console.log(`Mật khẩu người chơi: ${TEST_PLAYER_PASSWORD}`);
   console.log(`Mật khẩu quản trị: ${TEST_ADMIN_PASSWORD}`);

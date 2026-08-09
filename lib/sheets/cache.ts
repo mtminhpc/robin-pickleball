@@ -16,9 +16,13 @@ import { AccountRepo } from "./accounts";
 import { ClubRepo, type LoadedClub } from "./clubs";
 import { EventRepo, type EventRecord } from "./repo";
 import { AppEventLimitRepo } from "./app-event-limits";
-import { EventAssetRepo } from "./event-assets";
+import { EventAssetRepo, type EventAsset } from "./event-assets";
 import { EventCreationReservationRepo } from "./event-reservations";
 import { EventOwnerClaimRepo } from "./event-owner-claims";
+import { EventStaffRepo, type EventStaffMember } from "./event-staff";
+import { EventAuthRepo } from "./event-auth";
+import { EventCopyRepo } from "./event-copies";
+import { AccountAssetRepo, type AccountAsset } from "./account-assets";
 
 /** Bao lâu thì chấp nhận dữ liệu cũ. Ghi thì xoá đệm ngay nên không ai phải chờ. */
 const TTL_SECONDS = 5;
@@ -116,12 +120,81 @@ export function getEventAssetRepo(): EventAssetRepo {
   return new EventAssetRepo(getSheetsClient());
 }
 
+/** Asset ID không bị ghi đè; bản chỉnh sửa luôn có ID mới nên có thể đệm lâu. */
+export async function readEventAsset(code: string, assetId: string): Promise<EventAsset | null> {
+  const read = unstable_cache(
+    async (eventCode: string, id: string) => getEventAssetRepo().get(eventCode, id),
+    ["event-asset"],
+    { revalidate: 60 * 60 },
+  );
+  return read(code.toUpperCase(), assetId);
+}
+
 export function getEventCreationReservationRepo(): EventCreationReservationRepo {
   return new EventCreationReservationRepo(getSheetsClient());
 }
 
 export function getEventOwnerClaimRepo(): EventOwnerClaimRepo {
   return new EventOwnerClaimRepo(getSheetsClient());
+}
+
+export function getAccountAssetRepo(): AccountAssetRepo {
+  return new AccountAssetRepo(getSheetsClient());
+}
+
+export async function readAccountAsset(userId: string, assetId: string): Promise<AccountAsset | null> {
+  const read = unstable_cache(
+    async (id: string, asset: string) => getAccountAssetRepo().get(id, asset),
+    ["account-asset"],
+    { revalidate: 60 * 60 },
+  );
+  return read(userId, assetId);
+}
+
+export function getEventCopyRepo(): EventCopyRepo {
+  return new EventCopyRepo(getSheetsClient());
+}
+
+export function eventStaffTag(code: string): string {
+  return `event-staff:${code}`;
+}
+
+export function getEventStaffRepo(): EventStaffRepo {
+  return new EventStaffRepo(getSheetsClient());
+}
+
+export async function readEventStaff(code: string): Promise<EventStaffMember[]> {
+  const read = unstable_cache(
+    async (eventCode: string) => getEventStaffRepo().list(eventCode),
+    ["event-staff"],
+    { tags: [eventStaffTag(code)], revalidate: 30 },
+  );
+  return read(code.toUpperCase());
+}
+
+export function invalidateEventStaff(code: string): void {
+  revalidateTag(eventStaffTag(code));
+}
+
+export function eventAuthTag(code: string): string {
+  return `event-auth:${code}`;
+}
+
+export function getEventAuthRepo(): EventAuthRepo {
+  return new EventAuthRepo(getSheetsClient());
+}
+
+export async function readEventAuthVersion(code: string): Promise<number> {
+  const read = unstable_cache(
+    async (eventCode: string) => getEventAuthRepo().version(eventCode),
+    ["event-auth"],
+    { tags: [eventAuthTag(code)], revalidate: 30 },
+  );
+  return read(code.toUpperCase());
+}
+
+export function invalidateEventAuth(code: string): void {
+  revalidateTag(eventAuthTag(code));
 }
 
 // ---------------------------------------------------------------------------

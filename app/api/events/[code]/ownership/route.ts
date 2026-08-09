@@ -41,7 +41,7 @@ export async function POST(
       ? parsed.body.adminPassword
       : "";
   if (!password || password.length > 200) {
-    return fail(400, "Mật khẩu chủ sự kiện không hợp lệ.");
+    return fail(400, "Mật khẩu điều hành cũ không hợp lệ.");
   }
 
   const initial = await getRepo().load(code);
@@ -66,7 +66,7 @@ export async function POST(
   if (!(await verifyPassword(password, initial.record.adminPassHash))) {
     return fail(
       401,
-      `Mật khẩu chủ sự kiện không đúng. Còn ${limitCheck.remaining} lần thử trong phút này.`,
+      `Mật khẩu điều hành cũ không đúng. Còn ${limitCheck.remaining} lần thử trong phút này.`,
     );
   }
   clearRateLimit(rateKey);
