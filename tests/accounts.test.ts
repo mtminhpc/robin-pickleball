@@ -615,6 +615,21 @@ describe('nhận ô tên "Đây là tôi"', () => {
     expect(sim.state.players.find((p) => p.id === ids[0])?.deviceId).toBe("dt-nam");
   });
 
+  it("người ẩn danh không nhận được ô đã thuộc một tài khoản", () => {
+    const { sim, ids } = withUnclaimed();
+    // Danh bạ câu lạc bộ có thể gắn sẵn userId nhưng chưa có deviceId. Phép
+    // kiểm cũ bỏ lọt đúng trường hợp người gọi không đăng nhập (userId trống).
+    sim.send({ type: "LinkAccount", playerId: ids[0]!, userId: "u-nam" });
+
+    const error = sim.trySend({
+      type: "ClaimPlayer",
+      playerId: ids[0]!,
+      deviceId: "dt-ke-la",
+    });
+    expect(error).toMatch(/tài khoản khác/);
+    expect(sim.state.players.find((p) => p.id === ids[0])?.deviceId).toBeUndefined();
+  });
+
   it("cùng một máy bấm hai lần thì không sao", () => {
     // Sóng yếu ở sân là bấm lại, và hàng đợi ngoại tuyến cũng gửi lại.
     const { sim, ids } = withUnclaimed();

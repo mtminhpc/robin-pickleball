@@ -28,7 +28,7 @@ import {
   USER_COOKIE,
   USER_SESSION_TTL_SECONDS,
 } from "@/lib/auth/user-session";
-import { DEVICE_COOKIE } from "@/lib/identity/device";
+import { deviceIdFromRequest } from "@/lib/identity/device-token";
 import {
   getAccountRepo,
   getClubRepo,
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
       at,
     });
 
-    const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+    const deviceId = deviceIdFromRequest(request);
     if (deviceId) {
       await accounts.linkDevice({
         deviceId,

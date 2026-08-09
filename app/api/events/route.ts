@@ -25,7 +25,7 @@ import {
   memberForDevice,
   memberForUser,
 } from "@/lib/domain/club";
-import { DEVICE_COOKIE } from "@/lib/identity/device";
+import { deviceIdFromRequest } from "@/lib/identity/device-token";
 import { getClubRepo, invalidateClubEvents, readClub } from "@/lib/sheets/cache";
 import { currentUserId } from "@/lib/api/user";
 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
   // Tạo từ câu lạc bộ: kéo cả danh bạ vào. Chỉ người trong câu lạc bộ mới làm
   // được, nếu không thì ai biết mã cũng lôi được danh sách tên của nhóm khác ra.
-  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  const deviceId = deviceIdFromRequest(request);
   const userId = currentUserId(request);
   let roster: Array<{
     id: string;

@@ -19,7 +19,10 @@ import type { EventState } from "@/lib/domain/types";
 export interface EventSnapshot {
   state: EventState;
   role: Role;
-  deviceId: string;
+  /** Mã giả để giao diện đối chiếu quyền tự sửa, không phải mã thiết bị thật. */
+  actorRef: "self" | "";
+  /** Người nào đã có danh tính nhận, nhưng không công khai danh tính đó. */
+  claimedPlayerIds: string[];
   /**
    * Người chơi nào là người đang xem, do máy chủ trả lời.
    *

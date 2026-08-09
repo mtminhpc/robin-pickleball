@@ -22,7 +22,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { PlayerSeed } from "@/lib/domain/commands";
-import { loadProfile, readDeviceId, saveProfile } from "@/lib/identity/device";
+import { loadProfile, saveProfile } from "@/lib/identity/device";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { AccountBar } from "@/components/AccountBar";
@@ -52,8 +52,6 @@ export default function JoinPage() {
     }
   }, []);
 
-  const deviceId = data?.deviceId || readDeviceId() || "";
-
   const mine = useMemo(
     () => data?.state.players.find((p) => p.id === data.myPlayerId),
     [data],
@@ -64,7 +62,7 @@ export default function JoinPage() {
     () =>
       (data?.state.players ?? []).filter(
         (p) =>
-          !p.deviceId &&
+          !data?.claimedPlayerIds.includes(p.id) &&
           p.id !== data?.myPlayerId &&
           p.status !== "left" &&
           p.status !== "rejected" &&
@@ -159,7 +157,6 @@ export default function JoinPage() {
         id: `p-${crypto.randomUUID().slice(0, 8)}`,
         name: trimmed,
         avatarId: avatarId ?? "",
-        deviceId,
       };
       queue.send({ type: "RequestJoin", player: seed });
     }

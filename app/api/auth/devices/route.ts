@@ -12,7 +12,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { DEVICE_COOKIE } from "@/lib/identity/device";
+import { deviceIdFromRequest } from "@/lib/identity/device-token";
 import { getAccountRepo, invalidateAccount } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
 import { currentUser } from "@/lib/api/user";
@@ -34,7 +34,7 @@ export async function DELETE(request: NextRequest) {
   // Máy đang cầm thì dùng Đăng xuất. Gỡ nó chỉ tạo ra một trạng thái khó hiểu:
   // vẫn đang đăng nhập bằng cookie, mà máy thì không còn thuộc tài khoản nào —
   // rồi lần đăng nhập sau nó tự gắn lại.
-  if (request.cookies.get(DEVICE_COOKIE)?.value === deviceId) {
+  if (deviceIdFromRequest(request) === deviceId) {
     return fail(400, "Đây là máy bạn đang dùng. Muốn rời tài khoản thì bấm Đăng xuất.");
   }
 

@@ -9,7 +9,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { activeMembers, checkClubName } from "@/lib/domain/club";
 import { isClubOwner, memberForDevice, memberForUser } from "@/lib/domain/club";
-import { DEVICE_COOKIE } from "@/lib/identity/device";
+import { deviceIdFromRequest } from "@/lib/identity/device-token";
 import { getClubRepo, invalidateClub, readClub } from "@/lib/sheets/cache";
 import { resolveClub } from "@/lib/api/club-context";
 import { fail, isResponse, readJson } from "@/lib/api/context";
@@ -20,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  const deviceId = deviceIdFromRequest(request);
   const userId = currentUserId(request);
 
   const loaded = (await readClub(id)) ?? (await getClubRepo().byInviteCode(id));

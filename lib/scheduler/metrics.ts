@@ -280,7 +280,15 @@ export function fairnessReport(state: EventState): FairnessReport {
       games: h.games[i],
       expected: round2(h.expected[i]),
       deficit: round2(h.expected[i] - h.games[i]),
-      catchUp: round2(Math.max(0, p.catchUpCredit - h.games[i])),
+      // Phần dương mà khoản cộng thêm còn tạo ra trong mục tiêu của bộ xếp lịch.
+      // Không được trừ toàn bộ số trận từ đầu buổi khỏi `catchUpCredit`: lệnh
+      // GrantCatchUp có thể được cấp sau khi người đó đã đánh nhiều trận. Công
+      // thức hiệu số này trả đúng +3 ngay sau khi cấp 3, rồi giảm dần khi họ đã
+      // thật sự được xếp vượt phần suất tự nhiên của mình.
+      catchUp: round2(
+        Math.max(0, h.expected[i] + p.catchUpCredit - h.games[i]) -
+          Math.max(0, h.expected[i] - h.games[i]),
+      ),
       byes: h.byes[i],
       currentPlayStreak: h.playStreak[i],
       longestPlayStreak: h.longestPlayStreak[i],

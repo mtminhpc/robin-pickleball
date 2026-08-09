@@ -10,7 +10,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { ClubMember } from "../domain/club";
 import { isClubOwner, memberForDevice, memberForUser } from "../domain/club";
-import { DEVICE_COOKIE } from "../identity/device";
+import { deviceIdFromRequest } from "../identity/device-token";
 import { readClub } from "../sheets/cache";
 import type { LoadedClub } from "../sheets/clubs";
 import { fail } from "./context";
@@ -35,7 +35,7 @@ export async function resolveClub(
   const loaded = await readClub(clubId);
   if (!loaded) return fail(404, "Không tìm thấy câu lạc bộ này.");
 
-  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  const deviceId = deviceIdFromRequest(request);
   // Chỉ đọc cookie, không đọc bảng tài khoản: mã tài khoản đã nằm sẵn trong
   // cookie đã ký, mà route này chạy ở mọi lượt mở trang câu lạc bộ.
   const userId = currentUserId(request);

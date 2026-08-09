@@ -13,6 +13,8 @@ import { cookieName, sessionSecret, verifySession } from "@/lib/auth/session";
 import { USER_COOKIE, verifyUserSession } from "@/lib/auth/user-session";
 import { findMyPlayer, isOwnerByAccount, roleFor } from "@/lib/api/context";
 import { DEVICE_COOKIE } from "@/lib/identity/device";
+import { verifyDeviceToken } from "@/lib/identity/device-token";
+import { publicEventSnapshot } from "@/lib/api/public-state";
 import { readEvent } from "@/lib/sheets/cache";
 import { EventShell } from "@/components/EventShell";
 
@@ -39,7 +41,8 @@ export default async function EventLayout({
   // Đọc header để Next hiểu trang này phụ thuộc yêu cầu và không dựng tĩnh nhầm.
   await headers();
 
-  const deviceId = jar.get(DEVICE_COOKIE)?.value ?? "";
+  const deviceId =
+    verifyDeviceToken(jar.get(DEVICE_COOKIE)?.value, sessionSecret()) ?? "";
   // Trả lời "ai là tôi" ngay ở lượt dựng đầu tiên, cùng cách route state trả
   // lời. Để trống rồi chờ lần hỏi sau thì trang tham gia loé lên form gõ tên
   // trước khi kịp nhận ra người đã đăng nhập.
@@ -56,9 +59,8 @@ export default async function EventLayout({
     <EventShell
       code={code}
       initial={{
-        state: event.state,
+        ...publicEventSnapshot(event.state, deviceId),
         role,
-        deviceId,
         myPlayerId: findMyPlayer(event.state, deviceId, userId)?.id ?? null,
         requiresPlayerPassword: event.record.playerPassHash !== "",
         ownerByAccount: isOwnerByAccount(event.record, userId),

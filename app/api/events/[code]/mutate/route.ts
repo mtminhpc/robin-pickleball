@@ -21,6 +21,7 @@ import { nextScheduleCommand } from "@/lib/domain/autoplan";
 import { apply } from "@/lib/domain/reduce";
 import { canEditResult } from "@/lib/domain/rules";
 import { fail, isResponse, readJson, resolveContext } from "@/lib/api/context";
+import { redactEventState } from "@/lib/api/public-state";
 import { getRepo, invalidateEvent, withEventLock } from "@/lib/sheets/cache";
 
 interface MutateBody {
@@ -99,7 +100,10 @@ export async function POST(
   if (!result.ok) return fail(409, result.error);
 
   invalidateEvent(code);
-  return NextResponse.json({ state: result.state, seq: result.seq });
+  return NextResponse.json({
+    state: redactEventState(result.state, ctx.deviceId),
+    seq: result.seq,
+  });
 }
 
 /**
@@ -142,6 +146,17 @@ function checkPermission(
   command: Command,
   ctx: Extract<Awaited<ReturnType<typeof resolveContext>>, { role: string }>,
 ): string | null {
+  if (
+    (command.type === "ClaimPlayer" || command.type === "RequestJoin") &&
+    !ctx.deviceId &&
+    !ctx.userId
+  ) {
+    return "Trình duyệt đang chặn cookie nên chưa thể nhận ra bạn. Bật cookie rồi tải lại trang.";
+  }
+  if (command.type === "LinkAccount" && !ctx.userId) {
+    return "Cần đăng nhập tài khoản trước khi gắn tên này.";
+  }
+
   if (command.type === "EditResult" || command.type === "RevertResult") {
     const match = ctx.event.state.matches.find((m) => m.id === command.matchId);
     if (!match) return "Không tìm thấy trận.";

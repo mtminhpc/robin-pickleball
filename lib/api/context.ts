@@ -10,8 +10,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { Actor, EventState, Player } from "../domain/types";
 import type { Role } from "../domain/commands";
-import { DEVICE_COOKIE } from "../identity/device";
 import { cookieName, sessionSecret, verifySession } from "../auth/session";
+import { deviceIdFromRequest } from "../identity/device-token";
 import { readEvent, type CachedEvent } from "../sheets/cache";
 import type { EventRecord } from "../sheets/repo";
 import { currentUserId } from "./user";
@@ -85,7 +85,7 @@ export async function resolveContext(
     code,
     sessionSecret(),
   );
-  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  const deviceId = deviceIdFromRequest(request);
   // Chỉ đọc cookie đã ký, không đọc bảng tài khoản: đây là đường bị gọi nhiều
   // nhất trong cả ứng dụng, mỗi điện thoại đang mở app hỏi lại vài giây một lần.
   const userId = currentUserId(request);

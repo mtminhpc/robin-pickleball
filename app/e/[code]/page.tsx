@@ -104,7 +104,7 @@ export default function LivePage() {
                 actor={{
                   kind: data.role === "admin" ? "admin" : "player",
                   label: "",
-                  ref: data.deviceId,
+                  ref: data.actorRef || undefined,
                 }}
                 canEnterScore={canEnterScore}
                 pendingScore={pendingScoreFor(match.id, queue.queued)}

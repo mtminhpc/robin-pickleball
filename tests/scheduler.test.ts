@@ -46,6 +46,22 @@ function runSession(players: number, courts: number, rounds: number, seed = 7) {
   return sim;
 }
 
+describe("hiển thị khoản đuổi kịp", () => {
+  it("cấp sau khi đã đánh vẫn hiện đủ số vừa cấp", () => {
+    const sim = runSession(8, 2, 4, 81);
+    const playerId = sim.state.players[0]!.id;
+    expect(countGames(sim, playerId)).toBe(4);
+
+    sim.send({ type: "GrantCatchUp", playerId, games: 3 });
+    const row = fairnessReport(sim.state).players.find(
+      (player) => player.playerId === playerId,
+    );
+
+    expect(row?.catchUp).toBe(3);
+    expect(row?.deficit).toBe(0);
+  });
+});
+
 describe("ma trận quy mô", () => {
   // Quét toàn bộ dải người dùng đã chọn (6-20 người) trên 1-4 sân. Đây là lưới an
   // toàn chính: một thay đổi trọng số làm hỏng bất kỳ ô nào sẽ lộ ra ngay.

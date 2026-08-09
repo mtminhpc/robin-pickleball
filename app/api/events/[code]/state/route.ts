@@ -8,6 +8,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { isResponse, resolveContext } from "@/lib/api/context";
+import { publicEventSnapshot } from "@/lib/api/public-state";
 
 export async function GET(
   request: NextRequest,
@@ -18,9 +19,8 @@ export async function GET(
   if (isResponse(ctx)) return ctx;
 
   return NextResponse.json({
-    state: ctx.event.state,
+    ...publicEventSnapshot(ctx.event.state, ctx.deviceId),
     role: ctx.role,
-    deviceId: ctx.deviceId,
     /**
      * Người chơi nào là người đang xem.
      *

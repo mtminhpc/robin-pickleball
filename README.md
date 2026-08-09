@@ -4,7 +4,7 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Phiên bản v0.4.0 · Trạng thái: giai đoạn 3 — dùng được cả mùa, trên nhiều thiết bị.** Ứng dụng
+> **Phiên bản v0.4.1 · Trạng thái: giai đoạn 3 — dùng được cả mùa, trên nhiều thiết bị.** Ứng dụng
 > chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
 > bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
 > tuần và tháng, đăng nhập bằng tài khoản Google. Xem [lộ trình](#lộ-trình).
@@ -34,7 +34,7 @@ Lệnh này luôn dùng `.data/test-sandbox.json`, kể cả máy đã cấu hì
 chạy lại không nhân đôi hay reset buổi đang thử và không đụng dữ liệu thật.
 
 ```bash
-npm test                  # 492 bài kiểm thử
+npm test                  # 498 bài kiểm thử
 npm run scenarios         # 152 lượt thực chiến 4–11 người
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
@@ -48,6 +48,12 @@ npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 > **Dự án dùng `npm`**, và tệp khoá duy nhất là `package-lock.json`. Đừng thêm
 > tệp khoá thứ hai: hai tệp khoá cho cùng một dự án thì sớm muộn cũng lệch nhau,
 > và khi đó máy này cài ra một bộ thư viện còn máy kia ra bộ khác.
+
+> **Lưu ý nâng từ v0.4.0:** v0.4.1 thay cookie thiết bị không ký bằng cookie HMAC
+> `httpOnly`, vì bản cũ từng phát mã máy trong trạng thái công khai. Không có hồ
+> sơ, lịch sử, tỷ số, tài khoản hay CLB nào bị xoá. Người đã đăng nhập vẫn được
+> nhận ra qua tài khoản; người chỉ dùng danh tính ẩn danh cũ có thể cần nhận lại
+> tên của mình một lần sau khi nâng cấp.
 
 **Hướng dẫn từng bước cho Windows, kịch bản bấm thử, và tình trạng dự án:**
 [docs/TIEN-DO.md](docs/TIEN-DO.md).
@@ -191,7 +197,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, đăng nhập Google
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo dữ liệu TEST, tạo sẵn tab trong Sheet
-tests/            492 bài kiểm thử
+tests/            498 bài kiểm thử
 ```
 
 Nguyên tắc: `lib/domain` và `lib/scheduler` là hàm thuần, không đọc đồng hồ, không gọi

@@ -13,6 +13,7 @@
 
 import type { Role } from "../domain/commands";
 import { readPayload, signPayload } from "./hmac";
+export { sessionSecret } from "./secret";
 
 export interface SessionPayload {
   code: string;
@@ -60,24 +61,4 @@ export function newSession(code: string, role: Role, now = Date.now()): SessionP
     role,
     exp: Math.floor(now / 1000) + SESSION_TTL_SECONDS,
   };
-}
-
-/**
- * Khoá ký. Bắt buộc phải đặt khi chạy thật.
- *
- * Ở chế độ phát triển thì dùng một khoá cố định để khỏi phải cấu hình gì —
- * nhưng chạy thật mà thiếu thì phải dừng hẳn, vì khoá đoán được nghĩa là ai cũng
- * tự ký được quyền chủ sự kiện cho mình.
- */
-export function sessionSecret(): string {
-  const secret = process.env.APP_SECRET;
-  if (secret && secret.length >= 16) return secret;
-
-  if (process.env.NODE_ENV === "production" || process.env.VERCEL === "1") {
-    throw new Error(
-      "Thiếu APP_SECRET (cần ít nhất 16 ký tự). Không có nó thì ai cũng tự ký được " +
-        "quyền chủ sự kiện. Sinh một chuỗi ngẫu nhiên và đặt vào biến môi trường.",
-    );
-  }
-  return "khoa-chi-dung-khi-phat-trien-tren-may";
 }

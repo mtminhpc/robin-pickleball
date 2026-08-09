@@ -51,12 +51,17 @@ export async function GET(
       if (request.headers.get("if-none-match") === etag) {
         return new NextResponse(null, {
           status: 304,
-          headers: { ETag: etag, "Cache-Control": CACHE },
+          headers: {
+            ETag: etag,
+            "Cache-Control": CACHE,
+            "X-Content-Type-Options": "nosniff",
+          },
         });
       }
       return new NextResponse(Buffer.from(checked.base64, "base64"), {
         headers: {
           "Content-Type": checked.mime,
+          "X-Content-Type-Options": "nosniff",
           "Cache-Control": CACHE,
           ETag: etag,
         },

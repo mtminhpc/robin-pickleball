@@ -6,8 +6,10 @@
  * người vừa nhập điểm tự sửa trong hai phút, và nhận ra người quay lại sau khi
  * tạm rời.
  *
- * Máy chủ cấp một cookie `rp_device` (xem `middleware.ts`); tên và ảnh đại diện
- * thì nằm ở `localStorage` vì chúng chỉ phục vụ việc hiển thị.
+ * Máy chủ cấp một cookie `rp_device` có chữ ký và `httpOnly` (xem
+ * `middleware.ts`); tên và ảnh đại diện thì nằm ở `localStorage` vì chúng chỉ
+ * phục vụ việc hiển thị. Mã chạy trên trang không cần và không được đọc giấy
+ * thông hành này.
  *
  * Phần lịch sử các sự kiện cũ theo thiết bị để sang giai đoạn sau cùng với câu
  * lạc bộ — ở đây chỉ làm đủ để máy nhớ được chủ nhân của nó.
@@ -30,15 +32,6 @@ export interface RecentEvent {
   code: string;
   name: string;
   lastOpenedAt: number;
-}
-
-/** Đọc cookie thiết bị ở phía trình duyệt. Máy chủ đọc thẳng từ request. */
-export function readDeviceId(): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(
-    new RegExp(`(?:^|;\\s*)${DEVICE_COOKIE}=([^;]+)`),
-  );
-  return match?.[1] ?? null;
 }
 
 export function loadProfile(): DeviceProfile | null {

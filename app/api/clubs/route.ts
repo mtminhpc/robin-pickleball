@@ -7,7 +7,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { checkClubName, checkMemberName } from "@/lib/domain/club";
-import { DEVICE_COOKIE } from "@/lib/identity/device";
+import { deviceIdFromRequest } from "@/lib/identity/device-token";
 import { getClubRepo, invalidateClub } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
 import { currentUserId } from "@/lib/api/user";
@@ -28,7 +28,7 @@ interface CreateBody {
  * cả hai — đó chính là điều họ đăng nhập để có.
  */
 export async function GET(request: NextRequest) {
-  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  const deviceId = deviceIdFromRequest(request);
   const userId = currentUserId(request);
 
   const repo = getClubRepo();
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   const ownerError = checkMemberName(ownerName);
   if (ownerError) return fail(400, `Tên của bạn: ${ownerError.toLowerCase()}`);
 
-  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  const deviceId = deviceIdFromRequest(request);
   if (!deviceId) {
     return fail(
       400,

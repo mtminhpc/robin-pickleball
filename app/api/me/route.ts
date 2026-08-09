@@ -17,7 +17,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { rollupEvents } from "@/lib/domain/rollup";
-import { DEVICE_COOKIE } from "@/lib/identity/device";
+import { deviceIdFromRequest } from "@/lib/identity/device-token";
 import { getAccountRepo, getClubRepo, getRepo } from "@/lib/sheets/cache";
 import { readJson } from "@/lib/api/context";
 import { currentUser } from "@/lib/api/user";
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   const parsed = await readJson<Body>(request);
   if (!parsed.ok) return parsed.response;
 
-  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value ?? "";
+  const deviceId = deviceIdFromRequest(request);
   const name = (parsed.body.name ?? "").trim().toLowerCase();
   const fromBrowser = parsed.body.codes ?? [];
 

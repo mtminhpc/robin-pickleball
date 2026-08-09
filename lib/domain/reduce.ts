@@ -426,7 +426,10 @@ function applyInPlace(
       if (p.deviceId && c.deviceId && p.deviceId !== c.deviceId) {
         return err("Tên này đã có người nhận rồi.");
       }
-      if (p.userId && c.userId && p.userId !== c.userId) {
+      // Một ô đã thuộc tài khoản thì người chưa đăng nhập cũng không được nhận.
+      // Phép kiểm cũ chỉ chặn khi *cả hai* phía có userId, nên một người ẩn danh
+      // vẫn gắn được máy mình vào ô tên của tài khoản khác.
+      if (p.userId && p.userId !== c.userId) {
         return err("Tên này thuộc về tài khoản khác.");
       }
 
@@ -462,7 +465,7 @@ function applyInPlace(
       if (p.deviceId && c.deviceId && p.deviceId !== c.deviceId) {
         return err("Tên này đã có người nhận rồi.");
       }
-      if (p.userId && c.userId && p.userId !== c.userId) {
+      if (p.userId && p.userId !== c.userId) {
         return err("Tên này thuộc về tài khoản khác.");
       }
 
