@@ -21,3 +21,10 @@ next-env.d.ts
 service-account*.json
 gcp-*.json
 *credentials*.json
+
+# Tệp Google Cloud tải về khi bấm "Download JSON" ở màn hình OAuth client. Nó
+# chứa `client_secret`, và tên tệp Google đặt sẵn KHÔNG khớp mẫu nào ở trên: nó
+# kết thúc bằng `.apps.googleusercontent.com.json` chứ không phải 12 ký tự hex.
+# Đây là lần thứ hai trong dự án một tệp bí mật lọt qua vì tên nó trông vô hại —
+# lần trước là `.env.local.bak`. Thêm mới thì kiểm lại `git check-ignore`.
+client_secret*.json
