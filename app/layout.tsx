@@ -3,6 +3,7 @@ import { Archivo } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/QueryProvider";
 import { VersionBadge } from "@/components/VersionBadge";
+import { ClientDataRefresh } from "@/components/ClientDataRefresh";
 
 /**
  * Archivo là phông của bản thiết kế. Nạp qua `next/font` chứ không qua `@import`
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="vi" className={archivo.variable}>
       <body>
+        <ClientDataRefresh />
         <QueryProvider>{children}</QueryProvider>
         <VersionBadge />
       </body>

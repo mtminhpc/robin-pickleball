@@ -26,7 +26,14 @@ const OUTCOMES: Record<string, string> = {
   chuacaidat: "Máy chủ này chưa bật đăng nhập Google.",
 };
 
-export function AccountBar({ next }: { next: string }) {
+export function AccountBar({
+  next,
+  variant = "default",
+}: {
+  next: string;
+  /** Trang chủ có dải tài khoản gọn, xanh–đen; các màn hình trong sự kiện giữ nguyên. */
+  variant?: "default" | "home";
+}) {
   const { data } = useAccount();
   const signOut = useSignOut();
   const outcome = OUTCOMES[useLoginOutcome() ?? ""];
@@ -35,6 +42,31 @@ export function AccountBar({ next }: { next: string }) {
   if (!data?.enabled) return null;
 
   if (!data.user) {
+    if (variant === "home") {
+      return (
+        <div className="space-y-2 border-y border-line py-2.5">
+          {outcome && <p className="text-sm text-accent-700">{outcome}</p>}
+          <div className="flex min-h-tap items-center gap-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line bg-surface">
+              <GoogleMark />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-extrabold">Lưu số liệu của bạn</p>
+              <p className="truncate text-[10px] text-mute-600">
+                Đồng bộ khi đổi điện thoại
+              </p>
+            </div>
+            <a
+              href={signInHref(next)}
+              className="inline-flex min-h-tap shrink-0 items-center font-display text-[10px] font-extrabold uppercase text-[#087a55] hover:underline"
+            >
+              Đăng nhập
+            </a>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <Card className="space-y-3 p-4">
         {outcome && <p className="text-sm text-accent-700">{outcome}</p>}
@@ -50,6 +82,32 @@ export function AccountBar({ next }: { next: string }) {
           vì nằm lại trên máy này.
         </p>
       </Card>
+    );
+  }
+
+  if (variant === "home") {
+    return (
+      <div className="flex min-h-tap items-center gap-3 border-y border-line py-2.5">
+        <Avatar
+          name={data.user.displayName}
+          avatarId={data.user.avatarId}
+          userId={data.user.userId}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-extrabold">{data.user.displayName}</p>
+          <p className="truncate text-[10px] text-mute-600">
+            {data.user.email}
+            {data.user.devices > 1 && ` · gộp ${data.user.devices} máy`}
+          </p>
+        </div>
+        <button
+          className="min-h-tap shrink-0 px-1 font-display text-[10px] font-extrabold uppercase text-[#087a55] hover:underline disabled:opacity-40"
+          disabled={signOut.isPending}
+          onClick={() => signOut.mutate()}
+        >
+          Đăng xuất
+        </button>
+      </div>
     );
   }
 

@@ -14,9 +14,11 @@
  */
 
 export const DEVICE_COOKIE = "rp_device";
-const PROFILE_KEY = "rp_profile";
-const RECENT_KEY = "rp_recent_events";
-const CLUBS_KEY = "rp_recent_clubs";
+export const PROFILE_KEY = "rp_profile";
+export const RECENT_KEY = "rp_recent_events";
+export const CLUBS_KEY = "rp_recent_clubs";
+/** Dữ liệu thuộc về người dùng, phải sống qua mọi lần nâng phiên bản. */
+export const USER_LOCAL_STORAGE_KEYS = [PROFILE_KEY, RECENT_KEY, CLUBS_KEY] as const;
 const MAX_RECENT = 12;
 
 export interface DeviceProfile {

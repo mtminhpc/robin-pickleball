@@ -15,7 +15,7 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.2.1 — Dấu phiên bản triển khai`. Ứng dụng đã chạy thật.**
+**Phiên bản hiện tại: `v0.3.0 — Trang chủ xanh, dữ liệu tạm tự làm mới`.**
 Không còn phần mã nào đang làm dở trong đợt này.
 
 | | |
@@ -26,8 +26,34 @@ Không còn phần mã nào đang làm dở trong đợt này.
 | Vercel ↔ GitHub | Đã nối. Đẩy commit lên nhánh này là Vercel tự dựng lại |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-`npm test` 400 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
+`npm test` 404 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
+
+### Bàn giao `v0.3.0 — Trang chủ xanh, dữ liệu tạm tự làm mới` (09/08/2026)
+
+Phạm vi giao diện được khoá rất rõ:
+
+- Chỉ trang chủ `/` dùng xanh emerald đậm `#087a55` kết hợp đen, với slogan
+  **“Linh hoạt, công bằng, nhanh gọn.”**
+- Nút **“Của tôi”** trên trang chủ đổi thành **“Setting”**, vẫn dẫn tới `/me`.
+- Cuối trang ghi **Maico Jack Sun**, cờ Việt Nam và email thương mại/quảng cáo
+  `mtminhpc@gmail.com` dưới dạng liên kết `mailto:`.
+- Mọi màn hình sâu hơn — vào trận, lịch, người chơi, nhập điểm, xếp hạng, quản
+  lý — **giữ nguyên hệ cam–đen**. Không đổi bảng màu toàn cục.
+
+Quy tắc mới quan trọng cho mọi phiên sau: **mỗi lần phát hành phải tăng version
+trong `package.json` và `package-lock.json`**. `ClientDataRefresh` so phiên bản đó
+với `rp_app_version`; khi khác nhau nó dọn khoá `rp_` tạm, `sessionStorage` và
+Cache Storage rồi tải lại đúng một lần. Những dữ liệu sau luôn được giữ:
+
+- `rp_profile`, `rp_recent_events`, `rp_recent_clubs`;
+- cookie thiết bị `rp_device` và cookie đăng nhập;
+- hàng đợi lệnh chưa gửi trong IndexedDB (`rp_queue_*`) — đây là thao tác thật
+  của người dùng, không phải cache.
+
+Không được thay cơ chế này bằng `localStorage.clear()` hoặc xoá IndexedDB: hai
+việc đó làm mất hồ sơ hay tỷ số đang chờ gửi. Bốn bài trong
+`tests/client-data-version.test.ts` canh đúng ranh giới bảo toàn/xoá.
 
 ### Bàn giao bản vá `v0.2.1 — Dấu phiên bản triển khai` (09/08/2026)
 
@@ -280,7 +306,7 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
-| Chạy bộ kiểm thử | `npm test` (400 bài, ~15 giây) |
+| Chạy bộ kiểm thử | `npm test` (404 bài, ~18 giây) |
 | Soát cấu hình trước khi triển khai | `npm run check-env` |
 | Sinh `APP_SECRET` mới | `npm run new-secret` |
 | Quét công bằng 42 cấu hình | `npm run sim -- --matrix` |
@@ -523,7 +549,7 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **400 bài xanh** (`npm test`) — gồm quyền tự phục vụ, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng, khai giờ đến/về và dấu phiên bản deploy |
+| Kiểm thử tự động | **404 bài xanh** (`npm test`) — gồm quyền tự phục vụ, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng, khai giờ đến/về, dấu phiên bản deploy và làm mới dữ liệu tạm |
 | **Chạy thử trên Google Sheet THẬT** | **19 phép kiểm, 0 hỏng** — lập câu lạc bộ, tạo buổi, bốn người, xếp lịch, nhập tỷ số 11–7, tổng kết, rồi đọc lại từ một tiến trình khác để chắc dữ liệu nằm trên bảng tính |
 | Kiểm tra kiểu | `npm run typecheck` sạch |
 | Quét ma trận công bằng | **42 cấu hình, 0 cấu hình bị đánh dấu** |
@@ -757,7 +783,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            400 bài kiểm thử
+tests/            404 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —

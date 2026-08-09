@@ -4,7 +4,7 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Phiên bản v0.2.1 · Trạng thái: giai đoạn 3 — dùng được cả mùa, trên nhiều thiết bị.** Ứng dụng
+> **Phiên bản v0.3.0 · Trạng thái: giai đoạn 3 — dùng được cả mùa, trên nhiều thiết bị.** Ứng dụng
 > chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
 > bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
 > tuần và tháng, đăng nhập bằng tài khoản Google. Xem [lộ trình](#lộ-trình).
@@ -23,7 +23,7 @@ sàng dùng thật thì điền biến môi trường Google và ứng dụng t�
 Sheet — xem [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
-npm test                  # 400 bài kiểm thử
+npm test                  # 404 bài kiểm thử
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
 
@@ -179,7 +179,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, đăng nhập Google
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            400 bài kiểm thử
+tests/            404 bài kiểm thử
 ```
 
 Nguyên tắc: `lib/domain` và `lib/scheduler` là hàm thuần, không đọc đồng hồ, không gọi
