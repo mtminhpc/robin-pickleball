@@ -15,6 +15,10 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 - Kho thử bền vững nằm ở `.data/test-sandbox.json`: chạy `npm run dev:test`, vào mã
   `TEST11`, mật khẩu người chơi `test1234`, quản trị `admin1234`. Chạy lại không
   reset dữ liệu và không đụng Google Sheet.
+- Trên máy này CLB TEST có mã mời `H9DFHG`, 11 người TEST; SHA-256 của kho sau hai
+  lần seed liên tiếp cùng là `239CF611EF64F9F19AE5A03926C66ABA426105602E7927993F8C1C725DCEA909`.
+- Nhánh mặc định có các commit tài liệu bàn giao sau commit/tag production. Chênh
+  lệch tài liệu đó với `main` là có chủ ý, không phải mã runtime còn làm dở.
 - Không có mã tính năng đang làm dở sau v0.4.0.
 
 ## Những ranh giới không được vô tình phá

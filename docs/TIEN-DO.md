@@ -31,6 +31,29 @@ Không còn phần mã nào đang làm dở trong đợt này.
 `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
 
+### Ghi chú khoá phiên 09/08/2026
+
+Đây là ảnh chụp trạng thái cuối ngày dành cho Claude, Codex hoặc người tiếp quản:
+
+- Commit runtime/tag/production là `9d223f0` / `v0.4.0`; `origin/main` cố ý dừng ở
+  commit này. Nhánh mặc định có thêm các commit chỉ ghi bàn giao, không phải tính
+  năng còn dở và không cần đưa vào production.
+- Production đã kiểm lại bằng cả Vercel CLI và HTTP công khai: deployment
+  `dpl_2ZKxmvrcRFfJWvjm3Heqe6rc8GmD`, `target production`, `status Ready`, HTTP 200,
+  HTML có `v0.4.0 · 9d223f0`.
+- Cổng kiểm định cuối cùng: 17 tệp test, 492/492 bài xanh; 152 lượt kịch bản 4–11
+  người, 0 vấn đề; build Next.js production sạch; TypeScript sạch; cổng 3000 đã
+  được trả lại sau smoke test local.
+- `.data/test-sandbox.json` vẫn còn trên máy với SHA-256
+  `239CF611EF64F9F19AE5A03926C66ABA426105602E7927993F8C1C725DCEA909`. CLB
+  `CLB TEST ROBIN`, mã mời `H9DFHG`, sân `TEST11`, 11 người TEST. Bài
+  `tests/test-data.test.ts` canh việc seed lần hai không reset hoặc nhân đôi.
+- Working tree cuối phiên chỉ còn `Mobile app design-handoff.zip` ở trạng thái
+  untracked có chủ ý. Đây là tệp người dùng; không sửa, xoá hay commit.
+- Không còn đầu việc kỹ thuật bắt buộc. Phiên sau đọc `AGENTS.md`, `CLAUDE.md`, mục
+  này rồi mới chọn yêu cầu mới; không chạy lại hay sửa phần đã xanh nếu không có
+  bằng chứng lỗi mới.
+
 ### Bàn giao `v0.4.0 — Kiểm định công bằng 4–11 người và sân TEST` (09/08/2026)
 
 Đợt này không đổi giao diện. Trang chủ vẫn xanh–đen; toàn bộ màn hình sâu trong
