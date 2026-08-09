@@ -365,7 +365,7 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 | Việc | Lệnh |
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
-| Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
+| Xoá dữ liệu chạy thử mặc định, chơi lại từ đầu | Chỉ xoá `.data/sheet.json`; giữ `.data/test-sandbox.json` |
 | Chạy bộ kiểm thử | `npm test` (492 bài, ~26 giây) |
 | Mở sân TEST đã có 11 người | `npm run dev:test`, vào mã `TEST11` |
 | Quét 152 lượt 4–11 người | `npm run scenarios` |
@@ -865,7 +865,7 @@ nghiệp vụ kiểm thử được mà không cần dựng Google Sheet.
 | Cổng 3000 đã bị chiếm | `npm run dev -- -p 3001` |
 | Trang trắng, lỗi lạ | Xoá thư mục `.next` rồi `npm run dev` lại |
 | Mất hết định dạng, chữ đen trên nền trắng | Đã chạy `npm run build` trong lúc `npm run dev` đang chạy — hai lệnh cùng ghi vào `.next`. Dừng cả hai, xoá `.next`, chạy lại |
-| Dữ liệu rối, muốn làm lại | Xoá thư mục `.data` |
+| Dữ liệu chạy thử mặc định rối, muốn làm lại | Chỉ xoá `.data/sheet.json`; không xoá `.data/test-sandbox.json` |
 | Không lập được câu lạc bộ | Trình duyệt đang chặn cookie — app cần cookie thiết bị để biết máy nào là ai |
 | Không thấy nút đăng nhập Google | Chưa cấu hình OAuth. Cố ý ẩn nút chứ không phải lỗi — xem [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) |
 

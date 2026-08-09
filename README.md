@@ -18,9 +18,10 @@ npm install
 npm run dev        # mở http://localhost:3000
 ```
 
-Dữ liệu lưu vào `.data/sheet.json`; xoá thư mục đó là chơi lại từ đầu. Khi nào sẵn
-sàng dùng thật thì điền biến môi trường Google và ứng dụng tự chuyển sang Google
-Sheet — xem [docs/SETUP.md](docs/SETUP.md).
+Dữ liệu mặc định lưu vào `.data/sheet.json`; muốn chơi lại từ đầu thì chỉ xoá đúng
+tệp đó. Không xoá `.data/test-sandbox.json`, vì đó là CLB/sân/người chơi TEST được
+giữ lại. Khi nào sẵn sàng dùng thật thì điền biến môi trường Google và ứng dụng tự
+chuyển sang Google Sheet — xem [docs/SETUP.md](docs/SETUP.md).
 
 Muốn thử ngay với CLB, sân và 11 người mẫu đã lưu sẵn thì dùng kho sandbox riêng:
 
