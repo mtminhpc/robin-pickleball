@@ -23,13 +23,20 @@ Không còn phần mã nào đang làm dở trong đợt này.
 | Địa chỉ | https://robin-pickleball.vercel.app |
 | Dữ liệu | Google Sheet thật, đã kiểm bằng cách đọc lại 7 mã buổi |
 | Đăng nhập Google | **Đã bật và đã Publish** — ai có tài khoản Google cũng vào được |
-| Vercel ↔ GitHub | Đã nối. Đẩy commit lên nhánh này là Vercel tự dựng lại |
+| Vercel ↔ GitHub | Đã nối. Nhánh thường → Preview; `main` → Production |
+| GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
 `npm test` 404 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
 
 ### Bàn giao `v0.3.0 — Trang chủ xanh, dữ liệu tạm tự làm mới` (09/08/2026)
+
+Mốc mã phát hành là commit `5ab45fb`, tag `v0.3.0`. Commit này đã được push cả
+nhánh làm việc lẫn `main`; Vercel tự tạo Production deployment
+`dpl_753kqSsbSYZVHk18ZJjf3bxK6KAw`, trạng thái **Ready**, và gắn alias
+`https://robin-pickleball.vercel.app`. Đọc lại HTML production trả HTTP 200 và
+có đủ `v0.3.0 · 5ab45fb`, `Setting`, slogan mới và `Maico Jack Sun`.
 
 Phạm vi giao diện được khoá rất rõ:
 
