@@ -15,7 +15,7 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.4.0 — Kiểm định công bằng 4–11 người và sân TEST`.**
+**Phiên bản hiện tại: `v0.4.1 — Khoá lỗ hổng danh tính thiết bị`.**
 Không còn phần mã nào đang làm dở trong đợt này.
 
 | | |
@@ -27,25 +27,25 @@ Không còn phần mã nào đang làm dở trong đợt này.
 | GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-`npm test` 492 bài xanh, `npm run scenarios` chạy 152 lượt/0 vấn đề,
+`npm test` 498 bài xanh, `npm run scenarios` chạy 152 lượt/0 vấn đề,
 `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
 
-### Ghi chú khoá phiên 09/08/2026
+### Ghi chú khoá phiên 09/08/2026 — v0.4.1
 
 Đây là ảnh chụp trạng thái cuối ngày dành cho Claude, Codex hoặc người tiếp quản:
 
-- Commit runtime/tag/production là `9d223f0` / `v0.4.0`; `origin/main` cố ý dừng ở
-  commit này. Nhánh mặc định có thêm các commit chỉ ghi bàn giao, không phải tính
-  năng còn dở và không cần đưa vào production.
+- Commit runtime/tag/production là `6ae181f` / `v0.4.1`; `origin/main` dừng ở
+  commit này. Nhánh mặc định có thêm commit chỉ ghi bàn giao sau phát hành, không
+  phải runtime còn dở và không cần đưa vào production.
 - Production đã kiểm lại bằng cả Vercel CLI và HTTP công khai: deployment
-  `dpl_2ZKxmvrcRFfJWvjm3Heqe6rc8GmD`, `target production`, `status Ready`, HTTP 200,
-  HTML có `v0.4.0 · 9d223f0`.
-- Cổng kiểm định cuối cùng: 17 tệp test, 492/492 bài xanh; 152 lượt kịch bản 4–11
+  `dpl_DANZBkMLZyJ7aGY3JNFWx215eeNs`, `target production`, `status Ready`, HTTP 200,
+  HTML có `v0.4.1 · 6ae181f`.
+- Cổng kiểm định cuối cùng: 18 tệp test, 498/498 bài xanh; 152 lượt kịch bản 4–11
   người, 0 vấn đề; build Next.js production sạch; TypeScript sạch; cổng 3000 đã
   được trả lại sau smoke test local.
 - `.data/test-sandbox.json` vẫn còn trên máy với SHA-256
-  `239CF611EF64F9F19AE5A03926C66ABA426105602E7927993F8C1C725DCEA909`. CLB
+  `401186052ECD8F279A3F413AD30818760DA95BD79A5D2E2F668026B2C720CE76`. CLB
   `CLB TEST ROBIN`, mã mời `H9DFHG`, sân `TEST11`, 11 người TEST. Bài
   `tests/test-data.test.ts` canh việc seed lần hai không reset hoặc nhân đôi.
 - Working tree cuối phiên chỉ còn `Mobile app design-handoff.zip` ở trạng thái
@@ -53,6 +53,53 @@ việc nào đang dở dang giữa chừng trong mã.
 - Không còn đầu việc kỹ thuật bắt buộc. Phiên sau đọc `AGENTS.md`, `CLAUDE.md`, mục
   này rồi mới chọn yêu cầu mới; không chạy lại hay sửa phần đã xanh nếu không có
   bằng chứng lỗi mới.
+
+### Bàn giao `v0.4.1 — Khoá lỗ hổng danh tính thiết bị` (09/08/2026)
+
+Claude Code kiểm lại phiên Codex và phát hiện đúng một lỗi nghiêm trọng: cookie
+`rp_device` là UUID không ký, trong khi `findMyPlayer` dùng nó như giấy thông hành
+và `EventState` trả công khai lại chứa `Player.deviceId`. Thử thật trước bản vá cho
+thấy chép mã TEST Hà rồi gọi `UpdateProfile` trả 200. Bán kính ảnh hưởng gồm các
+lệnh tự phục vụ, ảnh tài khoản, gắn thiết bị vào tài khoản và quyền câu lạc bộ.
+
+Bản v0.4.1 đóng toàn bộ đường cùng gốc, không chỉ sửa đúng một route:
+
+1. Middleware ký HMAC-SHA256 cookie thiết bị bằng `APP_SECRET`, đặt `httpOnly`,
+   và mọi API đọc qua `deviceIdFromRequest`. Bản Web Crypto trong Edge đã có test
+   tương thích với `lib/auth/hmac.ts` phía Node.
+2. UUID trần của bản cũ không được ký lại. Middleware tạo danh tính mới và chèn
+   token vào chính request đầu tiên, để lệnh đang chờ trong IndexedDB không mất vì
+   một lượt 403. Đây là lần cắt bắt buộc: ký lại UUID đã phát công khai thì kẻ đã
+   chép nó cũng xin được chữ ký và lỗ hổng vẫn còn.
+3. `publicEventSnapshot`/`redactEventState` được dùng cho `/state`, dữ liệu dựng
+   sẵn RSC và response `/mutate`. Nó lược `Player.deviceId`, `submittedBy.ref`,
+   `edits[].by.ref`; giao diện chỉ nhận cờ đã-được-nhận và mã giả `self` để giữ nút
+   tự sửa tỷ số.
+4. `ClaimPlayer` không còn cho người ẩn danh nhận ô đã thuộc `userId`; `LinkAccount`
+   qua API bắt buộc có tài khoản đăng nhập.
+5. Cột ưu tiên của `GrantCatchUp` nay đo phần tín dụng còn tác động vào mục tiêu
+   scheduler, nên cấp 3 sau khi người đó đã đánh 4 trận hiện đúng `+3`, không phải 0.
+6. Byte ảnh tự tải có `X-Content-Type-Options: nosniff` ở cả phản hồi 200 và 304.
+
+Tác động nâng cấp: không xoá Sheet, tài khoản, CLB, sự kiện, tỷ số, localStorage
+hay hàng đợi IndexedDB. Người đã đăng nhập Google vẫn được nhận qua `userId` trên
+mọi máy. Người chỉ dùng danh tính ẩn danh cũ có thể phải nhận lại tên một lần, vì
+không có cách mật mã nào phân biệt chủ cookie cũ với người đã chép cookie đó.
+
+Kiểm chứng sau sửa:
+
+- 18 tệp test, 498/498 bài xanh; 152 lượt kịch bản 4–11 người, 0 vấn đề;
+  `npm run build` (Next 15.5.23) và `npm run typecheck` sạch.
+- HTTP local với cookie giả `robin-test-player-6`: `/state` không còn mã máy,
+  `myPlayerId=null`, cookie bị thay bằng HMAC `HttpOnly`; đổi tên TEST Hà bị 403
+  và tên giữ nguyên. Probe bị chặn trước ghi nên SHA kho TEST không đổi.
+- Production deployment `dpl_DANZBkMLZyJ7aGY3JNFWx215eeNs` ở trạng thái Ready;
+  alias chính trả `v0.4.1 · 6ae181f`, cookie ký đúng, và `/state` sự kiện thật
+  không còn trường `deviceId`.
+- `npm audit` vẫn báo 3 high qua Next 15 (`postcss`, `sharp`). Đường khai thác đã
+  ghi trước vẫn không được app gọi: không biên dịch CSS người dùng, không dùng
+  `next/image`. Công cụ chỉ đề xuất nâng major lên Next 16.3.0; việc đó phải làm
+  thành đợt riêng trên mốc v0.4.1.
 
 ### Bàn giao `v0.4.0 — Kiểm định công bằng 4–11 người và sân TEST` (09/08/2026)
 
@@ -239,10 +286,10 @@ thiện phần còn thiếu. Mốc phát hành là tag Git `v0.2.0` trên nhánh
   hiện nhưng không làm test/typecheck/build thất bại; đừng trộn việc dọn cảnh báo
   đó vào một sửa lỗi không liên quan.
 
-Bản nâng lên Next.js 16.3.0 nằm sẵn ở nhánh `claude/nang-next-16`, **cố ý chưa
-gộp** — xem [mục dưới](#nhánh-claudenang-next-16--làm-xong-chờ-gộp). Giờ đã có
-một bản Next 15 chạy thật làm mốc so sánh, nên đánh vài buổi trên đó trước rồi
-mới nâng.
+Ghi chú cũ từng coi `claude/nang-next-16` là nhánh chờ gộp. Kết luận đó đã hết
+hiệu lực: nhánh tách từ `d24f924` và không chứa các bản vá sau này. Xem mục
+[bản thí nghiệm lịch sử](#nhánh-claudenang-next-16--bản-thí-nghiệm-lịch-sử-không-được-merge);
+không merge nó vào mã hiện tại.
 
 ### Bảy biến môi trường trên Vercel
 
@@ -389,7 +436,7 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá dữ liệu chạy thử mặc định, chơi lại từ đầu | Chỉ xoá `.data/sheet.json`; giữ `.data/test-sandbox.json` |
-| Chạy bộ kiểm thử | `npm test` (492 bài, ~26 giây) |
+| Chạy bộ kiểm thử | `npm test` (498 bài, ~27 giây) |
 | Mở sân TEST đã có 11 người | `npm run dev:test`, vào mã `TEST11` |
 | Quét 152 lượt 4–11 người | `npm run scenarios` |
 | Soát cấu hình trước khi triển khai | `npm run check-env` |
@@ -634,7 +681,7 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **492 bài xanh** (`npm test`) — gồm 156 bài ma trận/kỳ vọng 4–11 người, dữ liệu sân TEST bền vững, quyền tự phục vụ, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng, khai giờ đến/về, dấu phiên bản deploy và làm mới dữ liệu tạm |
+| Kiểm thử tự động | **498 bài xanh** (`npm test`) — gồm 156 bài ma trận/kỳ vọng 4–11 người, dữ liệu sân TEST bền vững, quyền tự phục vụ, cookie thiết bị ký HMAC, lược danh tính khỏi state, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng, khai giờ đến/về, dấu phiên bản deploy và làm mới dữ liệu tạm |
 | Kịch bản thực chiến 4–11 người | **152 lượt chạy, 0 vấn đề** (`npm run scenarios`); lệch suất kỳ vọng lớn nhất 1,29 trận ở ca 7 người, ghim trận rồi cho nghỉ |
 | **Chạy thử trên Google Sheet THẬT** | **19 phép kiểm, 0 hỏng** — lập câu lạc bộ, tạo buổi, bốn người, xếp lịch, nhập tỷ số 11–7, tổng kết, rồi đọc lại từ một tiến trình khác để chắc dữ liệu nằm trên bảng tính |
 | Kiểm tra kiểu | `npm run typecheck` sạch |
@@ -809,28 +856,23 @@ gia, và ô nhập mật khẩu có thêm dòng *"Bạn tạo buổi này mà qu
   nhập tỷ số thì ảnh **sẽ có ích thật** — đó là chỗ bắt lỗi "nhập đúng tỷ số vào
   nhầm trận" — nhưng để dành, chưa làm.
 
-### Nhánh `claude/nang-next-16` — làm xong, chờ gộp
+### Nhánh `claude/nang-next-16` — bản thí nghiệm lịch sử, không được merge
 
-Bản nâng lên **Next.js 16.3.0** đã làm xong và kiểm chứng, nhưng **cố ý chưa gộp**
-vào nhánh chính. Lý do là thứ tự: nên deploy một bản Next 15 chạy thật trước, để
-có mốc so sánh. Sau khi nâng, lỗi nào lộ ra trên Vercel cũng không biết quy cho
-Next 16 hay cho lần đầu chạy thật — nhất là khi phần chưa kiểm được ở máy nhà
-chính là hành vi lớp đệm của nền Vercel.
+Đánh giá ngày 09/08 xác nhận nhánh này đứng ở `8e27c43`, tách từ mốc `d24f924`.
+Nó cũ hơn các bản v0.2.0–v0.4.1 và đụng đúng những tệp đã thay đổi nhiều nhất:
+`package-lock.json`, `tsconfig.json`, cache Sheet, danh tính thiết bị và đặc biệt
+`middleware.ts` — nơi v0.4.1 vừa đóng lỗ hổng mạo danh.
 
-```powershell
-git checkout claude/nang-next-16
-```
-
-Nội dung: `npm audit` về 0 lỗ hổng, `revalidateTag` sửa theo chữ ký mới của Next
-16, `middleware.ts` đổi thành `proxy.ts`, gỡ script `next lint` đã chết. Chi tiết
-và những cái bẫy ở mục [Nâng lên Next.js 16.3.0](#nâng-lên-nextjs-1630) trên
-nhánh đó.
-
-Sau khi deploy xong và chạy thật vài buổi thì gộp:
+Vì vậy **không chạy `git merge claude/nang-next-16`**. Nội dung nhánh vẫn hữu ích
+như ghi chú nghiên cứu: Next 16.3.0, chữ ký mới của `revalidateTag`, đổi
+`middleware.ts` thành `proxy.ts`, gỡ `next lint`. Khi quyết định nâng, tạo nhánh
+mới từ tag đã phát hành và áp lại từng thay đổi có kiểm chứng:
 
 ```powershell
-git merge claude/nang-next-16
+git switch -c codex/nang-next-16-v2 v0.4.1
 ```
+
+Không cherry-pick nguyên commit cũ và không mang lại phiên bản middleware cũ.
 
 ### Cảnh báo bảo mật
 
@@ -844,10 +886,10 @@ git merge claude/nang-next-16
 
 Nên **không chặn việc chạy thử hay dùng ở sân**.
 
-**Đã dọn xong ở nhánh `claude/nang-next-16`** — gộp nhánh đó là `npm audit` về 0.
-Một chỗ tài liệu này từng nói chưa đúng: bản vá là **≥ 16.3.0** chứ không phải
-"Next 16" chung chung. Cả ba khuyến cáo đều trả `fixAvailable: next@16.3.0`, tức
-16.0 tới 16.2 vẫn bị đánh dấu.
+Nhánh lịch sử từng đưa `npm audit` về 0, nhưng không còn là bản vá có thể gộp.
+Phiên mới phải nâng lại trên v0.4.1; đích tối thiểu mà audit hiện đề xuất là
+**Next.js 16.3.0**, không phải "Next 16" chung chung. Các bản 16.0–16.2 vẫn bị
+đánh dấu.
 
 ---
 
@@ -869,7 +911,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            492 bài kiểm thử
+tests/            498 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —
