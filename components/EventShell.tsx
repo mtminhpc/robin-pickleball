@@ -1,11 +1,17 @@
 "use client";
 
 /**
- * Vỏ ngoài của mọi màn hình trong một sự kiện: banner trạng thái lưu, tiêu đề,
- * và thanh điều hướng dưới đáy.
+ * Vỏ ngoài của mọi màn hình trong một sự kiện.
  *
- * Thanh điều hướng nằm dưới đáy chứ không trên đỉnh: điện thoại ngày nay dài,
- * ngón cái với không tới mép trên khi cầm một tay.
+ * Hai hình dạng, cùng một cây thẻ:
+ *
+ *   • **Điện thoại** — thanh điều hướng dính dưới đáy. Nằm dưới chứ không trên:
+ *     điện thoại ngày nay dài, ngón cái với không tới mép trên khi cầm một tay.
+ *   • **Máy tính (≥1024px)** — thanh bên tối cố định bên trái. Cùng năm mục,
+ *     cùng thứ tự, nên đổi máy không phải học lại.
+ *
+ * Băng tiêu đề tối với số vòng cỡ lớn là thứ đầu tiên đập vào mắt. Người đang
+ * đứng ở sân chỉ cần biết đúng một điều: giờ là vòng mấy.
  */
 
 import Link from "next/link";
@@ -42,79 +48,156 @@ function ShellInner({ code, children }: { code: string; children: ReactNode }) {
 
   return (
     <MutationQueueProvider code={code} onApplied={applyServerState}>
-      <div className="mx-auto flex min-h-dvh max-w-2xl flex-col">
-        <SaveStatusBanner />
-        <Header code={code} />
-        <main className="flex-1 space-y-4 px-4 pb-28 pt-2">{children}</main>
-        <NavBar code={code} />
+      <div className="mx-auto flex min-h-dvh w-full max-w-[78.75rem]">
+        <SideBar code={code} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <SaveStatusBanner />
+          <Band code={code} />
+          {/* Thanh dưới nằm TRONG dòng chảy chứ không `fixed`, nên không cần
+              chừa khoảng đệm dưới cho nó như bản trước. */}
+          <main className="flex-1 px-4 pb-10 lg:px-10 lg:pb-12">{children}</main>
+          <TabBar code={code} />
+        </div>
       </div>
     </MutationQueueProvider>
   );
 }
 
-function Header({ code }: { code: string }) {
-  const { data } = useEvent();
-  if (!data) return null;
+const TABS: ReadonlyArray<{ href: string; label: string; adminOnly?: boolean }> = [
+  { href: "", label: "Đang đánh" },
+  { href: "/standings", label: "Xếp hạng" },
+  { href: "/schedule", label: "Lịch" },
+  { href: "/players", label: "Người chơi" },
+  { href: "/admin", label: "Quản lý", adminOnly: true },
+];
 
-  const { state, role } = data;
-  const status =
-    state.status === "draft"
-      ? "Chưa bắt đầu"
-      : state.status === "running"
-        ? `Vòng ${currentRound(state.matches)}`
-        : state.endedEarly
-          ? "Đã kết thúc sớm"
-          : "Đã xong";
-
-  return (
-    <header className="px-4 pt-4">
-      <h1 className="truncate text-xl font-bold">{state.config.name}</h1>
-      <p className="text-sm text-slate-400">
-        {status} · {state.config.courts} sân · mã{" "}
-        <span className="font-mono tracking-wider text-slate-300">{code}</span>
-        {role === "admin" && " · bạn là chủ sự kiện"}
-        {role === "viewer" && " · chế độ xem"}
-      </p>
-    </header>
-  );
-}
-
-const TABS = [
-  { href: "", label: "Đang đánh", icon: "🏓" },
-  { href: "/standings", label: "Xếp hạng", icon: "🏆" },
-  { href: "/schedule", label: "Lịch", icon: "📋" },
-  { href: "/players", label: "Người chơi", icon: "👥" },
-  { href: "/admin", label: "Quản lý", icon: "⚙️" },
-] as const;
-
-function NavBar({ code }: { code: string }) {
+/** Mục nào đang mở. Tab gốc phải so khớp chính xác, nếu không nó luôn "đang mở". */
+function useActive(code: string) {
   const pathname = usePathname();
   const base = `/e/${code}`;
+  return (href: string) =>
+    href === "" ? pathname === base : pathname === `${base}${href}`;
+}
+
+function SideBar({ code }: { code: string }) {
+  const { data } = useEvent();
+  const isActive = useActive(code);
+  const isAdmin = data?.role === "admin";
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 backdrop-blur">
-      <div className="mx-auto flex max-w-2xl">
-        {TABS.map((tab) => {
-          const href = `${base}${tab.href}`;
-          const active = tab.href === "" ? pathname === base : pathname === href;
+    <aside className="hidden w-[14.5rem] flex-none flex-col bg-ink text-mute-200 lg:flex">
+      <div className="border-b border-white/15 px-5 pb-6 pt-7">
+        <div className="mb-3.5 h-1.5 w-6 bg-accent" />
+        <p className="font-display text-lg font-extrabold leading-none tracking-[-0.02em] text-white">
+          ROBIN
+          <br />
+          PICKLEBALL
+        </p>
+        <p className="eyebrow mt-2.5 font-normal text-mute-500">
+          Americano · Round robin
+        </p>
+      </div>
+
+      <nav className="flex flex-col py-3.5">
+        {TABS.filter((t) => !t.adminOnly || isAdmin).map((tab) => {
+          const active = isActive(tab.href);
           return (
             <Link
               key={tab.href}
-              href={href}
+              href={`/e/${code}${tab.href}`}
               aria-current={active ? "page" : undefined}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] ${
-                active ? "text-court-100" : "text-slate-500"
+              className={`flex items-center gap-3.5 px-5 py-3 font-display text-xs font-extrabold uppercase leading-none tracking-[0.1em] transition ${
+                active ? "text-white" : "text-mute-500 hover:text-mute-300"
               }`}
             >
-              <span aria-hidden className="text-lg leading-none">
-                {tab.icon}
-              </span>
+              <span
+                aria-hidden
+                className={`h-0.5 w-3.5 flex-none ${active ? "bg-accent" : "bg-mute-700"}`}
+              />
               {tab.label}
             </Link>
           );
         })}
+      </nav>
+
+      <div className="mt-auto border-t border-white/15 p-5">
+        <p className="eyebrow font-normal text-mute-600">Mã buổi đánh</p>
+        <p className="mt-1.5 font-display text-2xl font-extrabold tracking-[0.16em] text-white">
+          {code}
+        </p>
       </div>
+    </aside>
+  );
+}
+
+function TabBar({ code }: { code: string }) {
+  const { data } = useEvent();
+  const isActive = useActive(code);
+  const isAdmin = data?.role === "admin";
+
+  return (
+    <nav className="sticky bottom-0 z-30 flex bg-ink lg:hidden">
+      {TABS.filter((t) => !t.adminOnly || isAdmin).map((tab) => {
+        const active = isActive(tab.href);
+        return (
+          <Link
+            key={tab.href}
+            href={`/e/${code}${tab.href}`}
+            aria-current={active ? "page" : undefined}
+            className={`flex min-h-[3.875rem] flex-1 flex-col items-center justify-center gap-2 font-display text-[9px] font-extrabold uppercase leading-none tracking-[0.1em] ${
+              active ? "text-white" : "text-mute-500"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`h-0.5 w-5 ${active ? "bg-accent" : "bg-mute-700"}`}
+            />
+            {tab.label}
+          </Link>
+        );
+      })}
     </nav>
+  );
+}
+
+/** Băng tối trên đỉnh: tên buổi, vòng đang đánh cỡ lớn, và mã. */
+function Band({ code }: { code: string }) {
+  const { data } = useEvent();
+  if (!data) return null;
+
+  const { state, role } = data;
+  const round = currentRound(state.matches);
+  const title =
+    state.status === "draft"
+      ? "CHƯA BẮT ĐẦU"
+      : state.status === "running"
+        ? `VÒNG ${round}`
+        : state.endedEarly
+          ? "KẾT THÚC SỚM"
+          : "ĐÃ XONG";
+
+  return (
+    <header className="bg-ink px-4 pb-4 pt-5 text-white lg:px-10 lg:pb-6 lg:pt-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="truncate text-[10px] uppercase tracking-[0.2em] text-mute-500">
+            {state.config.name}
+          </p>
+          <p className="mt-2 font-display text-display lg:text-[2.875rem]">{title}</p>
+          <p className="mt-2 text-[11px] text-mute-400">
+            {state.config.courts} sân
+            {role === "admin" && " · bạn là chủ sự kiện"}
+            {role === "viewer" && " · chế độ xem"}
+          </p>
+        </div>
+        <div className="flex-none text-right lg:hidden">
+          <p className="eyebrow font-normal text-mute-500">Mã</p>
+          <p className="mt-1 font-display text-[17px] font-extrabold tracking-[0.18em]">
+            {code}
+          </p>
+        </div>
+      </div>
+    </header>
   );
 }
 

@@ -101,7 +101,7 @@ export default function MePage() {
   return (
     <main className="mx-auto min-h-dvh max-w-md space-y-6 px-4 py-8">
       <header className="space-y-1">
-        <Link href="/" className="text-sm text-slate-500 hover:text-slate-300">
+        <Link href="/" className="text-sm text-mute-600 hover:text-mute-800">
           ← Trang chủ
         </Link>
         <div className="flex items-center gap-3 pt-1">
@@ -112,14 +112,14 @@ export default function MePage() {
             </h1>
             {data?.account && data.account.devices > 1 ? (
               <button
-                className="text-sm text-slate-400 underline decoration-slate-700 underline-offset-4 hover:text-slate-200"
+                className="text-sm text-mute-700 underline decoration-mute-400 underline-offset-4 hover:text-mute-900"
                 onClick={() => setShowDevices((v) => !v)}
               >
                 Gộp số liệu từ {data.account.devices} máy
                 <span className="ml-1 text-xs">{showDevices ? "▲" : "▼"}</span>
               </button>
             ) : (
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-mute-700">
                 {data?.account
                   ? "Số liệu theo tài khoản"
                   : "Số liệu lưu trên máy, không cần tài khoản"}
@@ -154,21 +154,21 @@ export default function MePage() {
 
           {data.periods.length > 1 && (
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-mute-700">
                 Theo tháng
               </h2>
               {data.periods.map((p) => (
                 <Card key={p.periodKey} className="flex items-center justify-between p-4">
                   <div>
                     <p className="font-medium">{p.label}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-mute-600">
                       {p.events} buổi · {p.games} trận
                       {p.rank > 0 && ` · hạng ${p.rank}/${p.of}`}
                     </p>
                   </div>
                   <span
                     className={`shrink-0 font-semibold tabular-nums ${
-                      p.avgDiff > 0 ? "text-court-100" : "text-slate-300"
+                      p.avgDiff > 0 ? "text-accent-700" : "text-mute-800"
                     }`}
                   >
                     {p.avgDiff > 0 ? "+" : ""}
@@ -180,7 +180,7 @@ export default function MePage() {
           )}
 
           <section className="space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-mute-700">
               Từng buổi
             </h2>
             {data.events.map((e) => (
@@ -188,14 +188,14 @@ export default function MePage() {
                 <Card className="flex items-center justify-between p-4">
                   <div className="min-w-0">
                     <p className="truncate font-medium">{e.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-mute-600">
                       {new Date(e.at).toLocaleDateString("vi-VN")} · {e.games} trận ·{" "}
                       {e.wins}T {e.losses}B
                     </p>
                   </div>
                   <span
                     className={`ml-3 shrink-0 font-semibold tabular-nums ${
-                      e.avgDiff > 0 ? "text-court-100" : "text-slate-300"
+                      e.avgDiff > 0 ? "text-accent-700" : "text-mute-800"
                     }`}
                   >
                     {e.avgDiff > 0 ? "+" : ""}
@@ -212,7 +212,7 @@ export default function MePage() {
 
       <AccountBar next="/me" />
 
-      <p className="pb-4 text-xs text-slate-600">
+      <p className="pb-4 text-xs text-mute-500">
         {data?.account
           ? "Số liệu này bám theo tài khoản của bạn. Đăng nhập trên điện thoại mới là thấy lại đủ."
           : "Số liệu này bám theo máy bạn đang dùng. Xoá dữ liệu trình duyệt hoặc đổi điện thoại là mất."}
@@ -258,7 +258,7 @@ function DeviceList({ devices }: { devices: DeviceRow[] }) {
 
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-mute-700">
         Máy đang gộp
       </h2>
 
@@ -268,21 +268,21 @@ function DeviceList({ devices }: { devices: DeviceRow[] }) {
             <div className="min-w-0">
               <p className="truncate font-medium">
                 {d.displayName || "Máy không tên"}
-                <span className="ml-2 font-mono text-xs text-slate-600">
+                <span className="ml-2 font-mono text-xs text-mute-500">
                   ·{d.deviceId.slice(-4)}
                 </span>
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-mute-600">
                 {d.current ? "Máy này" : `Đồng bộ lần cuối ${whenLabel(d.lastSeen)}`}
               </p>
             </div>
 
             {d.current ? (
-              <span className="shrink-0 text-xs text-slate-600">Dùng Đăng xuất</span>
+              <span className="shrink-0 text-xs text-mute-500">Dùng Đăng xuất</span>
             ) : (
               confirming !== d.deviceId && (
                 <button
-                  className="shrink-0 text-sm text-slate-400 hover:text-slate-100"
+                  className="shrink-0 text-sm text-mute-700 hover:text-ink"
                   onClick={() => {
                     remove.reset();
                     setConfirming(d.deviceId);
@@ -295,8 +295,8 @@ function DeviceList({ devices }: { devices: DeviceRow[] }) {
           </div>
 
           {confirming === d.deviceId && (
-            <div className="mt-3 space-y-3 rounded-xl bg-amber-500/10 p-3">
-              <p className="text-sm text-amber-200">
+            <div className="mt-3 space-y-3 rounded-xl bg-accent-100 p-3">
+              <p className="text-sm text-accent-800">
                 Số liệu từ máy này thôi được cộng vào trang của bạn, và danh sách
                 buổi của nó không còn theo tài khoản sang máy khác nữa.
                 <strong className="block pt-1 font-semibold">
@@ -350,10 +350,10 @@ function Stat({
 }) {
   return (
     <div>
-      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-xs text-mute-600">{label}</p>
       <p
         className={`text-2xl font-bold tabular-nums ${
-          highlight ? "text-court-100" : "text-slate-100"
+          highlight ? "text-accent-700" : "text-ink"
         }`}
       >
         {value}

@@ -36,13 +36,13 @@ export default function HomePage() {
       <header className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold">Robin Pickleball</h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-mute-700">
             Xếp lịch xoay đôi công bằng, tính điểm theo hiệu số.
           </p>
         </div>
         <Link
           href="/me"
-          className="shrink-0 rounded-xl bg-slate-900 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          className="shrink-0 rounded-xl bg-surface px-3 py-2 text-sm text-mute-800 hover:bg-mute-300"
         >
           Của tôi
         </Link>
@@ -50,14 +50,14 @@ export default function HomePage() {
 
       {recent.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-mute-700">
             Gần đây
           </h2>
           {recent.slice(0, 5).map((e) => (
             <Link key={e.code} href={`/e/${e.code}`} className="block">
               <Card className="flex items-center justify-between p-4">
                 <span className="truncate font-medium">{e.name}</span>
-                <span className="ml-3 shrink-0 font-mono text-xs tracking-wider text-slate-500">
+                <span className="ml-3 shrink-0 font-mono text-xs tracking-wider text-mute-600">
                   {e.code}
                 </span>
               </Card>
@@ -68,21 +68,21 @@ export default function HomePage() {
 
       {clubs.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-mute-700">
             Câu lạc bộ của bạn
           </h2>
           {clubs.slice(0, 5).map((c) => (
             <Link key={c.id} href={`/c/${c.id}`} className="block">
               <Card className="flex items-center justify-between p-4">
                 <span className="truncate font-medium">{c.name}</span>
-                <span className="ml-3 shrink-0 text-xs text-slate-500">danh bạ →</span>
+                <span className="ml-3 shrink-0 text-xs text-mute-600">danh bạ →</span>
               </Card>
             </Link>
           ))}
         </section>
       )}
 
-      <div className="flex gap-2 rounded-xl bg-slate-900 p-1">
+      <div className="flex gap-2 rounded-xl bg-surface p-1">
         <TabButton active={tab === "join"} onClick={() => setTab("join")}>
           Vào bằng mã
         </TabButton>
@@ -117,7 +117,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={`min-h-tap flex-1 rounded-lg text-sm font-semibold ${
-        active ? "bg-slate-800 text-slate-100" : "text-slate-400"
+        active ? "bg-mute-300 text-ink" : "text-mute-700"
       }`}
     >
       {children}
@@ -238,7 +238,7 @@ function CreateEvent() {
             type="checkbox"
             checked={winBy2}
             onChange={(e) => setWinBy2(e.target.checked)}
-            className="h-5 w-5 accent-court-500"
+            className="h-5 w-5 accent-accent"
           />
           Phải hơn 2 điểm mới thắng
         </label>
@@ -269,7 +269,7 @@ function CreateEvent() {
           />
         </Field>
 
-        {error && <p className="text-sm text-red-300">{error}</p>}
+        {error && <p className="text-sm text-accent-700">{error}</p>}
 
         <Button
           tone="primary"
@@ -371,7 +371,7 @@ function ClubEntry() {
           </Field>
 
           {error && (
-            <p className="rounded-xl bg-red-500/15 p-3 text-sm text-red-200">{error}</p>
+            <p className="rounded-xl bg-accent-100 p-3 text-sm text-paper">{error}</p>
           )}
 
           <Button

@@ -28,7 +28,7 @@ export default function AdminPage() {
   if (role !== "admin") {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-mute-700">
           Trang này cần mật khẩu chủ sự kiện.
         </p>
         <PasswordGate code={code} />
@@ -45,7 +45,7 @@ export default function AdminPage() {
       {state.status === "draft" && (
         <Card className="space-y-3 p-5">
           <h2 className="font-semibold">Bắt đầu buổi đánh</h2>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-mute-700">
             {readyCount} người đã sẵn sàng. Bấm Bắt đầu để chốt danh sách và xếp
             lịch. Sau đó ai vào thêm sẽ phải chờ bạn duyệt.
           </p>
@@ -93,11 +93,11 @@ export default function AdminPage() {
                 patch: { countPartialMatches: e.target.checked },
               })
             }
-            className="mt-0.5 h-5 w-5 shrink-0 accent-court-500"
+            className="mt-0.5 h-5 w-5 shrink-0 accent-accent"
           />
           <span>
             Tính trận dở dang vào bảng xếp hạng
-            <span className="block text-xs text-slate-500">
+            <span className="block text-xs text-mute-600">
               Trận bị bỏ giữa chừng nhưng có ghi tỷ số.
             </span>
           </span>
@@ -107,9 +107,9 @@ export default function AdminPage() {
       <LogSection />
 
       {state.status === "running" && (
-        <Card className="space-y-3 border-red-900/50 p-5">
-          <h2 className="font-semibold text-red-300">Kết thúc sớm</h2>
-          <p className="text-sm text-slate-400">
+        <Card className="space-y-3 border-line p-5">
+          <h2 className="font-semibold text-accent-700">Kết thúc sớm</h2>
+          <p className="text-sm text-mute-700">
             Huỷ toàn bộ trận chưa đánh và chốt bảng xếp hạng. Không mở lại được.
             Hiện còn{" "}
             {state.matches.filter((m) => m.status === "scheduled").length} trận
@@ -142,7 +142,7 @@ function QrSection({ code }: { code: string }) {
   return (
     <Card className="space-y-3 p-5 text-center">
       <h2 className="font-semibold">Mời người chơi</h2>
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-mute-700">
         Chiếu mã này lên để mọi người quét, tự nhập tên và chọn ảnh đại diện.
       </p>
       {/* Ảnh SVG do máy chủ dựng; đường dẫn cố định nên trình duyệt giữ lại được. */}
@@ -152,7 +152,7 @@ function QrSection({ code }: { code: string }) {
         alt={`Mã QR tham gia buổi đánh ${code}`}
         className="mx-auto h-56 w-56 rounded-xl bg-white p-2"
       />
-      <p className="break-all font-mono text-xs text-slate-500">{joinUrl}</p>
+      <p className="break-all font-mono text-xs text-mute-600">{joinUrl}</p>
       <Button
         full
         onClick={() => {
@@ -197,8 +197,8 @@ function LogSection() {
       ) : (
         <ul className="space-y-1.5 text-sm">
           {entries.map((e, i) => (
-            <li key={i} className="flex gap-2 text-slate-400">
-              <span className="shrink-0 font-mono text-xs text-slate-600">
+            <li key={i} className="flex gap-2 text-mute-700">
+              <span className="shrink-0 font-mono text-xs text-mute-500">
                 {new Date(e.at).toLocaleTimeString("vi-VN", {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -235,7 +235,7 @@ function EndDialog({
       title="Kết thúc buổi đánh"
     >
       <div className="space-y-4">
-        <p className="rounded-xl bg-red-500/15 p-3 text-sm text-red-200">
+        <p className="rounded-xl bg-accent-100 p-3 text-sm text-paper">
           Mọi trận chưa đánh sẽ bị huỷ và bảng xếp hạng được chốt. Không mở lại được.
         </p>
 
@@ -252,7 +252,7 @@ function EndDialog({
             type="checkbox"
             checked={confirmed}
             onChange={(e) => setConfirmed(e.target.checked)}
-            className="h-5 w-5 accent-red-500"
+            className="h-5 w-5 accent-accent"
           />
           Tôi hiểu và muốn kết thúc buổi đánh
         </label>

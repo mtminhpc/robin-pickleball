@@ -1,22 +1,23 @@
 "use client";
 
 /**
- * Thẻ một trận đấu.
+ * Một trận đấu, dạng hàng ngang phân tách bằng đường kẻ.
+ *
+ * Không phải thẻ có khung: bản thiết kế dùng kẻ ngang thay cho hộp, nên nhiều
+ * trận xếp liền nhau đọc như một danh sách chứ không như một đống hộp rời.
  *
  * Hai chi tiết ở đây phục vụ trực tiếp nỗi lo "tưởng đã lưu mà chưa lưu":
  *
- *   • Tỷ số đang chờ gửi hiện MỜ kèm chấm nhấp nháy, trông khác hẳn tỷ số đã
- *     lưu. Chỉ nhìn thẻ trận là biết cái nào chắc chắn, không phải nhớ mình vừa
- *     bấm gì.
- *   • Mọi lần sửa hiện công khai ngay trên thẻ: ai sửa, lúc mấy giờ, từ bao
- *     nhiêu thành bao nhiêu. Minh bạch quan trọng hơn gọn gàng khi có tranh cãi.
+ *   • Tỷ số đang chờ gửi hiện MỜ kèm nhấp nháy, trông khác hẳn tỷ số đã lưu.
+ *     Chỉ nhìn là biết cái nào chắc chắn, không phải nhớ mình vừa bấm gì.
+ *   • Mọi lần sửa hiện công khai ngay tại chỗ: ai sửa, lúc mấy giờ, từ bao nhiêu
+ *     thành bao nhiêu. Minh bạch quan trọng hơn gọn gàng khi có tranh cãi.
  */
 
 import type { Command } from "@/lib/domain/commands";
 import { canEditResult } from "@/lib/domain/rules";
 import type { Actor, EventState, Match, PlayerId } from "@/lib/domain/types";
-import { Avatar } from "@/components/Avatar";
-import { Button, Tag } from "@/components/ui";
+import { Button, Marker } from "@/components/ui";
 
 export function MatchCard({
   match,
@@ -36,7 +37,8 @@ export function MatchCard({
   onEnterScore: (match: Match) => void;
   onCancel?: (match: Match) => void;
 }) {
-  const player = (id: PlayerId) => state.players.find((p) => p.id === id);
+  const nameOf = (id: PlayerId) =>
+    state.players.find((p) => p.id === id)?.name ?? id;
   const result = match.result;
   const shown = pendingScore ?? result;
   const editable =
@@ -48,89 +50,91 @@ export function MatchCard({
 
   return (
     <div
-      className={`rounded-2xl border p-4 ${
-        dead
-          ? "border-slate-800 bg-slate-900/40 opacity-60"
-          : "border-slate-800 bg-slate-900"
-      }`}
+      className={`border-b border-line pb-5 pt-4.5 ${dead ? "opacity-50" : ""}`}
     >
-      <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
-        <span>
-          Vòng {match.round} · Sân {match.court}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <span className="font-display text-[11px] font-extrabold uppercase tracking-[0.16em] text-mute-700">
+          Sân {match.court}
         </span>
-        <span className="flex items-center gap-1.5">
-          {match.pinned && <Tag>đã ghim</Tag>}
-          {result?.partial && <Tag tone="warn">dở dang</Tag>}
-          {result?.irregular && !result.partial && <Tag tone="warn">lệch mốc</Tag>}
-          {match.status === "cancelled" && <Tag tone="danger">đã huỷ</Tag>}
-          {match.status === "abandoned" && <Tag tone="danger">bỏ dở</Tag>}
-          {match.status === "submitted" && !pendingScore && <Tag tone="ok">đã khoá</Tag>}
+        <span className="flex items-center gap-2">
+          {match.pinned && <Marker tone="ink">đã ghim</Marker>}
+          {result?.partial && <Marker tone="accent">dở dang</Marker>}
+          {result?.irregular && !result.partial && (
+            <Marker tone="accent">lệch mốc</Marker>
+          )}
+          {match.status === "cancelled" && <Marker tone="accent">đã huỷ</Marker>}
+          {match.status === "abandoned" && <Marker tone="accent">bỏ dở</Marker>}
+          {pendingScore && <Marker tone="accent">đang lưu</Marker>}
+          {match.status === "submitted" && !pendingScore && (
+            <Marker tone="ink">đã khoá</Marker>
+          )}
         </span>
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <Team ids={match.teamA} lookup={player} align="left" />
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2.5">
+        <Team ids={match.teamA} nameOf={nameOf} />
         <div
-          className={`text-center text-3xl font-extrabold tabular-nums ${
-            pendingScore ? "animate-pulse text-slate-500" : "text-slate-100"
+          className={`px-2 text-center font-display text-score tabular-nums ${
+            pendingScore
+              ? "animate-pulse text-mute-600"
+              : shown
+                ? "text-ink"
+                : "text-mute-400"
           }`}
         >
-          {shown ? (
-            <>
-              {shown.scoreA}
-              <span className="mx-1 text-slate-600">–</span>
-              {shown.scoreB}
-            </>
-          ) : (
-            <span className="text-xl text-slate-600">vs</span>
-          )}
+          {shown ? `${shown.scoreA}–${shown.scoreB}` : "vs"}
         </div>
-        <Team ids={match.teamB} lookup={player} align="right" />
+        <Team ids={match.teamB} nameOf={nameOf} align="right" />
       </div>
 
-      {pendingScore && (
-        <p className="mt-2 text-center text-xs text-amber-300">
-          Đang lưu — chưa chắc chắn
-        </p>
-      )}
-
       {match.cancelReason && (
-        <p className="mt-2 text-center text-xs text-slate-400">{match.cancelReason}</p>
+        <p className="mt-2 text-center text-xs text-mute-700">
+          {match.cancelReason}
+        </p>
       )}
 
       {match.edits
         .filter((e) => e.from !== null)
         .map((edit, i) => (
-          <p key={i} className="mt-1 text-center text-xs text-slate-500">
+          <p key={i} className="mt-1 text-center text-xs text-mute-600">
             Đã sửa bởi {edit.by.label} · {formatClock(edit.at)} ·{" "}
-            {edit.from!.scoreA}-{edit.from!.scoreB} → {edit.to?.scoreA}-{edit.to?.scoreB}
+            {edit.from!.scoreA}-{edit.from!.scoreB} → {edit.to?.scoreA}-
+            {edit.to?.scoreB}
           </p>
         ))}
 
       {!dead && (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-4.5 flex gap-2">
           {editable.allowed ? (
             <Button
               tone={shown ? "neutral" : "primary"}
-              full
               onClick={() => onEnterScore(match)}
+              className="min-h-[3.125rem] flex-1 justify-start"
             >
               {shown ? "Sửa tỷ số" : "Nhập tỷ số"}
             </Button>
           ) : (
             editable.reason && (
-              <p className="flex-1 self-center text-xs text-slate-500">
+              <p className="flex-1 self-center text-xs text-mute-600">
                 {editable.reason}
               </p>
             )
           )}
           {onCancel && match.status === "scheduled" && (
-            <Button tone="ghost" onClick={() => onCancel(match)}>
+            <Button
+              tone="danger"
+              onClick={() => onCancel(match)}
+              className="min-h-[3.125rem] flex-none"
+            >
               Huỷ
             </Button>
           )}
           {onCancel && match.status === "playing" && (
-            <Button tone="ghost" onClick={() => onCancel(match)}>
+            <Button
+              tone="danger"
+              onClick={() => onCancel(match)}
+              className="min-h-[3.125rem] flex-none"
+            >
               Bỏ dở
             </Button>
           )}
@@ -142,33 +146,27 @@ export function MatchCard({
 
 function Team({
   ids,
-  lookup,
-  align,
+  nameOf,
+  align = "left",
 }: {
   ids: readonly [PlayerId, PlayerId];
-  lookup: (id: PlayerId) => { name: string; avatarId: string } | undefined;
-  align: "left" | "right";
+  nameOf: (id: PlayerId) => string;
+  align?: "left" | "right";
 }) {
   return (
     // `min-w-0` cho phép cột lưới co lại để `truncate` có tác dụng. Thiếu nó thì
-    // tên dài như "Nguyễn Văn Cường" đẩy cả thẻ trận tràn ra ngoài màn hình.
+    // tên dài như "Nguyễn Văn Cường" đẩy cả hàng tràn ra ngoài màn hình.
     <div
-      className={`min-w-0 space-y-1.5 ${align === "right" ? "text-right" : ""}`}
+      className={`flex min-w-0 flex-col gap-1.5 ${align === "right" ? "text-right" : ""}`}
     >
-      {ids.map((id) => {
-        const p = lookup(id);
-        return (
-          <div
-            key={id}
-            className={`flex min-w-0 items-center gap-2 ${
-              align === "right" ? "flex-row-reverse" : ""
-            }`}
-          >
-            <Avatar name={p?.name ?? id} avatarId={p?.avatarId} size="sm" />
-            <span className="truncate text-sm font-medium">{p?.name ?? id}</span>
-          </div>
-        );
-      })}
+      {ids.map((id) => (
+        <span
+          key={id}
+          className="truncate text-[15px] font-semibold tracking-[-0.01em]"
+        >
+          {nameOf(id)}
+        </span>
+      ))}
     </div>
   );
 }

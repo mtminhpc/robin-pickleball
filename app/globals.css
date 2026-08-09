@@ -3,17 +3,37 @@
 @tailwind utilities;
 
 /*
- * Nền tối mặc định. Sân pickleball ngoài trời rất chói; nền tối với chữ sáng dễ
- * nhìn hơn nền trắng, và đỡ tốn pin trên màn hình OLED trong một buổi hai tiếng.
+ * Nền sáng, theo bản thiết kế "Modernist".
+ *
+ * Bản trước dùng nền tối với lý do đỡ chói ngoài sân. Đổi sang nền sáng là đánh
+ * đổi có thật: tốn pin hơn trên màn OLED. Bù lại, dưới nắng gắt thì nền sáng ở
+ * độ sáng tối đa lại dễ đọc hơn nền tối, nên riêng khoản chói thì không mất gì.
  */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+  @apply bg-paper text-ink antialiased;
+  font-size: 15px;
+  line-height: 1.55;
   /* Chặn kéo co giãn quá đà trên iOS, nó làm banner dính bị nhảy. */
   overscroll-behavior-y: none;
+}
+
+/*
+ * Tiêu đề dùng chữ rất đậm và bó sát — đây là nét nhận dạng của hệ thống này,
+ * không phải trang trí. Bỏ nó đi thì mọi thứ trông như bản mẫu chưa thiết kế.
+ */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  @apply font-display font-extrabold;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
 }
 
 /* Vùng bấm tối thiểu cho ngón tay ướt mồ hôi. */
@@ -31,4 +51,31 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
+}
+
+/* Viền tiêu điểm phải thấy rõ trên nền sáng, và không được nhoè vào màu nhấn. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid theme("colors.accent.DEFAULT");
+  outline-offset: 2px;
+}
+::selection {
+  background: theme("colors.accent.200");
+}
+
+/*
+ * Nhãn nhỏ chữ hoa giãn cách — dùng cho tiêu đề mục và nhãn nút.
+ * Gom lại thành một lớp vì nó lặp ở gần như mọi màn hình.
+ */
+@layer components {
+  .eyebrow {
+    @apply font-display text-[10px] font-extrabold uppercase tracking-[0.16em];
+  }
+
+  /* Gạch đầu mục: số thứ tự màu nhấn + tiêu đề + đường kẻ đậm bên dưới. */
+  .rule-head {
+    @apply flex items-baseline gap-3 border-b-2 border-ink pb-2 pt-6;
+  }
 }

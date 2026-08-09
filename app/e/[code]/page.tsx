@@ -5,7 +5,10 @@
  *
  * Đây là màn hình người chơi nhìn nhiều nhất trong buổi, nên nó chỉ trả lời đúng
  * ba câu hỏi và không thêm gì khác: tôi có đang đánh không, ai đang nghỉ, và bao
- * giờ tới lượt tôi.
+ * giờ tới lượt tôi. Ba câu đó là ba mục được đánh số 01–03.
+ *
+ * Trên máy tính, mục 01 chiếm cột rộng bên trái còn 02–03 dồn sang cột hẹp bên
+ * phải: việc đang diễn ra đáng nhiều chỗ hơn việc sắp diễn ra.
  */
 
 import { useMemo, useState } from "react";
@@ -20,8 +23,7 @@ import { MatchCard, pendingScoreFor } from "@/components/MatchCard";
 import { ScoreEntryDialog } from "@/components/ScoreEntryDialog";
 import { CancelMatchDialog } from "@/components/CancelMatchDialog";
 import { PasswordGate } from "@/components/PasswordGate";
-import { Avatar } from "@/components/Avatar";
-import { Button, Card, Empty } from "@/components/ui";
+import { Button, Empty, SectionHead } from "@/components/ui";
 
 export default function LivePage() {
   const { code } = useParams<{ code: string }>();
@@ -57,18 +59,18 @@ export default function LivePage() {
 
   if (state.status === "draft") {
     return (
-      <Card className="space-y-3 p-5 text-center">
-        <p className="text-lg font-semibold">Buổi đánh chưa bắt đầu</p>
-        <p className="text-sm text-slate-400">
+      <>
+        <SectionHead n="01">Chưa bắt đầu</SectionHead>
+        <p className="pt-4 text-sm text-mute-700">
           {state.players.filter((p) => p.status === "confirmed").length} người đã
           xác nhận. Chủ sự kiện bấm Bắt đầu ở trang Quản lý là hệ thống xếp lịch.
         </p>
-        <Link href={`/e/${code}/players`} className="block">
+        <Link href={`/e/${code}/players`} className="mt-4 block">
           <Button tone="primary" full>
             Xem danh sách người chơi
           </Button>
         </Link>
-      </Card>
+      </>
     );
   }
 
@@ -78,74 +80,80 @@ export default function LivePage() {
     <>
       {!canEnterScore && <PasswordGate code={code} />}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-          {state.status === "finished" ? "Trận cuối" : `Vòng ${view.round}`}
-        </h2>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] lg:items-start lg:gap-12">
+        <section>
+          <SectionHead n="01" aside={`${state.config.courts} sân`}>
+            {state.status === "finished" ? "Trận cuối" : "Đang đánh"}
+          </SectionHead>
 
-        {view.current.length === 0 ? (
-          <Empty>
-            {state.status === "finished"
-              ? "Buổi đánh đã kết thúc. Xem bảng xếp hạng để biết kết quả."
-              : "Chưa có trận nào được xếp."}
-          </Empty>
-        ) : (
-          view.current.map((match) => (
-            <MatchCard
-              key={match.id}
-              match={match}
-              state={state}
-              actor={{ kind: data.role === "admin" ? "admin" : "player", label: "", ref: data.deviceId }}
-              canEnterScore={canEnterScore}
-              pendingScore={pendingScoreFor(match.id, queue.queued)}
-              onEnterScore={setScoring}
-              onCancel={data.role === "admin" ? setCancelling : undefined}
-            />
-          ))
-        )}
-      </section>
-
-      {view.resting.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-            Đang nghỉ vòng này
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {view.resting.map((p) => (
-              <span
-                key={p.id}
-                className="flex items-center gap-2 rounded-full bg-slate-900 py-1 pl-1 pr-3 text-sm"
-              >
-                <Avatar name={p.name} avatarId={p.avatarId} size="sm" />
-                {p.name}
-              </span>
-            ))}
-          </div>
+          {view.current.length === 0 ? (
+            <div className="pt-4">
+              <Empty>
+                {state.status === "finished"
+                  ? "Buổi đánh đã kết thúc. Xem bảng xếp hạng để biết kết quả."
+                  : "Chưa có trận nào được xếp."}
+              </Empty>
+            </div>
+          ) : (
+            view.current.map((match) => (
+              <MatchCard
+                key={match.id}
+                match={match}
+                state={state}
+                actor={{
+                  kind: data.role === "admin" ? "admin" : "player",
+                  label: "",
+                  ref: data.deviceId,
+                }}
+                canEnterScore={canEnterScore}
+                pendingScore={pendingScoreFor(match.id, queue.queued)}
+                onEnterScore={setScoring}
+                onCancel={data.role === "admin" ? setCancelling : undefined}
+              />
+            ))
+          )}
         </section>
-      )}
 
-      {view.next.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-            Vòng sau
-          </h2>
-          {view.next.map((m) => (
-            <NextUpRow key={m.id} match={m} state={state} />
-          ))}
-          <Link
-            href={`/e/${code}/schedule`}
-            className="block pt-1 text-center text-sm text-court-100 underline"
-          >
-            Xem toàn bộ lịch
-          </Link>
+        <section>
+          {view.resting.length > 0 && (
+            <>
+              <SectionHead n="02">Đang nghỉ</SectionHead>
+              <div className="flex flex-wrap border-b border-line pb-4 pt-3.5">
+                {view.resting.map((p) => (
+                  <span
+                    key={p.id}
+                    className="mr-3.5 border-r border-line pr-3.5 text-sm font-semibold last:mr-0 last:border-r-0 last:pr-0"
+                  >
+                    {p.name}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+
+          {view.next.length > 0 && (
+            <>
+              <SectionHead n="03">Vòng sau</SectionHead>
+              {view.next.map((m) => (
+                <NextUpRow key={m.id} match={m} state={state} />
+              ))}
+              <Link href={`/e/${code}/schedule`} className="mt-3 inline-block">
+                <Button tone="ghost" className="px-0">
+                  Xem toàn bộ lịch →
+                </Button>
+              </Link>
+            </>
+          )}
         </section>
-      )}
+      </div>
 
       <ScoreEntryDialog
         match={scoring}
         state={state}
         open={scoring !== null}
-        pendingScore={scoring ? pendingScoreFor(scoring.id, queue.queued) : undefined}
+        pendingScore={
+          scoring ? pendingScoreFor(scoring.id, queue.queued) : undefined
+        }
         onClose={() => setScoring(null)}
         onSubmit={(command: Command) => queue.send(command)}
       />
@@ -171,13 +179,15 @@ function NextUpRow({
   const name = (id: string) =>
     state.players.find((p) => p.id === id)?.name ?? id;
   return (
-    <div className="flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm">
-      <span className="w-12 shrink-0 text-xs text-slate-500">Sân {match.court}</span>
-      <span className="flex-1 truncate">
+    <div className="flex items-center gap-3 border-b border-line py-3.5 text-[13px]">
+      <span className="w-4 flex-none font-display text-[11px] font-extrabold text-mute-600">
+        {match.court}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-semibold">
         {name(match.teamA[0])} & {name(match.teamA[1])}
       </span>
-      <span className="text-slate-600">vs</span>
-      <span className="flex-1 truncate text-right">
+      <span className="text-[10px] tracking-[0.1em] text-mute-600">VS</span>
+      <span className="min-w-0 flex-1 truncate text-right font-semibold">
         {name(match.teamB[0])} & {name(match.teamB[1])}
       </span>
     </div>

@@ -3,6 +3,11 @@ node_modules/
 out/
 .env
 .env*.local
+# Bản sao lưu khi tạm tắt biến Google để chạy thử cục bộ. `.env*.local` KHÔNG
+# bắt được `.env.local.bak` vì mẫu đó đòi tên tệp phải kết thúc bằng `.local`,
+# mà tệp sao lưu thì chứa nguyên khoá riêng.
+.env.local.*
+*.bak
 *.tsbuildinfo
 next-env.d.ts
 .vercel

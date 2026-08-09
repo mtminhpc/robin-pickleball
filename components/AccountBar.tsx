@@ -37,15 +37,15 @@ export function AccountBar({ next }: { next: string }) {
   if (!data.user) {
     return (
       <Card className="space-y-3 p-4">
-        {outcome && <p className="text-sm text-amber-300">{outcome}</p>}
+        {outcome && <p className="text-sm text-accent-700">{outcome}</p>}
         <a
           href={signInHref(next)}
-          className="flex min-h-tap items-center justify-center gap-2 rounded-xl bg-slate-800 px-5 font-semibold text-slate-100 transition hover:bg-slate-700"
+          className="flex min-h-tap items-center justify-center gap-2 rounded-xl bg-mute-300 px-5 font-semibold text-ink transition hover:bg-mute-400"
         >
           <GoogleMark />
           Đăng nhập bằng Google
         </a>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-mute-600">
           Không bắt buộc. Đăng nhập để số liệu theo bạn sang điện thoại khác thay
           vì nằm lại trên máy này.
         </p>
@@ -58,13 +58,13 @@ export function AccountBar({ next }: { next: string }) {
       <Avatar name={data.user.displayName} avatarId={data.user.avatarId} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{data.user.displayName}</p>
-        <p className="truncate text-xs text-slate-500">
+        <p className="truncate text-xs text-mute-600">
           {data.user.email}
           {data.user.devices > 1 && ` · gộp ${data.user.devices} máy`}
         </p>
       </div>
       <button
-        className="shrink-0 px-2 text-sm text-slate-400 hover:text-slate-100 disabled:opacity-40"
+        className="shrink-0 px-2 text-sm text-mute-700 hover:text-ink disabled:opacity-40"
         disabled={signOut.isPending}
         onClick={() => signOut.mutate()}
       >

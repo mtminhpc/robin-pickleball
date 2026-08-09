@@ -31,12 +31,12 @@ export function AvatarPicker({
         >
           {current.glyph}
         </span>
-        <div className="text-sm text-slate-400">
+        <div className="text-sm text-mute-700">
           {value ? "Ảnh đang chọn" : "Ảnh tự chọn theo tên — bấm bên dưới để đổi"}
         </div>
       </div>
 
-      <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-800 p-2">
+      <div className="max-h-64 overflow-y-auto rounded-xl border border-mute-300 p-2">
         {GLYPHS.map((glyph, g) => (
           // Lưới 8 cột co giãn thay vì nút cỡ cố định: 8 nút 44px cộng khoảng
           // cách vượt quá bề ngang điện thoại hẹp, và hàng đó sẽ bị cắt mất

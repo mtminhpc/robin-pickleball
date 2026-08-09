@@ -45,7 +45,7 @@ export function PasswordGate({ code }: { code: string }) {
   return (
     <Card className="p-4">
       <form onSubmit={submit} className="space-y-3">
-        <p className="text-sm text-slate-300">
+        <p className="text-sm text-mute-800">
           Bạn đang ở chế độ xem. Nhập mật khẩu để nhập điểm.
         </p>
         <div className="flex gap-2">
@@ -61,7 +61,7 @@ export function PasswordGate({ code }: { code: string }) {
             Vào
           </Button>
         </div>
-        {error && <p className="text-sm text-red-300">{error}</p>}
+        {error && <p className="text-sm text-accent-700">{error}</p>}
       </form>
     </Card>
   );

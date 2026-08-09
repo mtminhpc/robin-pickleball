@@ -72,17 +72,17 @@ export function CancelMatchDialog({
       title={started ? "Bỏ dở trận đang đánh" : "Huỷ trận chưa đánh"}
     >
       <div className="space-y-4">
-        <p className="rounded-xl bg-slate-950 p-3 text-sm">
+        <p className="rounded-xl bg-paper p-3 text-sm">
           Vòng {match.round}, sân {match.court}
           <br />
-          <span className="text-slate-400">
+          <span className="text-mute-700">
             {nameOf(match.teamA[0])} & {nameOf(match.teamA[1])} vs{" "}
             {nameOf(match.teamB[0])} & {nameOf(match.teamB[1])}
           </span>
         </p>
 
         <div className="space-y-2">
-          <span className="text-sm font-medium text-slate-300">Lý do</span>
+          <span className="text-sm font-medium text-mute-800">Lý do</span>
           <div className="flex flex-wrap gap-2">
             {REASONS.map((r) => (
               <button
@@ -90,7 +90,7 @@ export function CancelMatchDialog({
                 type="button"
                 onClick={() => setReason(r)}
                 className={`min-h-tap rounded-xl px-4 text-sm font-medium ${
-                  reason === r ? "bg-court-500 text-white" : "bg-slate-800 text-slate-300"
+                  reason === r ? "bg-accent text-white" : "bg-mute-300 text-mute-800"
                 }`}
               >
                 {r}
@@ -106,17 +106,17 @@ export function CancelMatchDialog({
         </div>
 
         {started && (
-          <div className="space-y-3 rounded-xl bg-slate-950 p-3">
+          <div className="space-y-3 rounded-xl bg-paper p-3">
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
                 checked={keepScore}
                 onChange={(e) => setKeepScore(e.target.checked)}
-                className="mt-1 h-5 w-5 shrink-0 accent-court-500"
+                className="mt-1 h-5 w-5 shrink-0 accent-accent"
               />
               <span className="text-sm">
                 <span className="font-medium">Ghi lại tỷ số dở dang</span>
-                <span className="block text-slate-400">
+                <span className="block text-mute-700">
                   Tính vào hiệu số, có dấu riêng trong bảng xếp hạng. Bỏ trống thì
                   trận coi như không diễn ra, bốn người được ưu tiên xếp lại.
                 </span>
@@ -130,7 +130,7 @@ export function CancelMatchDialog({
                   value={scoreA}
                   onChange={setScoreA}
                 />
-                <span className="text-slate-600">–</span>
+                <span className="text-mute-500">–</span>
                 <NumberBox
                   label={`${nameOf(match.teamB[0])} & ${nameOf(match.teamB[1])}`}
                   value={scoreB}
@@ -177,7 +177,7 @@ function NumberBox({
       onChange={(e) =>
         onChange(Math.max(0, Math.min(99, Math.round(Number(e.target.value) || 0))))
       }
-      className="min-h-tap w-full rounded-xl border border-slate-700 bg-slate-900 text-center text-2xl font-bold tabular-nums focus:border-court-500 focus:outline-none"
+      className="min-h-tap w-full rounded-xl border border-mute-400 bg-surface text-center text-2xl font-bold tabular-nums focus:border-accent focus:outline-none"
     />
   );
 }

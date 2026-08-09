@@ -42,13 +42,13 @@ export default function ClubSummaryPage() {
   return (
     <main className="mx-auto min-h-dvh max-w-md space-y-6 px-4 py-8">
       <header className="space-y-1">
-        <Link href={`/c/${id}`} className="text-sm text-slate-500 hover:text-slate-300">
+        <Link href={`/c/${id}`} className="text-sm text-mute-600 hover:text-mute-800">
           ← {data?.club.name ?? "Câu lạc bộ"}
         </Link>
         <h1 className="text-2xl font-bold">Tổng kết</h1>
       </header>
 
-      <div className="flex gap-2 rounded-xl bg-slate-900 p-1">
+      <div className="flex gap-2 rounded-xl bg-surface p-1">
         <PeriodTab active={period === "week"} onClick={() => setPeriod("week")}>
           Theo tuần
         </PeriodTab>
@@ -84,7 +84,7 @@ function PeriodTab({
       type="button"
       onClick={onClick}
       className={`min-h-tap flex-1 rounded-lg text-sm font-semibold ${
-        active ? "bg-slate-800 text-slate-100" : "text-slate-400"
+        active ? "bg-mute-300 text-ink" : "text-mute-700"
       }`}
     >
       {children}
@@ -100,20 +100,20 @@ function PeriodCard({ period }: { period: PeriodRollup }) {
     <section className="space-y-2">
       <div className="flex items-baseline justify-between">
         <h2 className="font-semibold">{period.label}</h2>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-mute-600">
           {period.events.length} buổi · {period.totalGames} trận
         </span>
       </div>
 
       {live && (
-        <p className="rounded-xl bg-amber-500/10 p-2 text-xs text-amber-200">
+        <p className="rounded-xl bg-accent-100 p-2 text-xs text-accent-800">
           Có buổi chưa kết thúc — số liệu còn chạy tiếp.
         </p>
       )}
 
       <Card className="overflow-hidden">
         <table className="w-full text-sm tabular-nums">
-          <thead className="text-xs text-slate-500">
+          <thead className="text-xs text-mute-600">
             <tr className="text-left">
               <th className="p-3 font-medium">#</th>
               <th className="p-3 font-medium">Người</th>
@@ -124,19 +124,19 @@ function PeriodCard({ period }: { period: PeriodRollup }) {
           </thead>
           <tbody>
             {period.players.map((p) => (
-              <tr key={p.key} className="border-t border-slate-800">
-                <td className="p-3 text-slate-500">{p.rank}</td>
+              <tr key={p.key} className="border-t border-mute-300">
+                <td className="p-3 text-mute-600">{p.rank}</td>
                 <td className="p-3">
                   <span className="flex items-center gap-2">
                     <Avatar name={p.name} avatarId={p.avatarId} size="sm" />
                     <span className="truncate">{p.name}</span>
                   </span>
                 </td>
-                <td className="p-3 text-right text-slate-400">{p.events}</td>
-                <td className="p-3 text-right text-slate-400">{p.games}</td>
+                <td className="p-3 text-right text-mute-700">{p.events}</td>
+                <td className="p-3 text-right text-mute-700">{p.games}</td>
                 <td
                   className={`p-3 text-right font-semibold ${
-                    p.avgDiff > 0 ? "text-court-100" : "text-slate-300"
+                    p.avgDiff > 0 ? "text-accent-700" : "text-mute-800"
                   }`}
                 >
                   {p.avgDiff > 0 ? "+" : ""}
@@ -149,7 +149,7 @@ function PeriodCard({ period }: { period: PeriodRollup }) {
       </Card>
 
       <button
-        className="text-sm text-slate-500 hover:text-slate-300"
+        className="text-sm text-mute-600 hover:text-mute-800"
         onClick={() => setOpen((v) => !v)}
       >
         {open ? "▾" : "▸"} Các buổi trong kỳ
@@ -162,7 +162,7 @@ function PeriodCard({ period }: { period: PeriodRollup }) {
               <Card className="flex items-center justify-between p-3 text-sm">
                 <span className="min-w-0 flex-1 truncate">{e.name}</span>
                 {e.live && <Tag tone="warn">đang đánh</Tag>}
-                <span className="ml-3 shrink-0 text-xs text-slate-500">
+                <span className="ml-3 shrink-0 text-xs text-mute-600">
                   {e.players} người · {e.games} trận
                 </span>
               </Card>

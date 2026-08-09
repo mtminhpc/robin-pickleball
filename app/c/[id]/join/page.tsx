@@ -73,9 +73,9 @@ export default function ClubJoinPage() {
   return (
     <main className="mx-auto min-h-dvh max-w-md space-y-6 px-4 py-8">
       <header className="space-y-1">
-        <p className="text-sm text-slate-400">Vào câu lạc bộ</p>
+        <p className="text-sm text-mute-700">Vào câu lạc bộ</p>
         <h1 className="text-2xl font-bold">{data.club.name}</h1>
-        <p className="text-sm text-slate-500">{data.members.length} người đã có tên</p>
+        <p className="text-sm text-mute-600">{data.members.length} người đã có tên</p>
       </header>
 
       <Field label="Tên của bạn" hint="Tên mọi người ở sân gọi bạn.">
@@ -89,7 +89,7 @@ export default function ClubJoinPage() {
       </Field>
 
       {taken && name.trim() !== "" && (
-        <Card className="border-amber-800 bg-amber-500/10 p-3 text-sm text-amber-200">
+        <Card className="border-accent-300 bg-accent-100 p-3 text-sm text-accent-800">
           Câu lạc bộ đã có người tên này. Vẫn vào được, nhưng thêm họ hoặc biệt danh
           sẽ đỡ nhầm lúc nhập điểm giữa sân.
         </Card>
@@ -98,7 +98,7 @@ export default function ClubJoinPage() {
       <AvatarPicker name={name} value={avatarId} onChange={setAvatarId} />
 
       {failed && (
-        <p className="rounded-xl bg-red-500/15 p-3 text-sm text-red-200">{failed}</p>
+        <p className="rounded-xl bg-accent-100 p-3 text-sm text-paper">{failed}</p>
       )}
 
       <Button

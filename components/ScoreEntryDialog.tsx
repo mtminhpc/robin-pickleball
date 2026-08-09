@@ -7,11 +7,12 @@
  * nhầm." Nên có đúng hai lớp chặn bấm nhầm, và cả hai đều cố ý không thể lướt qua:
  *
  *   1. **Kiểm mốc điểm.** Tỷ số hoà hay âm thì chặn hẳn. Lệch mốc thì cảnh báo
- *      vàng kèm nút "Vẫn lưu" — vì trận dừng sớm do hết giờ sân là chuyện thường,
+ *      kèm nút vẫn lưu được — vì trận dừng sớm do hết giờ sân là chuyện thường,
  *      chặn cứng sẽ khiến người ta bịa ra một tỷ số giả cho qua.
- *   2. **Bước xác nhận.** Hiện to đầy đủ tên bốn người và tỷ số. Đây là chỗ bắt
- *      được lỗi tai hại nhất mà kiểm tra số không bao giờ thấy: nhập đúng tỷ số
- *      nhưng vào nhầm trận.
+ *   2. **Bước xác nhận.** Hiện trên KHỐI TỐI, to hết cỡ, đủ tên bốn người và tỷ
+ *      số. Đây là chỗ bắt được lỗi tai hại nhất mà kiểm tra số không bao giờ
+ *      thấy: nhập đúng tỷ số nhưng vào nhầm trận. Khối tối để bước này trông
+ *      khác hẳn bước nhập — đổi nền là cách nhanh nhất báo "đây là bước khác".
  */
 
 import { useEffect, useState } from "react";
@@ -64,74 +65,62 @@ export function ScoreEntryDialog({
   const isEdit = match.result !== null;
 
   const submit = () => {
-    onSubmit(
-      isEdit
-        ? {
-            type: "EditResult",
-            matchId: match.id,
-            scoreA,
-            scoreB,
-            irregular: !check.regular,
-          }
-        : {
-            type: "SubmitResult",
-            matchId: match.id,
-            scoreA,
-            scoreB,
-            irregular: !check.regular,
-          },
-    );
+    onSubmit({
+      type: isEdit ? "EditResult" : "SubmitResult",
+      matchId: match.id,
+      scoreA,
+      scoreB,
+      irregular: !check.regular,
+    });
     onClose();
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={isEdit ? "Sửa tỷ số" : "Nhập tỷ số"}
-    >
+    <Dialog open={open} onClose={onClose} title={isEdit ? "Sửa tỷ số" : "Nhập tỷ số"}>
       {confirming ? (
-        <div className="space-y-5">
-          <p className="text-sm text-slate-400">Kiểm tra lại lần cuối:</p>
-          <div className="rounded-xl bg-slate-950 p-4 text-center">
-            <div className="text-lg font-semibold">{teamA}</div>
-            <div className="my-2 text-score tabular-nums">
-              {scoreA} <span className="text-slate-600">–</span> {scoreB}
-            </div>
-            <div className="text-lg font-semibold">{teamB}</div>
+        <div>
+          <p className="eyebrow font-normal text-mute-600">Kiểm tra lại lần cuối</p>
+          <div className="mt-3.5 bg-ink p-5 text-paper">
+            <p className="text-[15px] font-semibold">{teamA}</p>
+            <p className="my-3 font-display text-[3.75rem] font-extrabold leading-none tracking-[-0.05em] tabular-nums">
+              {scoreA} – {scoreB}
+            </p>
+            <p className="text-[15px] font-semibold">{teamB}</p>
           </div>
-          <div className="flex gap-2">
-            <Button tone="ghost" full onClick={() => setConfirming(false)}>
+          <div className="mt-4 flex gap-2.5">
+            <Button className="min-h-[3.25rem] flex-1" onClick={() => setConfirming(false)}>
               Sửa lại
             </Button>
-            <Button tone="primary" full onClick={submit}>
+            <Button tone="primary" className="min-h-[3.25rem] flex-1" onClick={submit}>
               Đúng rồi, lưu
             </Button>
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div>
+          <p className="eyebrow font-normal text-mute-600">
+            {isEdit ? "Sửa tỷ số" : "Nhập tỷ số"} · Sân {match.court}
+          </p>
+
           <ScoreStepper label={teamA} value={scoreA} onChange={setScoreA} />
           <ScoreStepper label={teamB} value={scoreB} onChange={setScoreB} />
 
           {check.fatal && (
-            <p className="rounded-xl bg-red-500/15 p-3 text-sm text-red-200">
-              {check.fatal}
-            </p>
+            <p className="mt-4 bg-accent p-3 text-xs text-paper">{check.fatal}</p>
           )}
           {!check.fatal && check.warning && (
-            <p className="rounded-xl bg-amber-500/15 p-3 text-sm text-amber-200">
-              ⚠ {check.warning} Vẫn lưu được, kết quả sẽ có dấu riêng.
+            <p className="mt-4 border border-ink p-3 text-xs">
+              {check.warning} Vẫn lưu được, kết quả sẽ có dấu riêng.
             </p>
           )}
 
-          <div className="flex gap-2">
-            <Button tone="ghost" full onClick={onClose}>
+          <div className="mt-4.5 flex gap-2.5">
+            <Button className="min-h-[3.25rem] flex-1" onClick={onClose}>
               Huỷ
             </Button>
             <Button
               tone="primary"
-              full
+              className="min-h-[3.25rem] flex-1"
               disabled={check.fatal !== null}
               onClick={() => setConfirming(true)}
             >
@@ -145,10 +134,12 @@ export function ScoreEntryDialog({
 }
 
 /**
- * Ô nhập một bên tỷ số.
+ * Ô nhập một bên tỷ số: nút trừ, con số, nút cộng.
  *
  * Có cả nút cộng trừ lẫn ô gõ trực tiếp: đa số trận chỉ cần bấm cộng vài cái từ
  * số 0, nhưng nhập bù cho trận đánh xong lâu rồi thì gõ thẳng nhanh hơn nhiều.
+ * Con số không có khung — chỉ một gạch đậm bên dưới, để nó đọc như một con số
+ * chứ không như một ô biểu mẫu.
  */
 function ScoreStepper({
   label,
@@ -160,17 +151,12 @@ function ScoreStepper({
   onChange: (n: number) => void;
 }) {
   return (
-    <div className="rounded-xl bg-slate-950 p-3">
-      <div className="mb-2 truncate text-sm font-medium text-slate-300">{label}</div>
-      <div className="flex items-center gap-3">
-        <Button
-          tone="neutral"
-          aria-label={`Giảm điểm ${label}`}
-          onClick={() => onChange(Math.max(0, value - 1))}
-          className="h-14 w-14 text-2xl"
-        >
+    <div className="pt-4">
+      <p className="mb-2.5 truncate text-sm font-semibold">{label}</p>
+      <div className="flex items-center gap-2.5">
+        <StepButton label={`Giảm điểm ${label}`} onClick={() => onChange(Math.max(0, value - 1))}>
           −
-        </Button>
+        </StepButton>
         {/*
           `min-w-0` là bắt buộc chứ không phải trang trí: ô nhập số có bề rộng nội
           tại theo thuộc tính `size` (mặc định 20 ký tự), và flex item không co
@@ -187,17 +173,33 @@ function ScoreStepper({
             const n = Number(e.target.value);
             onChange(Number.isFinite(n) ? Math.max(0, Math.min(99, Math.round(n))) : 0);
           }}
-          className="h-14 w-full min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 text-center text-4xl font-extrabold tabular-nums focus:border-court-500 focus:outline-none"
+          className="w-full min-w-0 flex-1 border-0 border-b-2 border-ink bg-transparent py-1.5 text-center font-display text-[2.625rem] font-extrabold leading-none tracking-[-0.04em] tabular-nums focus:border-accent focus:outline-none"
         />
-        <Button
-          tone="neutral"
-          aria-label={`Tăng điểm ${label}`}
-          onClick={() => onChange(Math.min(99, value + 1))}
-          className="h-14 w-14 text-2xl"
-        >
+        <StepButton label={`Tăng điểm ${label}`} onClick={() => onChange(Math.min(99, value + 1))}>
           +
-        </Button>
+        </StepButton>
       </div>
     </div>
+  );
+}
+
+function StepButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="flex h-14 w-14 flex-none items-center justify-center border border-ink text-2xl transition hover:bg-ink/[0.07] active:bg-ink/[0.14]"
+    >
+      {children}
+    </button>
   );
 }

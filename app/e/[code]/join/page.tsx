@@ -83,7 +83,7 @@ export default function JoinPage() {
         </div>
         <div>
           <p className="text-lg font-semibold">{mine.name}</p>
-          <p className="text-sm text-slate-400">{PLAYER_STATUS_LABEL[mine.status]}</p>
+          <p className="text-sm text-mute-700">{PLAYER_STATUS_LABEL[mine.status]}</p>
         </div>
         <Button tone="primary" full onClick={() => router.push(`/e/${code}`)}>
           Vào xem trận
@@ -98,7 +98,7 @@ export default function JoinPage() {
         <p className="text-lg font-semibold">
           {afterStart ? "Đã gửi yêu cầu tham gia" : "Đã ghi tên bạn"}
         </p>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-mute-700">
           {afterStart
             ? "Buổi đánh đã bắt đầu nên chủ sân cần duyệt. Bạn sẽ được xếp vào vòng gần nhất sau khi được duyệt."
             : "Chủ sân bấm Bắt đầu là hệ thống xếp lịch cho cả nhóm."}
@@ -141,14 +141,14 @@ export default function JoinPage() {
   return (
     <div className="space-y-4">
       {afterStart && (
-        <p className="rounded-xl bg-amber-500/15 p-3 text-sm text-amber-200">
+        <p className="rounded-xl bg-accent-100 p-3 text-sm text-accent-800">
           Buổi đánh đã bắt đầu. Chủ sân sẽ cần duyệt trước khi bạn được xếp lịch.
         </p>
       )}
 
       {unclaimed.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-mute-700">
             Tên bạn đã có sẵn?
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -161,7 +161,7 @@ export default function JoinPage() {
                   setName(p.name);
                 }}
                 className={`flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm ${
-                  claiming === p.id ? "bg-court-500 text-white" : "bg-slate-900"
+                  claiming === p.id ? "bg-accent text-white" : "bg-surface"
                 }`}
               >
                 <Avatar name={p.name} avatarId={p.avatarId} size="sm" />
@@ -170,7 +170,7 @@ export default function JoinPage() {
             ))}
           </div>
           {claiming && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-mute-600">
               Đang nhận tên này. Bấm lần nữa vào tên khác nếu chọn nhầm.
             </p>
           )}
@@ -188,7 +188,7 @@ export default function JoinPage() {
         </Field>
 
         <div>
-          <span className="mb-2 block text-sm font-medium text-slate-300">
+          <span className="mb-2 block text-sm font-medium text-mute-800">
             Ảnh đại diện
           </span>
           <AvatarPicker name={name} value={avatarId} onChange={setAvatarId} />

@@ -3,11 +3,15 @@
 /**
  * Toàn bộ lịch, và chỗ chủ sự kiện dời trận lên xuống.
  *
- * Nút "sớm hơn / muộn hơn" đổi chỗ CẢ HAI VÒNG cho nhau chứ không nhấc riêng một
- * trận sang chỗ khác. Ở lịch kín sân thì vòng nào cũng đủ người, nên nhét thêm
- * bốn người vào một vòng là có kẻ phải đánh hai trận — đo trên lịch thật thì
- * cách dời một trận hỏng 22 trên 24 lần. Đổi cả vòng thì không ai thêm hay bớt
- * trận nào, không ai đổi bạn đôi, chỉ thứ tự trước sau thay đổi.
+ * Mỗi vòng là một khối, mỗi trận là một hàng gọn: sân, đội A, tỷ số, đội B. Cả
+ * buổi nhìn hết trong một màn hình thay vì phải cuộn qua hàng chục thẻ. Bấm vào
+ * hàng là mở đúng hộp nhập tỷ số như ở màn hình chính.
+ *
+ * Nút "sớm hơn / muộn hơn" nằm ở mức VÒNG chứ không ở mức trận, vì `SwapRounds`
+ * vốn đổi cả hai vòng cho nhau. Ở lịch kín sân thì vòng nào cũng đủ người, nên
+ * nhét thêm bốn người vào một vòng là có kẻ phải đánh hai trận — đo trên lịch
+ * thật thì cách dời riêng một trận hỏng 22 trên 24 lần. Đổi cả vòng thì không ai
+ * thêm hay bớt trận nào, không ai đổi bạn đôi, chỉ thứ tự trước sau thay đổi.
  *
  * Việc đổi chỗ chạy `validateRoundSwap` ngay trên trình duyệt trước khi gửi đi.
  * Hàm đó là hàm thuần và trạng thái đã có sẵn ở đây, nên xem trước hậu quả là
@@ -21,21 +25,19 @@
 import { useMemo, useState } from "react";
 import type { Command } from "@/lib/domain/commands";
 import { firstUnplayedRound } from "@/lib/domain/rounds";
-import type { Match } from "@/lib/domain/types";
+import type { EventState, Match, PlayerId } from "@/lib/domain/types";
 import { validateRoundSwap, type MoveValidation } from "@/lib/scheduler/validate";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
-import { MatchCard, pendingScoreFor } from "@/components/MatchCard";
+import { pendingScoreFor } from "@/components/MatchCard";
 import { ScoreEntryDialog } from "@/components/ScoreEntryDialog";
-import { CancelMatchDialog } from "@/components/CancelMatchDialog";
-import { Button, Card, Dialog, Empty } from "@/components/ui";
+import { Button, Dialog, Empty, SectionHead } from "@/components/ui";
 
 export default function SchedulePage() {
   const { data } = useEvent();
   const queue = useMutationQueue();
 
   const [scoring, setScoring] = useState<Match | null>(null);
-  const [cancelling, setCancelling] = useState<Match | null>(null);
   const [swap, setSwap] = useState<{ from: number; to: number } | null>(null);
 
   const rounds = useMemo(() => {
@@ -62,73 +64,70 @@ export default function SchedulePage() {
   const open = firstUnplayedRound(state);
 
   if (rounds.length === 0) {
-    return <Empty>Chưa có lịch. Bắt đầu buổi đánh để hệ thống xếp.</Empty>;
+    return (
+      <div className="pt-6">
+        <Empty>Chưa có lịch. Bắt đầu buổi đánh để hệ thống xếp.</Empty>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      {rounds.map(({ round, matches }) => (
-        <section key={round} className="space-y-2">
-          <h2 className="flex items-baseline gap-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
-            Vòng {round}
-            {round < open && <span className="text-xs normal-case">đã xong</span>}
-            {round === open && (
-              <span className="text-xs normal-case text-court-100">đang tới</span>
-            )}
-          </h2>
+    <>
+      <div className="grid lg:grid-cols-2 lg:gap-x-10">
+        {rounds.map(({ round, matches }) => {
+          const canMove =
+            isAdmin && round > open && matches.every((m) => m.status === "scheduled");
+          return (
+            <section key={round} className="mb-2">
+              <SectionHead
+                n={String(round).padStart(2, "0")}
+                aside={
+                  round < open ? "đã xong" : round === open ? "đang tới" : "chưa đánh"
+                }
+              >
+                Vòng
+              </SectionHead>
 
-          {matches.map((match) => (
-            <div key={match.id} className="space-y-1">
-              <MatchCard
-                match={match}
-                state={state}
-                actor={{
-                  kind: isAdmin ? "admin" : "player",
-                  label: "",
-                  ref: data.deviceId,
-                }}
-                canEnterScore={role !== "viewer"}
-                pendingScore={pendingScoreFor(match.id, queue.queued)}
-                onEnterScore={setScoring}
-                onCancel={isAdmin ? setCancelling : undefined}
-              />
-              {isAdmin && match.status === "scheduled" && (
-                <div className="flex justify-end gap-1.5 pr-1">
+              {matches.map((m) => (
+                <ScheduleRow
+                  key={m.id}
+                  match={m}
+                  state={state}
+                  pending={pendingScoreFor(m.id, queue.queued)}
+                  onOpen={role !== "viewer" ? setScoring : undefined}
+                />
+              ))}
+
+              {canMove && (
+                <div className="flex gap-2 pt-3.5">
                   <Button
-                    tone="ghost"
-                    className="px-3 text-sm"
-                    disabled={round <= open}
+                    className="min-h-11"
+                    disabled={round - 1 <= open - 1}
                     onClick={() => setSwap({ from: round, to: round - 1 })}
                   >
-                    ▲ Sớm hơn
+                    Sớm hơn
                   </Button>
                   <Button
-                    tone="ghost"
-                    className="px-3 text-sm"
+                    className="min-h-11"
                     onClick={() => setSwap({ from: round, to: round + 1 })}
                   >
-                    ▼ Muộn hơn
+                    Muộn hơn
                   </Button>
                 </div>
               )}
-            </div>
-          ))}
-        </section>
-      ))}
+            </section>
+          );
+        })}
+      </div>
 
       <ScoreEntryDialog
         match={scoring}
         state={state}
         open={scoring !== null}
-        pendingScore={scoring ? pendingScoreFor(scoring.id, queue.queued) : undefined}
+        pendingScore={
+          scoring ? pendingScoreFor(scoring.id, queue.queued) : undefined
+        }
         onClose={() => setScoring(null)}
-        onSubmit={(c: Command) => queue.send(c)}
-      />
-      <CancelMatchDialog
-        match={cancelling}
-        state={state}
-        open={cancelling !== null}
-        onClose={() => setCancelling(null)}
         onSubmit={(c: Command) => queue.send(c)}
       />
       <SwapDialog
@@ -139,7 +138,58 @@ export default function SchedulePage() {
           setSwap(null);
         }}
       />
-    </div>
+    </>
+  );
+}
+
+/** Một trận, dạng hàng gọn. Bấm vào là mở hộp nhập tỷ số nếu được phép. */
+function ScheduleRow({
+  match,
+  state,
+  pending,
+  onOpen,
+}: {
+  match: Match;
+  state: EventState;
+  pending?: { scoreA: number; scoreB: number };
+  onOpen?: (m: Match) => void;
+}) {
+  const name = (id: PlayerId) =>
+    state.players.find((p) => p.id === id)?.name ?? id;
+  const shown = pending ?? match.result;
+  const dead = match.status === "cancelled" || match.status === "abandoned";
+  const clickable = !!onOpen && !dead;
+
+  const body = (
+    <>
+      <span className="w-4 flex-none font-display text-[11px] font-extrabold text-mute-600">
+        {match.court}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
+        {name(match.teamA[0])} & {name(match.teamA[1])}
+      </span>
+      <span
+        className={`flex-none font-display text-[15px] font-extrabold tracking-[-0.02em] tabular-nums ${
+          pending ? "animate-pulse text-mute-600" : shown ? "text-ink" : "text-mute-400"
+        }`}
+      >
+        {shown ? `${shown.scoreA}–${shown.scoreB}` : "·"}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-right text-[13px] font-semibold">
+        {name(match.teamB[0])} & {name(match.teamB[1])}
+      </span>
+    </>
+  );
+
+  const cls = `flex w-full items-center gap-3 border-b border-line py-3.5 text-left ${
+    dead ? "opacity-50 line-through" : ""
+  }`;
+
+  if (!clickable) return <div className={cls}>{body}</div>;
+  return (
+    <button type="button" onClick={() => onOpen!(match)} className={`${cls} hover:bg-ink/[0.04]`}>
+      {body}
+    </button>
   );
 }
 
@@ -167,46 +217,43 @@ function SwapDialog({
 
   return (
     <Dialog open onClose={onClose} title={`Đổi chỗ vòng ${earlier} và vòng ${later}`}>
-      <div className="space-y-4">
-        <Card className="p-3 text-sm text-slate-300">
-          Mọi trận của <strong className="text-slate-100">vòng {swap.from}</strong> sẽ
-          chuyển sang <strong className="text-slate-100">vòng {swap.to}</strong>, và
-          ngược lại.
-        </Card>
+      <p className="eyebrow text-mute-600">Đổi chỗ hai vòng</p>
+      <p className="mt-3.5 bg-surface p-3 text-sm">
+        Mọi trận của <strong>vòng {swap.from}</strong> sẽ chuyển sang{" "}
+        <strong>vòng {swap.to}</strong>, và ngược lại.
+      </p>
 
-        <div className="space-y-2">
-          {validation.notes.map((note, i) => (
-            <p
-              key={i}
-              className={`rounded-xl p-3 text-sm ${
-                note.severity === "block"
-                  ? "bg-red-500/15 text-red-200"
-                  : note.severity === "warn"
-                    ? "bg-amber-500/15 text-amber-200"
-                    : "bg-slate-800 text-slate-300"
-              }`}
-            >
-              {note.severity === "block" ? "⛔ " : note.severity === "warn" ? "⚠️ " : "✅ "}
-              {note.message}
-            </p>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          <Button tone="ghost" full onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button
-            tone="primary"
-            full
-            disabled={blocked}
-            onClick={() =>
-              onConfirm({ type: "SwapRounds", roundA: swap.from, roundB: swap.to })
-            }
+      <div className="mt-3 space-y-2">
+        {validation.notes.map((note, i) => (
+          <p
+            key={i}
+            className={`p-3 text-sm ${
+              note.severity === "block"
+                ? "bg-accent text-paper"
+                : note.severity === "warn"
+                  ? "border border-ink"
+                  : "bg-surface text-mute-800"
+            }`}
           >
-            Đổi chỗ
-          </Button>
-        </div>
+            {note.message}
+          </p>
+        ))}
+      </div>
+
+      <div className="mt-4.5 flex gap-2.5">
+        <Button className="min-h-[3.25rem] flex-1" onClick={onClose}>
+          Quay lại
+        </Button>
+        <Button
+          tone="primary"
+          className="min-h-[3.25rem] flex-1"
+          disabled={blocked}
+          onClick={() =>
+            onConfirm({ type: "SwapRounds", roundA: swap.from, roundB: swap.to })
+          }
+        >
+          Đổi chỗ
+        </Button>
       </div>
     </Dialog>
   );

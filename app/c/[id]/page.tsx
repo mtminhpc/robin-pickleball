@@ -44,19 +44,19 @@ export default function ClubPage() {
   return (
     <main className="mx-auto min-h-dvh max-w-md space-y-6 px-4 py-8">
       <header className="space-y-1">
-        <Link href="/" className="text-sm text-slate-500 hover:text-slate-300">
+        <Link href="/" className="text-sm text-mute-600 hover:text-mute-800">
           ← Trang chủ
         </Link>
         <h1 className="text-2xl font-bold">{club.name}</h1>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-mute-700">
           {members.length} người trong danh bạ
           {isOwner && " · bạn là người tạo"}
         </p>
       </header>
 
       {!me && (
-        <Card className="space-y-3 border-court-700 p-4">
-          <p className="text-sm text-slate-300">
+        <Card className="space-y-3 border-accent-700 p-4">
+          <p className="text-sm text-mute-800">
             Bạn chưa có tên trong danh bạ này.
           </p>
           <Button tone="primary" full onClick={() => router.push(`/c/${club.inviteCode}/join`)}>
@@ -67,11 +67,11 @@ export default function ClubPage() {
 
       <section className="space-y-2">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-mute-700">
             Danh bạ
           </h2>
           <button
-            className="text-sm text-court-100 hover:underline"
+            className="text-sm text-accent-700 hover:underline"
             onClick={() => setShowInvite(true)}
           >
             Mời thêm người
@@ -88,7 +88,7 @@ export default function ClubPage() {
             )}
             {(isOwner || m.memberId === me?.memberId) && (
               <button
-                className="shrink-0 px-2 text-sm text-slate-400 hover:text-slate-100"
+                className="shrink-0 px-2 text-sm text-mute-700 hover:text-ink"
                 onClick={() => setEditing(m.memberId)}
               >
                 Sửa
@@ -175,7 +175,7 @@ function InviteDialog({
   return (
     <Dialog open onClose={onClose} title="Mời vào câu lạc bộ">
       <div className="space-y-4">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-mute-700">
           Cho mọi người quét mã, hoặc đọc mã mời cho họ gõ vào.
         </p>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -191,7 +191,7 @@ function InviteDialog({
 
         {canRotate && !confirming && (
           <button
-            className="w-full text-sm text-slate-400 hover:text-slate-100"
+            className="w-full text-sm text-mute-700 hover:text-ink"
             onClick={() => setConfirming(true)}
           >
             Đổi mã mời
@@ -199,8 +199,8 @@ function InviteDialog({
         )}
 
         {confirming && (
-          <div className="space-y-3 rounded-xl bg-amber-500/10 p-3">
-            <p className="text-sm text-amber-200">
+          <div className="space-y-3 rounded-xl bg-accent-100 p-3">
+            <p className="text-sm text-accent-800">
               Mã <span className="font-mono">{inviteCode}</span> sẽ hết dùng được
               ngay, kể cả mã QR đã in ra dán ở sân. Danh bạ giữ nguyên — đổi mã
               chỉ chặn người mới vào, không đuổi ai đang ở trong.
@@ -273,7 +273,7 @@ function EditMemberDialog({
         <AvatarPicker name={name} value={avatarId} onChange={setAvatarId} />
 
         {error && (
-          <p className="rounded-xl bg-red-500/15 p-3 text-sm text-red-200">{error}</p>
+          <p className="rounded-xl bg-accent-100 p-3 text-sm text-paper">{error}</p>
         )}
 
         <div className="flex gap-2">
@@ -354,7 +354,7 @@ function CreateFromClubDialog({
   return (
     <Dialog open onClose={onClose} title="Tạo buổi đánh">
       <div className="space-y-4">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-mute-700">
           Cả danh bạ sẽ được thêm sẵn vào buổi này ở trạng thái <strong>đã mời</strong>.
           Ai xác nhận đi thì điểm danh ở trang Người chơi, không cần gõ lại tên ai.
         </p>
@@ -386,7 +386,7 @@ function CreateFromClubDialog({
         </Field>
 
         {error && (
-          <p className="rounded-xl bg-red-500/15 p-3 text-sm text-red-200">{error}</p>
+          <p className="rounded-xl bg-accent-100 p-3 text-sm text-paper">{error}</p>
         )}
 
         <div className="flex gap-2">
