@@ -70,6 +70,21 @@ describe("khi nào phải xếp lại", () => {
     }
   });
 
+  it("khai trước có mặt thì xếp lại phần chưa đánh", () => {
+    // Thiếu nhánh này thì lời khai nằm im cho tới khi có việc khác tình cờ kích
+    // hoạt xếp lại — người dùng bấm xong thấy lịch không đổi gì và kết luận là
+    // nút hỏng.
+    const sim = running();
+    expect(
+      rescheduleMode(sim.state, {
+        type: "DeclareAvailability",
+        playerId: "p",
+        fromRound: null,
+        toRound: 5,
+      }),
+    ).toBe("rebuild");
+  });
+
   it("admin dời trận thì KHÔNG tự xếp lại", () => {
     // Tự xếp lại ngay sẽ đá lại chính thao tác họ vừa làm bằng tay.
     const sim = running();

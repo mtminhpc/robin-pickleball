@@ -15,7 +15,8 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Ứng dụng đã chạy thật.** Không còn việc triển khai nào chờ nữa.
+**Phiên bản hiện tại: `v0.2.0 — Danh tính người chơi`. Ứng dụng đã chạy thật.**
+Không còn phần mã nào đang làm dở trong đợt này.
 
 | | |
 |---|---|
@@ -25,8 +26,87 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 | Vercel ↔ GitHub | Đã nối. Đẩy commit lên nhánh này là Vercel tự dựng lại |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-`npm test` 361 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
+`npm test` 397 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
+
+### Bàn giao phiên `v0.2.0 — Danh tính người chơi` (09/08/2026)
+
+Phiên này bắt đầu từ worktree Claude đang làm dở trên mốc `f7ece5e`. Codex đọc
+lại toàn bộ kế hoạch 362 dòng, rà từng diff, giữ nguyên phần đã chạy đúng và hoàn
+thiện phần còn thiếu. Mốc phát hành là tag Git `v0.2.0` trên nhánh
+`claude/pickleball-round-robin-app-fq8sja`.
+
+#### Những gì phiên này chốt xong
+
+- **Đổi tên.** Tài khoản Google đổi tên ở `/me` qua
+  `PATCH /api/me/profile`; tên trong từng buổi đổi riêng bằng `UpdateProfile`.
+  Tên mới cũng được ghi vào hồ sơ cục bộ để lần quét QR sau không tự điền tên cũ.
+- **Ảnh cho người không đăng nhập.** Người vào bằng QR và người được chủ sân thêm
+  hộ đều tải ảnh thật được. Ảnh nằm trong dòng `accounts` vãng lai có `userId`
+  tiền tố `g-`, email rỗng; trạng thái sự kiện chỉ giữ `userId`, tuyệt đối không
+  nhét base64 ảnh vào `EventState`.
+- **Một máy, một danh tính.** Khi máy từng chơi bằng `deviceId` rồi đăng nhập
+  Google, `SyncAccount` gửi `LinkAccount` để gắn ô tên cũ vào tài khoản mà không
+  đổi tên, avatar hay đẩy người đang chơi về hàng chờ.
+- **Quyền tự phục vụ.** `isAllowedForActor` cho người chơi sửa hồ sơ, khai giờ,
+  nghỉ tạm, báo về và quay lại cho đúng chính mình; nhắm vào người khác trả 403
+  trừ khi là admin. Không chỉ ẩn nút ở giao diện — route kiểm lại bằng
+  `ctx.me` lấy từ cookie đã ký.
+- **Chủ sự kiện quản khách.** Admin có hộp Sửa tên/ảnh và Xoá người thêm nhầm.
+  Người đã đánh không bị xoá mất kết quả; reducer hướng dẫn dùng “Đã về”.
+- **Dời lịch được gọi đúng tên.** Nút lịch nói rõ “Đổi với vòng N”; `SwapRounds`
+  đổi toàn bộ hai vòng, các vòng khác giữ nguyên. Nếu thao tác đẩy ai vào vòng họ
+  đã khai vắng, hộp xác nhận cảnh báo nhưng vẫn để chủ sân quyết định.
+- **Ba nghĩa khác nhau.** “Nghỉ” trong bảng xếp hạng là vòng có mặt nhưng ngồi
+  ngoài; “Nghỉ tạm” là rút khỏi lịch nhưng còn ở sân; “Đã về” là rời sân. Giao
+  diện và phần giải thích nay dùng đúng ba tên đó.
+- **Khai giờ đến/về.** Giao diện `DeclareAvailability` đã nối vào trang Người
+  chơi và lệnh này nay kích hoạt `rebuild`; khi người chơi thực sự nghỉ hoặc về,
+  lời khai dự định cũ bị xoá để lần quay lại không bị mắc ngoài lịch.
+
+#### Hai chỗ Codex vá thêm sau khi rà worktree
+
+1. Bản dang dở cho phép bấm “Tôi về đây” nhưng chỉ hiện nút tự quay lại khi
+   `paused`, nên trạng thái `left` thành cửa một chiều. Nay `ResumePlayer` nhận cả
+   `paused` và `left`. Không mở `MarkArrived` cho tự phục vụ, vì lệnh đó còn áp
+   dụng cho người `invited`/`declined` và sẽ tạo đường vượt hàng duyệt.
+2. Đổi tên ở `/me` trên một máy mới từng có thể ghi `avatarId: ""` vào hồ sơ cục
+   bộ. Nay `NameLine` nhận avatar đang hiện từ tài khoản làm giá trị dự phòng.
+
+#### Bằng chứng kiểm chứng của phiên
+
+- `npm test`: **397/397 đạt** (14 tệp test).
+- `npm run typecheck`: đạt.
+- `npm run build`: đạt với Next.js 15.5.23; hai route mới `/api/me/profile` và
+  `/api/events/[code]/players/[playerId]/photo` có mặt trong build production.
+- Chạy HTTP thật trên Next dev với một `LOCAL_SHEET_PATH` tạm riêng: tạo buổi 8
+  người; đổi toàn bộ vòng 1 ↔ 2 rồi đổi lại; viewer sửa người khác nhận 403; tự
+  sửa tên thành công; ảnh khách tạo tài khoản `g-` và đọc lại được qua
+  `/api/avatar`; base64 không lọt vào trạng thái; khai giờ, nghỉ tạm, đã về và
+  tự quay lại đều đúng; admin xoá được người chưa đánh.
+- Máy chủ kiểm chứng và tệp dữ liệu tạm đã được dừng/xoá. **Không chạm Google
+  Sheet thật** trong phép kiểm này.
+- Chủ dự án cho biết đã chạy deploy Vercel bằng PowerShell. Phiên Codex không tự
+  chạy lại deploy và chưa bấm kiểm tra production sau commit; GitHub/Vercel đã
+  nối sẵn nên push nhánh này cũng kích hoạt một lượt dựng mới.
+
+#### Cố ý chưa làm
+
+- Không gộp hai tài khoản Google có hai email khác nhau. Việc đó cần luồng xác
+  nhận sở hữu riêng; `LinkAccount` chỉ gắn một ô tên chưa có `userId`.
+- Không thêm nút dời riêng một trận. `ReorderMatch`/`validateMove` có test nhưng
+  lịch kín sân khiến phần lớn thao tác bị chặn; phiên này giữ cách đổi cả vòng.
+- Không gộp nhánh nâng Next.js 16.3.0.
+
+#### Lưu ý cho Claude/Codex phiên sau
+
+- Đọc mục này trước, rồi xem `git status` và tag `v0.2.0`; không dựng lại các
+  đường profile/ảnh/quyền đã có.
+- Tệp `Mobile app design-handoff.zip` là tệp cục bộ chưa theo dõi, **không thuộc
+  bản phát hành v0.2.0 và không được tự ý commit**.
+- Cảnh báo `npm warn Unknown project config "onlyBuiltDependencies"` vẫn xuất
+  hiện nhưng không làm test/typecheck/build thất bại; đừng trộn việc dọn cảnh báo
+  đó vào một sửa lỗi không liên quan.
 
 Bản nâng lên Next.js 16.3.0 nằm sẵn ở nhánh `claude/nang-next-16`, **cố ý chưa
 gộp** — xem [mục dưới](#nhánh-claudenang-next-16--làm-xong-chờ-gộp). Giờ đã có
@@ -178,7 +258,7 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
-| Chạy bộ kiểm thử | `npm test` (361 bài, ~15 giây) |
+| Chạy bộ kiểm thử | `npm test` (397 bài, ~15 giây) |
 | Soát cấu hình trước khi triển khai | `npm run check-env` |
 | Sinh `APP_SECRET` mới | `npm run new-secret` |
 | Quét công bằng 42 cấu hình | `npm run sim -- --matrix` |
@@ -421,7 +501,7 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **361 bài xanh** (`npm test`) — thêm 5 bài cho việc gỡ máy khỏi tài khoản và 5 bài cho kho Google Sheet |
+| Kiểm thử tự động | **397 bài xanh** (`npm test`) — gồm quyền tự phục vụ, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng và khai giờ đến/về |
 | **Chạy thử trên Google Sheet THẬT** | **19 phép kiểm, 0 hỏng** — lập câu lạc bộ, tạo buổi, bốn người, xếp lịch, nhập tỷ số 11–7, tổng kết, rồi đọc lại từ một tiến trình khác để chắc dữ liệu nằm trên bảng tính |
 | Kiểm tra kiểu | `npm run typecheck` sạch |
 | Quét ma trận công bằng | **42 cấu hình, 0 cấu hình bị đánh dấu** |
@@ -577,12 +657,13 @@ gia, và ô nhập mật khẩu có thêm dòng *"Bạn tạo buổi này mà qu
   hai địa chỉ redirect — nhưng app nay đã Publish nên không còn hàng rào test
   user che nữa. Cách thay: **Clients** → `Robin local` → *Add secret*, xoá mã cũ,
   *Download JSON*, rồi đẩy lên Vercel và deploy lại.
-- **Màn hình khai trước có mặt.** Lệnh `DeclareAvailability` và phần xét quyền đã
-  chạy, kiểm thử đã phủ, nhưng **chưa có giao diện nào gọi tới nó**. Người chơi
-  hiện không tự khai "tôi đến muộn, 8 giờ mới tới" được.
 
 ### Đã cân nhắc và cố ý không làm
 
+- **Gộp hai tài khoản Google thật.** Tự gắn một ô tên chỉ có `deviceId` vào tài
+  khoản vừa đăng nhập đã làm; nhưng hai email Google khác nhau vẫn là hai
+  `userId` độc lập. Gộp an toàn cần một luồng xác nhận quyền sở hữu riêng, không
+  dùng lại `LinkAccount` và không làm trong đợt danh tính người chơi này.
 - **Mời đồng chủ sự kiện.** Quyền chủ hiện gắn với đúng một tài khoản
   (`ownerUserId`) cộng với mật khẩu. Việc cho phép chủ mời tài khoản khác cùng
   làm chủ — hữu ích khi hôm đó bận, nhờ người khác chạy buổi — đã được cân nhắc
@@ -654,7 +735,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            361 bài kiểm thử
+tests/            397 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —

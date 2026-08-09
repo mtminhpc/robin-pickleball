@@ -15,6 +15,7 @@
 
 import { randomUUID } from "node:crypto";
 import {
+  GUEST_PREFIX,
   mergeRecentEvents,
   normalizeEmail,
   type Account,
@@ -81,6 +82,15 @@ export class AccountRepo {
     await this.bootstrap();
 
     const email = normalizeEmail(input.email);
+    // Email rỗng KHÔNG được đi tiếp. Phép tìm dưới đây so `normalizeEmail(ô)`
+    // với `email`, nên gọi kèm chuỗi rỗng sẽ khớp trúng dòng **tài khoản vãng
+    // lai** đầu tiên và biến nó thành tài khoản Google của người đang đăng nhập
+    // — kèm theo ảnh và mọi ô tên đang trỏ vào đó. Cùng cái bẫy
+    // chuỗi-rỗng-khớp-chuỗi-rỗng đã bắt một lần ở `roleFor`.
+    if (email === "") {
+      throw new Error("upsertByEmail cần email thật. Tài khoản vãng lai dùng createGuest.");
+    }
+
     const [accountRows] = await this.readAll();
     const rowIndex = accountRows.findIndex(
       (row, i) => i > 0 && normalizeEmail(row[A.email] ?? "") === email,
@@ -111,6 +121,38 @@ export class AccountRepo {
       avatarId: input.avatarId,
       createdAt: input.at,
       prefs: input.prefs ?? {},
+    };
+    await this.sheets.batch([
+      { kind: "append", tab: TABS.accounts, values: [accountRow(account)] },
+    ]);
+    return account;
+  }
+
+  /**
+   * Lập một tài khoản vãng lai cho người chơi không đăng nhập Google.
+   *
+   * Chỉ gọi khi thật sự cần một chỗ để cất ảnh — mỗi lần gọi là một dòng mới, và
+   * `SheetsClient` không xoá dòng được. Người đã có `userId` (Google hay vãng
+   * lai) thì dùng `updatePrefs` thẳng, đừng lập thêm.
+   *
+   * `email` rỗng là cố ý và là dấu hiệu nhận dạng duy nhất cần thiết: `byEmail`
+   * đã bỏ qua chuỗi rỗng từ trước, nên dòng này không bao giờ bị nhận nhầm là
+   * tài khoản của ai đang đăng nhập.
+   */
+  async createGuest(input: {
+    displayName: string;
+    avatarId: string;
+    at: number;
+  }): Promise<Account> {
+    await this.bootstrap();
+
+    const account: Account = {
+      userId: `${GUEST_PREFIX}${randomUUID()}`,
+      email: "",
+      displayName: input.displayName.trim().slice(0, 40),
+      avatarId: input.avatarId,
+      createdAt: input.at,
+      prefs: {},
     };
     await this.sheets.batch([
       { kind: "append", tab: TABS.accounts, values: [accountRow(account)] },

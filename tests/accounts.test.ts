@@ -217,6 +217,82 @@ describe("kho tài khoản", () => {
     expect(again.displayName).toBe("Nam Béo");
   });
 
+  it("đổi được tên hiển thị, và tên bị cắt khoảng trắng", async () => {
+    const { repo } = fresh();
+    const account = await repo.upsertByEmail(seed);
+    const updated = await repo.updateAccount(account.userId, {
+      displayName: "  Nam Béo  ",
+    });
+    expect(updated?.displayName).toBe("Nam Béo");
+    expect((await repo.byId(account.userId))?.displayName).toBe("Nam Béo");
+  });
+
+  describe("tài khoản vãng lai", () => {
+    it("lập được dòng có email rỗng và tiền tố g-", async () => {
+      const { repo } = fresh();
+      const guest = await repo.createGuest({
+        displayName: "Khách sân",
+        avatarId: "e03-c01",
+        at: 5000,
+      });
+      expect(guest.email).toBe("");
+      expect(guest.userId.startsWith("g-")).toBe(true);
+      expect((await repo.byId(guest.userId))?.displayName).toBe("Khách sân");
+    });
+
+    it("byEmail không bao giờ trả về tài khoản vãng lai", async () => {
+      // `email` rỗng là dấu hiệu nhận dạng duy nhất, nên nó phải thật sự vô hình
+      // với đường tra theo email — nếu không thì lần đăng nhập kế tiếp nhận nhầm.
+      const { repo } = fresh();
+      await repo.createGuest({ displayName: "Khách", avatarId: "", at: 5000 });
+      expect(await repo.byEmail("")).toBeNull();
+      expect(await repo.byEmail("   ")).toBeNull();
+    });
+
+    it("upsertByEmail từ chối email rỗng thay vì chiếm dòng vãng lai", async () => {
+      // Đây là cái bẫy chuỗi-rỗng-khớp-chuỗi-rỗng, lần thứ ba trong dự án. Không
+      // có lá chắn thì một lời gọi kèm email rỗng sẽ biến tài khoản vãng lai đầu
+      // tiên thành tài khoản Google của người đang đăng nhập — kèm ảnh của họ và
+      // mọi ô tên đang trỏ vào đó.
+      const { repo } = fresh();
+      const guest = await repo.createGuest({
+        displayName: "Khách",
+        avatarId: "",
+        at: 5000,
+      });
+
+      await expect(
+        repo.upsertByEmail({ email: "", displayName: "Kẻ lạ", avatarId: "", at: 6000 }),
+      ).rejects.toThrow(/email thật/);
+      await expect(
+        repo.upsertByEmail({ email: "  ", displayName: "Kẻ lạ", avatarId: "", at: 6000 }),
+      ).rejects.toThrow(/email thật/);
+
+      const still = await repo.byId(guest.userId);
+      expect(still?.displayName, "dòng vãng lai phải nguyên vẹn").toBe("Khách");
+      expect(still?.email).toBe("");
+    });
+
+    it("ảnh của khách lưu và xoá được như tài khoản thường", async () => {
+      const { repo } = fresh();
+      const guest = await repo.createGuest({ displayName: "Khách", avatarId: "", at: 1 });
+      await repo.updatePrefs(guest.userId, { photo: "data:image/webp;base64,AAAA" });
+      expect((await repo.byId(guest.userId))?.prefs.photo).toBe(
+        "data:image/webp;base64,AAAA",
+      );
+
+      await repo.updatePrefs(guest.userId, { photo: undefined });
+      expect((await repo.byId(guest.userId))?.prefs.photo).toBeUndefined();
+    });
+
+    it("hai khách khác nhau là hai dòng khác nhau", async () => {
+      const { repo } = fresh();
+      const a = await repo.createGuest({ displayName: "Khách", avatarId: "", at: 1 });
+      const b = await repo.createGuest({ displayName: "Khách", avatarId: "", at: 2 });
+      expect(a.userId).not.toBe(b.userId);
+    });
+  });
+
   it("gắn thiết bị vào tài khoản, và đổi chủ khi người khác đăng nhập", async () => {
     const { repo } = fresh();
     const nam = await repo.upsertByEmail(seed);
@@ -556,5 +632,110 @@ describe('nhận ô tên "Đây là tôi"', () => {
     const late = sim.addPlayer("Người tới muộn", { asActive: false });
     sim.send({ type: "ClaimPlayer", playerId: late, deviceId: "dt-muon" });
     expect(sim.state.players.find((p) => p.id === late)?.status).toBe("pendingApproval");
+  });
+});
+
+describe("gộp một máy hai danh tính", () => {
+  function running() {
+    const sim = new EventSim({ planning: { iterations: 200, timeBudgetMs: 20 } });
+    const ids = sim.addPlayers(["Nam", "Lan", "Hùng", "Tú", "Bình", "Quân"]);
+    sim.send({ type: "ClaimPlayer", playerId: ids[0]!, deviceId: "dt-nam" });
+    sim.start();
+    return { sim, ids };
+  }
+
+  it("gắn tài khoản vào ô tên mà KHÔNG đụng gì khác", () => {
+    // Đây là điểm khác `ClaimPlayer`, và là lý do lệnh này tồn tại: `ClaimPlayer`
+    // đẩy người ta vào hàng chờ duyệt sau giờ bắt đầu. Ai đang đánh dở mà bỗng
+    // phải xin duyệt lại thì đó là phần mềm tự phá buổi đánh.
+    const { sim, ids } = running();
+    const before = sim.state.players.find((p) => p.id === ids[0])!;
+    expect(before.status).toBe("active");
+
+    sim.send({ type: "LinkAccount", playerId: ids[0]!, userId: "u-nam", deviceId: "dt-nam" });
+
+    const after = sim.state.players.find((p) => p.id === ids[0])!;
+    expect(after.userId).toBe("u-nam");
+    expect(after.status, "không được đổi trạng thái").toBe("active");
+    expect(after.name).toBe(before.name);
+    expect(after.avatarId).toBe(before.avatarId);
+  });
+
+  it("từ chối gắn đè lên ô tên thuộc tài khoản khác", () => {
+    const { sim, ids } = running();
+    sim.send({ type: "LinkAccount", playerId: ids[0]!, userId: "u-nam" });
+
+    const error = sim.trySend({ type: "LinkAccount", playerId: ids[0]!, userId: "u-ke-cuop" });
+    expect(error).toMatch(/tài khoản khác/);
+    expect(sim.state.players.find((p) => p.id === ids[0])?.userId).toBe("u-nam");
+  });
+
+  it("máy lạ không gắn được vào ô tên đã có người nhận", () => {
+    // Lá chắn quan trọng nhất của lệnh này, và dễ bỏ sót nhất vì nghe có vẻ thừa
+    // cho một lệnh "chỉ gắn tài khoản". Ô tên chưa có `userId` thì lá chắn tài
+    // khoản không chặn được gì, nên người lạ quét mã QR sẽ đóng dấu tài khoản
+    // mình lên tên người đang chơi — rồi đổi được cả ảnh của họ.
+    const { sim, ids } = running();
+    const error = sim.trySend({
+      type: "LinkAccount",
+      playerId: ids[0]!,
+      userId: "u-ke-la",
+      deviceId: "dt-ke-la",
+    });
+    expect(error).toMatch(/đã có người nhận/);
+
+    const nam = sim.state.players.find((p) => p.id === ids[0])!;
+    expect(nam.userId, "không được đóng dấu tài khoản người lạ").toBeUndefined();
+    expect(nam.deviceId).toBe("dt-nam");
+  });
+
+  it("chính máy đó thì gắn được", () => {
+    // Đúng tình huống mà việc tự gộp chạy: `myPlayerId` được máy chủ tìm ra THEO
+    // MÁY, nên thiết bị luôn khớp. Lá chắn trên không bao giờ cản đường hợp lệ.
+    const { sim, ids } = running();
+    expect(
+      sim.trySend({
+        type: "LinkAccount",
+        playerId: ids[0]!,
+        userId: "u-nam",
+        deviceId: "dt-nam",
+      }),
+    ).toBeNull();
+    expect(sim.state.players.find((p) => p.id === ids[0])?.userId).toBe("u-nam");
+  });
+
+  it("điền máy vào ô tên chưa có máy nào", () => {
+    const { sim, ids } = running();
+    sim.send({ type: "LinkAccount", playerId: ids[1]!, userId: "u-lan", deviceId: "dt-lan" });
+    const lan = sim.state.players.find((p) => p.id === ids[1])!;
+    expect(lan.deviceId).toBe("dt-lan");
+    expect(lan.userId).toBe("u-lan");
+  });
+
+  it("gửi lại nhiều lần không đổi gì thêm", () => {
+    // Lệnh này chạy ngầm mỗi lần mở app, nên nó phải chịu được việc gửi lại.
+    const { sim, ids } = running();
+    sim.send({ type: "LinkAccount", playerId: ids[0]!, userId: "u-nam", deviceId: "dt-nam" });
+    expect(
+      sim.trySend({ type: "LinkAccount", playerId: ids[0]!, userId: "u-nam", deviceId: "dt-nam" }),
+    ).toBeNull();
+    expect(sim.state.players.find((p) => p.id === ids[0])?.userId).toBe("u-nam");
+  });
+
+  it("sau khi gắn thì nhận ra mình trên điện thoại khác", () => {
+    // Toàn bộ điểm của việc gộp: `findMyPlayer` dò tài khoản trước, máy sau.
+    const { sim, ids } = running();
+    expect(findMyPlayer(sim.state, "dt-khac", "u-nam"), "chưa gắn thì chưa nhận ra")
+      .toBeNull();
+
+    sim.send({ type: "LinkAccount", playerId: ids[0]!, userId: "u-nam" });
+    expect(findMyPlayer(sim.state, "dt-khac", "u-nam")?.id).toBe(ids[0]);
+  });
+
+  it("không tìm thấy ô tên thì báo lỗi", () => {
+    const { sim } = running();
+    expect(sim.trySend({ type: "LinkAccount", playerId: "khong-co", userId: "u-x" })).toMatch(
+      /Không tìm thấy người chơi/,
+    );
   });
 });

@@ -6,7 +6,7 @@
  * Ba đường vào, xếp theo thứ tự người chơi hay gặp nhất:
  *
  *   1. Tên mình đã có sẵn trong danh sách (chủ sân gõ trước) → bấm "Đây là tôi"
- *      để nhận, rồi đổi ảnh nếu muốn.
+ *      để nhận, rồi tải ảnh thật lên nếu muốn — **không cần tài khoản Google**.
  *   2. Chưa có tên → gõ tên, chọn ảnh, tham gia.
  *   3. Đã tham gia rồi, quay lại → nhận ra ngay và cho vào thẳng. Từ cùng máy
  *      thì nhận ra qua máy; đã đăng nhập thì nhận ra trên máy nào cũng được.
@@ -28,6 +28,7 @@ import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { AccountBar } from "@/components/AccountBar";
 import { Avatar } from "@/components/Avatar";
 import { AvatarPicker } from "@/components/AvatarPicker";
+import { PhotoPicker } from "@/components/PhotoPicker";
 import { PLAYER_STATUS_LABEL } from "@/lib/domain/labels";
 import { Button, Card, Field, inputClass } from "@/components/ui";
 
@@ -80,12 +81,26 @@ export default function JoinPage() {
     return (
       <div className="space-y-4">
         <Card className="space-y-4 p-5 text-center">
+          {/*
+            Chỗ đặt ảnh thật, và **không đòi tài khoản Google nào**. Đây là màn
+            hình mã QR dẫn tới, tức đông người nhất trong cả ứng dụng; bắt họ đăng
+            nhập chỉ để có mặt trong hàng trận là dựng một cửa ải phần lớn sẽ
+            không qua. Ảnh được cất vào một tài khoản vãng lai ở bảng `accounts`
+            chứ không nhét vào trạng thái sự kiện — xem docblock của
+            `app/api/events/[code]/players/[playerId]/photo/route.ts`.
+          */}
           <div className="flex justify-center">
-            <Avatar
+            <PhotoPicker
               name={mine.name}
               avatarId={mine.avatarId}
-              userId={mine.userId}
-              size="lg"
+              photoSrc={
+                mine.userId
+                  ? `/api/avatar/${encodeURIComponent(mine.userId)}`
+                  : undefined
+              }
+              endpoint={`/api/events/${code}/players/${mine.id}/photo`}
+              canEdit
+              hasPhoto={Boolean(mine.userId)}
             />
           </div>
           <div>

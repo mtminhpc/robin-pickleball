@@ -1,17 +1,22 @@
 "use client";
 
 /**
- * Toàn bộ lịch, và chỗ chủ sự kiện dời trận lên xuống.
+ * Toàn bộ lịch, và chỗ chủ sự kiện đổi chỗ hai vòng cho nhau.
  *
  * Mỗi vòng là một khối, mỗi trận là một hàng gọn: sân, đội A, tỷ số, đội B. Cả
  * buổi nhìn hết trong một màn hình thay vì phải cuộn qua hàng chục thẻ. Bấm vào
  * hàng là mở đúng hộp nhập tỷ số như ở màn hình chính.
  *
- * Nút "sớm hơn / muộn hơn" nằm ở mức VÒNG chứ không ở mức trận, vì `SwapRounds`
- * vốn đổi cả hai vòng cho nhau. Ở lịch kín sân thì vòng nào cũng đủ người, nên
- * nhét thêm bốn người vào một vòng là có kẻ phải đánh hai trận — đo trên lịch
- * thật thì cách dời riêng một trận hỏng 22 trên 24 lần. Đổi cả vòng thì không ai
- * thêm hay bớt trận nào, không ai đổi bạn đôi, chỉ thứ tự trước sau thay đổi.
+ * **Nút ở đây dời VÒNG, không dời trận.** Nó gửi `SwapRounds`, tức hoán vị nhãn
+ * của cả hai vòng: mọi trận của vòng 4 sang vòng 5 và ngược lại. Ở lịch kín sân
+ * thì vòng nào cũng đủ người, nên nhét thêm bốn người vào một vòng là có kẻ phải
+ * đánh hai trận — đo trên lịch thật thì cách dời riêng một trận hỏng 22 trên 24
+ * lần. Đổi cả vòng thì không ai thêm hay bớt trận nào, không ai đổi bạn đôi, chỉ
+ * thứ tự trước sau thay đổi.
+ *
+ * Nhãn nút vì thế phải nói thẳng ra là "đổi với vòng mấy". Bản trước ghi "sớm
+ * hơn / muộn hơn" và đặt ngay dưới một khối vòng, nên người dùng đọc thành dời
+ * một trận rồi ngạc nhiên khi cả vòng đi theo — đúng câu hỏi chủ dự án đã hỏi.
  *
  * Việc đổi chỗ chạy `validateRoundSwap` ngay trên trình duyệt trước khi gửi đi.
  * Hàm đó là hàm thuần và trạng thái đã có sẵn ở đây, nên xem trước hậu quả là
@@ -106,13 +111,13 @@ export default function SchedulePage() {
                     disabled={round - 1 <= open - 1}
                     onClick={() => setSwap({ from: round, to: round - 1 })}
                   >
-                    Sớm hơn
+                    ↑ Đổi với vòng {round - 1}
                   </Button>
                   <Button
                     className="min-h-11"
                     onClick={() => setSwap({ from: round, to: round + 1 })}
                   >
-                    Muộn hơn
+                    ↓ Đổi với vòng {round + 1}
                   </Button>
                 </div>
               )}
@@ -258,7 +263,8 @@ function SwapDialog({
       <p className="eyebrow text-mute-600">Đổi chỗ hai vòng</p>
       <p className="mt-3.5 bg-surface p-3 text-sm">
         Mọi trận của <strong>vòng {swap.from}</strong> sẽ chuyển sang{" "}
-        <strong>vòng {swap.to}</strong>, và ngược lại.
+        <strong>vòng {swap.to}</strong>, và ngược lại. Các vòng khác giữ nguyên
+        số của chúng — chỉ hai vòng này đổi nhãn cho nhau.
       </p>
 
       <div className="mt-3 space-y-2">

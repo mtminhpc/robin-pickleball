@@ -39,6 +39,11 @@ export function rescheduleMode(
     // Cấp thêm suất chỉ có tác dụng khi phần lịch chưa đánh được xếp lại theo
     // mức thiếu hụt mới.
     case "GrantCatchUp":
+    // Khai trước cũng đổi danh sách người được xếp — chỉ là đổi ở những vòng
+    // phía trước chứ không phải ngay lập tức. Thiếu nhánh này thì lời khai nằm
+    // im cho tới khi có việc khác tình cờ kích hoạt xếp lại, nên màn hình khai
+    // giờ về trông y như một cái nút hỏng: bấm xong lịch không đổi gì cả.
+    case "DeclareAvailability":
       return "rebuild";
 
     // Đổi số sân thì số trận mỗi vòng đổi theo.

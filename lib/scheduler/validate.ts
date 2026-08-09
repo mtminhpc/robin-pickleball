@@ -7,7 +7,8 @@
  */
 
 import { apply } from "../domain/reduce";
-import type { EventState, PlayerId } from "../domain/types";
+import { isAvailableAt } from "../domain/types";
+import type { EventState, PlayerId, PresenceSpan } from "../domain/types";
 import { achievableStreakCap } from "./metrics";
 
 export type Severity = "ok" | "warn" | "block";
@@ -121,9 +122,16 @@ export function validateMove(
 /**
  * Kiểm tra hậu quả của việc đổi chỗ hai vòng.
  *
- * Đổi cả vòng không bao giờ làm ai thừa hay thiếu trận, nên ở đây chỉ còn một
- * thứ đáng cảnh báo: chuỗi đánh liên tiếp và chuỗi ngồi chờ. Người bấm nút cần
- * thấy trước đúng thứ đó, không cần đọc thêm gì khác.
+ * Đổi cả vòng không bao giờ làm ai thừa hay thiếu trận, nên phần lớn thứ đáng
+ * cảnh báo chỉ còn là chuỗi đánh liên tiếp và chuỗi ngồi chờ.
+ *
+ * Trừ một thứ nữa: **lời khai có mặt**. `SwapRounds` ghi số vòng mới lên trận
+ * nhưng không đụng `player.available`, và nó cũng không kéo theo lần xếp lịch
+ * nào (`rescheduleMode` trả `null` cho lệnh dời tay). Nên một trận có thể lặng
+ * lẽ rơi vào đúng cái vòng mà người trong đó đã khai là mình không có mặt, và
+ * không có bước nào kiểm lại. Hậu quả không dừng ở chỗ họ đứng chờ hụt:
+ * `buildHistory` loại họ khỏi `present` ở vòng đó trong khi trận vẫn tính vào
+ * `games`, nên phần "lệch" của họ âm giả và thuật toán đi bù trừ nhầm về sau.
  */
 export function validateRoundSwap(
   state: EventState,
@@ -183,6 +191,8 @@ export function validateRoundSwap(
     }
   }
 
+  notes.push(...brokenDeclarations(state, after));
+
   const moved = after.matches.filter((m) => m.round === roundA || m.round === roundB).length;
   if (notes.length === 0) {
     notes.push({ severity: "ok", message: "Không ai bị ảnh hưởng xấu." });
@@ -226,6 +236,42 @@ function streakCaps(state: EventState): { soft: number; hard: number } {
     soft: Math.max(state.config.softMaxConsecutive, best),
     hard: Math.max(state.config.hardMaxConsecutive, best),
   };
+}
+
+/**
+ * Ai bị đẩy vào một vòng mình đã khai là không có mặt.
+ *
+ * Chỉ xét những trận **thật sự xê dịch**, và chỉ báo mỗi người một lần. Người
+ * vốn đã ở trong tình trạng đó từ trước không phải hậu quả của thao tác này, và
+ * đổ hết lên hộp xác nhận thì cảnh báo thật bị chìm mất.
+ */
+function brokenDeclarations(before: EventState, after: EventState): ValidationNote[] {
+  const notes: ValidationNote[] = [];
+  const byId = new Map(before.players.map((p) => [p.id, p] as const));
+  const roundBefore = new Map(before.matches.map((m) => [m.id, m.round] as const));
+  const seen = new Set<PlayerId>();
+
+  for (const m of after.matches) {
+    if (roundBefore.get(m.id) === m.round) continue;
+    for (const id of [...m.teamA, ...m.teamB]) {
+      if (seen.has(id)) continue;
+      const p = byId.get(id);
+      if (!p?.available) continue;
+      if (isAvailableAt(p, m.round)) continue;
+      seen.add(id);
+      notes.push({
+        severity: "warn",
+        message: `${p.name} đã khai ${describeSpan(p.available)}, mà sau khi đổi chỗ thì trận của ${p.name} rơi vào vòng ${m.round}.`,
+      });
+    }
+  }
+  return notes;
+}
+
+function describeSpan(span: PresenceSpan): string {
+  if (span.to === null) return `chỉ đánh từ vòng ${span.from} trở đi`;
+  if (span.from <= 1) return `chỉ đánh tới vòng ${span.to}`;
+  return `chỉ đánh từ vòng ${span.from} đến vòng ${span.to}`;
 }
 
 /** Những người có trận bị xê dịch giữa hai trạng thái. */

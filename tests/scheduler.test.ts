@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { firstUnplayedRound } from "../lib/domain/rounds";
 import type { EventState } from "../lib/domain/types";
 import { fairnessReport } from "../lib/scheduler/metrics";
-import { validateRoundSwap } from "../lib/scheduler/validate";
+import { validateMove, validateRoundSwap } from "../lib/scheduler/validate";
 import { EventSim } from "../lib/testing/harness";
 import {
   assertFairShare,
@@ -589,6 +589,116 @@ describe("đổi chỗ hai vòng", () => {
     const v = validateRoundSwap(sim.state, open, open + 1, Date.now());
     expect(v.notes.some((n) => /vòng liên tiếp/.test(n.message))).toBe(false);
     expect(v.severity).toBe("ok");
+  });
+
+  it("cảnh báo khi đổi chỗ đẩy ai đó vào vòng họ đã khai là vắng", () => {
+    // Lỗi thật: `SwapRounds` ghi số vòng mới lên trận nhưng không đụng lời khai,
+    // và nó cũng không kéo theo lần xếp lịch nào. Nên một trận rơi được vào đúng
+    // cái vòng người trong đó đã khai là mình không có mặt, lặng lẽ.
+    const sim = new EventSim({ seed: 41, config: { courts: 1 }, planning: FAST });
+    const ids = sim.addPlayers(names(8));
+    sim.start();
+
+    const open = firstUnplayedRound(sim.state);
+    const here = sim.state.matches.find((m) => m.round === open)!;
+    const victim = here.teamA[0];
+
+    // Khai đúng tới vòng đang tới. Vòng sau đó thì họ đã về.
+    sim.send({
+      type: "DeclareAvailability",
+      playerId: victim,
+      fromRound: null,
+      toRound: open,
+    });
+
+    const v = validateRoundSwap(sim.state, open, open + 1, Date.now());
+    const name = sim.state.players.find((p) => p.id === victim)!.name;
+    // Khớp đúng câu về lời khai, không phải "có cảnh báo nào đó": cảnh báo chuỗi
+    // liên tiếp cũng nhắc tên người và cũng là `warn`, nên bài này sẽ xanh vì lý
+    // do sai nếu chỉ đếm số cảnh báo.
+    const declared = v.notes.filter(
+      (n) => n.severity === "warn" && /đã khai/.test(n.message),
+    );
+    expect(declared.length, "phải cảnh báo đúng một lần về lời khai").toBe(1);
+    expect(declared[0]!.message).toContain(name);
+    expect(declared[0]!.message).toMatch(new RegExp(`vòng ${open + 1}`));
+    expect(v.severity, "cảnh báo chứ không chặn — chủ sự kiện tự quyết").toBe("warn");
+    expect(v.preview).not.toBeNull();
+    expect(ids).toContain(victim);
+  });
+
+  it("không cảnh báo lời khai khi trận không xê dịch qua ranh giới đó", () => {
+    const sim = new EventSim({ seed: 42, config: { courts: 1 }, planning: FAST });
+    sim.addPlayers(names(8));
+    sim.start();
+
+    const open = firstUnplayedRound(sim.state);
+    const v = validateRoundSwap(sim.state, open, open + 1, Date.now());
+    expect(v.notes.some((n) => /đã khai/.test(n.message))).toBe(false);
+  });
+});
+
+describe("xem trước khi dời một trận", () => {
+  /**
+   * `validateMove` viết xong từ lâu nhưng chưa bài nào chạm tới, vì chưa nút nào
+   * gọi nó. Nó là thứ duy nhất đứng giữa chủ sự kiện và một cú bấm làm hỏng lịch,
+   * nên phải có lưới an toàn trước khi nối vào giao diện.
+   */
+  it("chặn với lý do rõ ràng khi trận đã đánh xong", () => {
+    const sim = new EventSim({ seed: 51, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(12));
+    sim.start();
+    sim.playRounds(2);
+
+    const done = sim.state.matches.find((m) => m.status === "submitted")!;
+    const v = validateMove(sim.state, done.id, 9, 1, Date.now());
+    expect(v.severity).toBe("block");
+    expect(v.preview).toBeNull();
+    expect(v.notes[0]!.message).toMatch(/chưa đánh/);
+  });
+
+  it("chặn khi không tìm thấy trận", () => {
+    const sim = new EventSim({ seed: 52, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(8));
+    sim.start();
+
+    const v = validateMove(sim.state, "khong-co-that", 3, 1, Date.now());
+    expect(v.severity).toBe("block");
+    expect(v.notes[0]!.message).toMatch(/Không tìm thấy trận/);
+  });
+
+  it("chuyển nguyên văn lời từ chối của reduce lên hộp xác nhận", () => {
+    // 8 người trên 2 sân: ai cũng đánh mọi vòng nên dời đâu cũng đụng người.
+    const sim = new EventSim({ seed: 53, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(8));
+    sim.start();
+
+    const target = sim.state.matches.find((m) => m.round === 2)!;
+    const v = validateMove(sim.state, target.id, 1, 1, Date.now());
+    expect(v.severity).toBe("block");
+    expect(v.notes[0]!.message).toMatch(/phải đánh hai trận trong vòng/);
+  });
+
+  it("cho xem trước và báo trận sẽ bị ghim khi dời được", () => {
+    // 6 người trên 1 sân: mỗi vòng chỉ 4 người ra sân nên còn chỗ để xoay.
+    const sim = new EventSim({ seed: 54, config: { courts: 1 }, planning: FAST });
+    sim.addPlayers(names(6));
+    sim.start();
+
+    const a = sim.state.matches.find((m) => m.round === 2)!;
+    const b = sim.state.matches.find((m) => m.round === 3)!;
+    const v = validateMove(sim.state, a.id, 3, b.court, Date.now());
+    if (v.severity === "block") {
+      // Hạt giống này vẫn có thể trùng người; khi đó lý do phải nói được ra.
+      expect(v.notes[0]!.message).toMatch(/hai trận|đã đánh/);
+      return;
+    }
+
+    expect(v.preview, "không chặn thì phải xem trước được").not.toBeNull();
+    expect(v.notes.some((n) => /sẽ được ghim/.test(n.message))).toBe(true);
+    // Xem trước là bản sao, không được đụng vào trạng thái thật.
+    expect(sim.state.matches.find((m) => m.id === a.id)!.round).toBe(2);
+    expect(v.preview!.matches.find((m) => m.id === a.id)!.round).toBe(3);
   });
 });
 

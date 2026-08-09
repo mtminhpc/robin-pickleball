@@ -226,6 +226,14 @@ function deactivate(
   // `firstOpenRound` nhảy qua nó còn `firstUnplayedRound` thì không, nên người
   // vào giữa chừng nhận khoảng bắt đầu muộn hơn mốc đóng.
   closePresence(player, Math.max(open - 1, lastRoundPlayed(state, player.id)));
+
+  // Lời khai có mặt là một DỰ ĐỊNH, và dự định đó vừa bị thực tế vượt qua. Giữ
+  // lại thì nó thành cái bẫy: ai khai "đánh tới vòng 8", về ở vòng 4 rồi quay
+  // lại ở vòng 9 sẽ mang theo một lời khai nói rằng mình đã đi mất — và thuật
+  // toán, vốn coi lời khai là ràng buộc cứng, sẽ không xếp cho họ trận nào nữa.
+  // Người dùng thì chỉ thấy mình bấm "quay lại" xong ngồi không tới hết buổi.
+  delete player.available;
+
   player.status = status;
   dropFutureMatches(state, player.id, open);
 }
@@ -440,6 +448,31 @@ function applyInPlace(
       return ok(null);
     }
 
+    case "LinkAccount": {
+      const p = findPlayer(state, c.playerId);
+      if (!p) return err("Không tìm thấy người chơi.");
+
+      // Hai lá chắn, chép NGUYÊN của `ClaimPlayer` — đây cũng là lệnh công khai,
+      // nên nới một ly ở đây là mở đúng đường chiếm tên mà `ClaimPlayer` đã bịt.
+      //
+      // Lá chắn thiết bị đặc biệt không được bỏ, dù nghe có vẻ thừa với một lệnh
+      // "chỉ gắn tài khoản": ô tên chưa có `userId` thì lá chắn kia không chặn
+      // được gì cả, và người lạ quét mã QR sẽ đóng dấu tài khoản mình lên tên
+      // người đang chơi — rồi đổi được cả ảnh của họ qua đường ảnh người chơi.
+      if (p.deviceId && c.deviceId && p.deviceId !== c.deviceId) {
+        return err("Tên này đã có người nhận rồi.");
+      }
+      if (p.userId && c.userId && p.userId !== c.userId) {
+        return err("Tên này thuộc về tài khoản khác.");
+      }
+
+      if (c.userId) p.userId = c.userId;
+      if (c.deviceId) p.deviceId = c.deviceId;
+
+      // Cố ý không đụng `status`, `name`, `avatarId`. Xem docblock của lệnh.
+      return ok(null);
+    }
+
     case "ApproveJoin": {
       const p = findPlayer(state, c.playerId);
       if (!p) return err("Không tìm thấy người chơi.");
@@ -466,7 +499,12 @@ function applyInPlace(
     case "ResumePlayer": {
       const p = findPlayer(state, c.playerId);
       if (!p) return err("Không tìm thấy người chơi.");
-      if (p.status !== "paused") return err("Người này không ở trạng thái nghỉ tạm.");
+      // Cùng một lệnh mở lại cả hai cánh cửa mà người chơi tự đóng: nghỉ tạm và
+      // đã về. Không nới `MarkArrived` cho tự phục vụ, vì lệnh đó còn áp dụng
+      // cho người `invited`/`declined`; cho tự gửi sẽ vô tình bỏ qua hàng duyệt.
+      if (p.status !== "paused" && p.status !== "left") {
+        return err("Người này không ở trạng thái nghỉ tạm hoặc đã về.");
+      }
       activate(state, p);
       return ok(null);
     }

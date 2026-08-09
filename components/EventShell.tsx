@@ -16,9 +16,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { useAccount } from "@/hooks/useAccount";
 import { EventProvider, useEvent, type EventSnapshot } from "@/hooks/useEventState";
-import { MutationQueueProvider } from "@/hooks/useMutationQueue";
+import { MutationQueueProvider, useMutationQueue } from "@/hooks/useMutationQueue";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { rememberEvent } from "@/lib/identity/device";
 
@@ -48,6 +49,7 @@ function ShellInner({ code, children }: { code: string; children: ReactNode }) {
 
   return (
     <MutationQueueProvider code={code} onApplied={applyServerState}>
+      <SyncAccount />
       <div className="mx-auto flex min-h-dvh w-full max-w-[78.75rem]">
         <SideBar code={code} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -61,6 +63,45 @@ function ShellInner({ code, children }: { code: string; children: ReactNode }) {
       </div>
     </MutationQueueProvider>
   );
+}
+
+/**
+ * Gộp danh tính của cái máy vào tài khoản, ngay lúc mở một buổi cũ.
+ *
+ * Đây là chỗ chữa cảnh "một máy hai danh tính": chơi vài buổi bằng máy — ô tên
+ * chỉ mang `deviceId` — rồi hôm sau đăng nhập Google. Không có bước này thì tài
+ * khoản mới không biết gì về những ô tên cũ, và người dùng có hai bản thân trong
+ * cùng một ứng dụng.
+ *
+ * Chỉ chạy khi máy chủ đã nhận ra `myPlayerId` mà ô tên đó **chưa có tài khoản**.
+ * Nhận ra được nghĩa là `findMyPlayer` đã khớp theo `deviceId`, tức chính máy này
+ * — nên lá chắn chống chiếm tên trong `reduce` không bao giờ cản đường hợp lệ.
+ *
+ * Không tự gắn được cho người đăng nhập trên **điện thoại hoàn toàn mới**: ở đó
+ * `myPlayerId` là `null` và không có căn cứ nào để đoán ô tên nào là của họ. Họ
+ * vào trang Tham gia bấm "Đây là tôi", đúng như trước.
+ */
+function SyncAccount() {
+  const { data } = useEvent();
+  const account = useAccount();
+  const queue = useMutationQueue();
+  const sent = useRef<string | null>(null);
+
+  const signedIn = Boolean(account.data?.user);
+  const me = data?.state.players.find((p) => p.id === data.myPlayerId) ?? null;
+  const needsLink = signedIn && me !== null && !me.userId;
+  const playerId = me?.id ?? null;
+
+  useEffect(() => {
+    if (!needsLink || !playerId) return;
+    // Một lần cho mỗi ô tên trong mỗi lượt tải. Máy chủ tự điền `userId` từ
+    // cookie đã ký, nên lệnh này không mang theo gì để làm sai.
+    if (sent.current === playerId) return;
+    sent.current = playerId;
+    queue.send({ type: "LinkAccount", playerId });
+  }, [needsLink, playerId, queue]);
+
+  return null;
 }
 
 const TABS: ReadonlyArray<{ href: string; label: string; adminOnly?: boolean }> = [

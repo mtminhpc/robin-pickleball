@@ -250,6 +250,79 @@ describe("vòng đời sự kiện", () => {
     const id = played.teamA[0];
     expect(sim.trySend({ type: "RemovePlayer", playerId: id })).toMatch(/Đã về/i);
   });
+
+  it("rời cuộc thì xoá luôn lời khai có mặt cũ", () => {
+    // Lời khai là một DỰ ĐỊNH, và dự định đó vừa bị thực tế vượt qua. Giữ lại thì
+    // người quay lại ở vòng 9 mang theo một lời khai nói rằng mình đã đi mất, và
+    // thuật toán — vốn coi lời khai là ràng buộc cứng — không xếp cho họ trận nào
+    // nữa. Người dùng chỉ thấy mình bấm "quay lại" rồi ngồi không tới hết buổi.
+    const sim = started(12);
+    const id = sim.state.players[0]!.id;
+
+    sim.send({ type: "DeclareAvailability", playerId: id, fromRound: null, toRound: 8 });
+    expect(sim.state.players.find((p) => p.id === id)!.available).toBeDefined();
+
+    sim.playRounds(2);
+    sim.send({ type: "PlayerLeft", playerId: id });
+    expect(sim.state.players.find((p) => p.id === id)!.available).toBeUndefined();
+  });
+
+  it("nghỉ tạm cũng xoá lời khai — cùng một hàm, cùng một lý do", () => {
+    const sim = started(12);
+    const id = sim.state.players[0]!.id;
+    sim.send({ type: "DeclareAvailability", playerId: id, fromRound: null, toRound: 8 });
+    sim.send({ type: "PausePlayer", playerId: id });
+    expect(sim.state.players.find((p) => p.id === id)!.available).toBeUndefined();
+  });
+
+  it("quay lại sau khi về vẫn được xếp trận", () => {
+    // Bài canh hậu quả cuối cùng của hai bài trên: chuỗi khai → về → quay lại
+    // phải trả người đó về lịch, không phải để họ ngồi ngoài mãi.
+    const sim = started(12);
+    const id = sim.state.players[0]!.id;
+
+    // Khai tới đúng vòng 3 rồi đánh hết vòng 3: từ vòng 4 trở đi lời khai nói
+    // rằng người này đã đi mất. Phải đi qua hẳn cái mốc đó thì bài test mới có
+    // nghĩa — dừng ở vòng 2 thì lời khai vẫn còn hiệu lực và bài xanh vô ích.
+    sim.send({ type: "DeclareAvailability", playerId: id, fromRound: null, toRound: 3 });
+    sim.playRounds(3);
+    sim.send({ type: "PlayerLeft", playerId: id });
+    sim.reschedule("rebuild");
+
+    // Người chơi tự quay lại bằng `ResumePlayer`; không dùng `MarkArrived` vì
+    // lệnh đó còn dành cho admin duyệt người mời/đã từ chối.
+    sim.send({ type: "ResumePlayer", playerId: id });
+    sim.reschedule("rebuild");
+
+    const back = sim.state.matches.some(
+      (m) => m.status === "scheduled" && [...m.teamA, ...m.teamB].includes(id),
+    );
+    expect(back, "người quay lại phải có tên trong lịch phía trước").toBe(true);
+  });
+
+  it("ResumePlayer không cho người đang chờ tự vượt hàng duyệt", () => {
+    // `ResumePlayer` được mở cho chính chủ, nên reducer phải giới hạn nó đúng
+    // hai trạng thái `paused`/`left`; nếu nhận mọi trạng thái như `MarkArrived`
+    // thì người tới muộn chỉ cần gọi thẳng API là bỏ qua chủ sự kiện.
+    const sim = started(8);
+    sim.send(
+      {
+        type: "RequestJoin",
+        player: { id: "muon-tu-vao", name: "Muộn", avatarId: "a01" },
+      },
+      { kind: "player", label: "Muộn", ref: "muon-tu-vao" },
+    );
+    expect(sim.state.players.find((p) => p.id === "muon-tu-vao")?.status).toBe(
+      "pendingApproval",
+    );
+
+    expect(
+      sim.trySend({ type: "ResumePlayer", playerId: "muon-tu-vao" }),
+    ).toMatch(/nghỉ tạm hoặc đã về/);
+    expect(sim.state.players.find((p) => p.id === "muon-tu-vao")?.status).toBe(
+      "pendingApproval",
+    );
+  });
 });
 
 describe("bảng xếp hạng", () => {

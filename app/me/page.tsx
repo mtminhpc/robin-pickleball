@@ -16,11 +16,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { loadProfile, loadRecentEvents } from "@/lib/identity/device";
-import { ACCOUNT_KEY } from "@/hooks/useAccount";
+import { loadProfile, loadRecentEvents, saveProfile } from "@/lib/identity/device";
+import { ACCOUNT_KEY, useAccount } from "@/hooks/useAccount";
 import { AccountBar } from "@/components/AccountBar";
 import { PhotoPicker } from "@/components/PhotoPicker";
-import { Button, Card, Empty } from "@/components/ui";
+import { Button, Card, Empty, inputClass } from "@/components/ui";
 
 interface MeResponse {
   events: Array<{
@@ -72,6 +72,8 @@ interface DeviceRow {
 export default function MePage() {
   const [payload, setPayload] = useState<{ codes: string[]; name: string } | null>(null);
   const [showDevices, setShowDevices] = useState(false);
+  const queryClient = useQueryClient();
+  const user = useAccount().data?.user ?? null;
 
   useEffect(() => {
     setPayload({
@@ -106,13 +108,22 @@ export default function MePage() {
         </Link>
         <div className="flex items-center gap-3 pt-1">
           <PhotoPicker
-            fallbackName={profile?.name ?? "Máy này"}
-            fallbackAvatarId={profile?.avatarId}
+            name={user?.displayName || profile?.name || "Máy này"}
+            avatarId={user?.avatarId ?? profile?.avatarId}
+            photoSrc={
+              user ? `/api/avatar/${encodeURIComponent(user.userId)}` : undefined
+            }
+            endpoint="/api/me/avatar"
+            canEdit={user !== null}
+            hasPhoto={user?.hasPhoto ?? false}
+            onChanged={() => queryClient.invalidateQueries({ queryKey: ACCOUNT_KEY })}
           />
-          <div>
-            <h1 className="text-2xl font-bold">
-              {data?.account?.displayName || profile?.name || "Máy này"}
-            </h1>
+          <div className="min-w-0">
+            <NameLine
+              name={data?.account?.displayName || profile?.name || "Máy này"}
+              avatarId={user?.avatarId ?? profile?.avatarId ?? ""}
+              canEdit={user !== null}
+            />
             {data?.account && data.account.devices > 1 ? (
               <button
                 className="text-sm text-mute-700 underline decoration-mute-400 underline-offset-4 hover:text-mute-900"
@@ -221,6 +232,111 @@ export default function MePage() {
           : "Số liệu này bám theo máy bạn đang dùng. Xoá dữ liệu trình duyệt hoặc đổi điện thoại là mất."}
       </p>
     </main>
+  );
+}
+
+/**
+ * Tên hiển thị, và nút sửa nó.
+ *
+ * Chỉ hiện nút khi đã đăng nhập: chưa có tài khoản thì cái tên đang hiện nằm
+ * trong `localStorage` của máy này, người dùng đổi nó ở màn hình Tham gia.
+ *
+ * Lưu xong thì ghi cả vào `localStorage`. Không có bước đó thì lần quét mã QR
+ * sau vẫn tự điền cái tên cũ, và người dùng phải sửa lần thứ hai cho một việc
+ * họ tưởng đã làm xong.
+ */
+function NameLine({
+  name,
+  avatarId,
+  canEdit,
+}: {
+  name: string;
+  avatarId: string;
+  canEdit: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: async (displayName: string) => {
+      const res = await fetch("/api/me/profile", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ displayName }),
+      });
+      const body = (await res.json()) as { displayName?: string; error?: string };
+      if (!res.ok) throw new Error(body.error ?? "Không đổi được tên.");
+      return body.displayName ?? displayName;
+    },
+    onSuccess: (saved) => {
+      // Máy mới có thể chưa có `rp_profile`; lấy ảnh đang hiện từ tài khoản làm
+      // dự phòng để đổi tên không vô tình ghi một avatar rỗng vào localStorage.
+      saveProfile({ name: saved, avatarId });
+      queryClient.invalidateQueries({ queryKey: ACCOUNT_KEY });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      setEditing(false);
+      setError(null);
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  if (!editing) {
+    return (
+      <div className="flex min-w-0 items-center gap-2">
+        <h1 className="truncate text-2xl font-bold">{name}</h1>
+        {canEdit && (
+          <button
+            type="button"
+            aria-label="Đổi tên hiển thị"
+            onClick={() => {
+              setDraft(name);
+              setEditing(true);
+            }}
+            className="min-h-9 flex-none px-1 text-sm text-mute-600 underline underline-offset-4 hover:text-mute-900"
+          >
+            Sửa
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const trimmed = draft.trim();
+        if (trimmed === "" || save.isPending) return;
+        save.mutate(trimmed);
+      }}
+      className="space-y-1"
+    >
+      <div className="flex gap-2">
+        <input
+          autoFocus
+          value={draft}
+          maxLength={40}
+          onChange={(e) => setDraft(e.target.value)}
+          className={inputClass}
+        />
+        <Button tone="primary" type="submit" disabled={!draft.trim() || save.isPending}>
+          {save.isPending ? "…" : "Lưu"}
+        </Button>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          setEditing(false);
+          setError(null);
+        }}
+        className="min-h-9 text-xs text-mute-600 underline underline-offset-4"
+      >
+        Thôi
+      </button>
+      {error && <p className="bg-accent p-2 text-xs text-paper">{error}</p>}
+    </form>
   );
 }
 

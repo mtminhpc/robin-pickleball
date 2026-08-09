@@ -12,7 +12,8 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  isAllowedForRole,
+  isAllowedForActor,
+  SELF_SERVICE,
   type Command,
   type CommandEnvelope,
 } from "@/lib/domain/commands";
@@ -119,6 +120,7 @@ function stampIdentity(
   };
 
   if (command.type === "ClaimPlayer") return { ...command, ...identity };
+  if (command.type === "LinkAccount") return { ...command, ...identity };
   if (command.type === "RequestJoin") {
     return { ...command, player: { ...command.player, ...identity } };
   }
@@ -131,6 +133,10 @@ function stampIdentity(
  * `EditResult` không theo bảng phân quyền thông thường: trong hai phút đầu chính
  * người vừa nhập được sửa lại mà không cần mật khẩu chủ sự kiện. Đó là cách chống
  * bấm nhầm mà không phải nới quyền cho cả nhóm.
+ *
+ * `ctx.me` là người chơi ứng với cookie đã ký, nên nó **không giả mạo được** —
+ * đó là điều khiến luật "chỉ sửa phần của chính mình" có giá trị thật chứ không
+ * chỉ là ẩn nút đi trên giao diện.
  */
 function checkPermission(
   command: Command,
@@ -143,8 +149,16 @@ function checkPermission(
     return verdict.allowed ? null : verdict.reason;
   }
 
-  if (isAllowedForRole(command.type, ctx.role)) return null;
+  const target = "playerId" in command ? command.playerId : null;
+  if (isAllowedForActor(command.type, ctx.role, ctx.me?.id ?? null, target)) {
+    return null;
+  }
 
+  if (SELF_SERVICE.includes(command.type)) {
+    return ctx.me
+      ? "Chỉ chủ sự kiện mới sửa được phần của người khác."
+      : "Chưa nhận ra bạn là ai trong buổi này. Vào trang Tham gia để nhận tên của bạn.";
+  }
   if (ctx.role === "viewer") {
     return "Cần mật khẩu để nhập điểm. Hỏi người tổ chức buổi đánh.";
   }

@@ -68,6 +68,22 @@ export type Command =
       deviceId?: string;
       userId?: string;
     }
+  /**
+   * Gắn danh tính vào một ô tên đã có, **không đụng gì khác**.
+   *
+   * Đây là chỗ chữa cảnh "một máy hai danh tính": chơi vài buổi bằng máy (nhận
+   * qua `deviceId`), hôm sau đăng nhập Google, và nếu không có lệnh này thì tài
+   * khoản mới không biết gì về những ô tên cũ.
+   *
+   * Không dùng `ClaimPlayer` cho việc đó được, dù nó cũng gắn danh tính:
+   * `ClaimPlayer` còn đổi tên, đổi ảnh, và **đẩy người ta vào hàng chờ duyệt**
+   * sau giờ bắt đầu. Ai đang đánh dở mà bỗng phải xin duyệt lại thì đó là phần
+   * mềm tự phá buổi đánh.
+   *
+   * `deviceId` và `userId` do **máy chủ điền** từ cookie đã ký, y hệt
+   * `ClaimPlayer` — xem `stampIdentity`.
+   */
+  | { type: "LinkAccount"; playerId: PlayerId; userId?: string; deviceId?: string }
   | { type: "ApproveJoin"; playerId: PlayerId }
   | { type: "RejectJoin"; playerId: PlayerId }
   | { type: "PausePlayer"; playerId: PlayerId }
@@ -200,6 +216,43 @@ export const PUBLIC_COMMANDS: readonly CommandType[] = [
   // đúng vào chỗ cần nhanh nhất. `ClaimPlayer` tự bảo vệ bằng cách từ chối ô
   // tên đã có chủ.
   "ClaimPlayer",
+  // Cùng một lý lẽ, và cùng một lớp bảo vệ: danh tính bị máy chủ ghi đè từ cookie
+  // đã ký, còn `reduce` từ chối ghi đè lên ô tên đã thuộc tài khoản khác. Người
+  // vừa đăng nhập trên điện thoại mới chưa có mật khẩu buổi nào cả — bắt gõ mật
+  // khẩu ở đây thì việc tự gộp danh tính sẽ không bao giờ chạy.
+  "LinkAccount",
+];
+
+/**
+ * Các lệnh nói về CHÍNH MÌNH, không phải về cả buổi đánh.
+ *
+ * Ba lệnh này trước đây chỉ được xét theo vai, và cách xét đó sai về cả hai phía
+ * cùng lúc:
+ *
+ *   • **Quá rộng.** Chúng không nằm trong `ADMIN_ONLY`, nên bất kỳ ai gõ được
+ *     mật khẩu người chơi đều đổi được tên người khác, khai hộ giờ về của người
+ *     khác, hay cho người khác "đã về" — mà `reduce` không hề kiểm người gửi có
+ *     phải chính chủ. Mật khẩu người chơi thì cả nhóm biết.
+ *   • **Quá hẹp.** Người quét mã QR ở sân là `viewer` cho tới khi gõ mật khẩu,
+ *     nên họ *không* tự bấm về được — đúng thứ họ cần nhất, và cũng là thứ chỉ
+ *     họ mới biết.
+ *
+ * Thước đo đúng ở đây không phải "vai gì" mà là "có phải việc của mình không".
+ *
+ * Danh sách này **không thay** hai bảng trên, nó chèn thêm một tầng: nhắm vào
+ * chính mình thì được, nhắm vào người khác thì quay về luật cũ. Nên `PausePlayer`
+ * và `ResumePlayer` vẫn nằm trong `ADMIN_ONLY` — chỉ chủ sự kiện cho *người khác*
+ * nghỉ, còn tự mình xin nghỉ một lúc thì không cần hỏi ai.
+ *
+ * Hai lệnh nghỉ/vào lại phải đi cùng nhau. Cho người ta tự bấm về mà bắt đi tìm
+ * chủ sân mới quay lại được là một cánh cửa chỉ mở một chiều.
+ */
+export const SELF_SERVICE: readonly CommandType[] = [
+  "PlayerLeft",
+  "PausePlayer",
+  "ResumePlayer",
+  "UpdateProfile",
+  "DeclareAvailability",
 ];
 
 export type Role = "viewer" | "player" | "admin";
@@ -214,6 +267,27 @@ export function isAllowedForRole(type: CommandType, role: Role): boolean {
   if (PUBLIC_COMMANDS.includes(type)) return true;
   if (role === "viewer") return false;
   return !ADMIN_ONLY.includes(type);
+}
+
+/**
+ * Vai trò **cộng thêm** câu hỏi "lệnh này nhắm vào ai".
+ *
+ * Đây là hàm mà tầng route phải gọi, không phải `isAllowedForRole`. Cả hai `&&`
+ * ở dưới đều cần: thiếu chúng thì một `myPlayerId` rỗng (người xem chưa có tên
+ * trong buổi) sẽ khớp với một `targetPlayerId` rỗng, và người lạ bất kỳ sửa được
+ * hồ sơ của một người chơi không tồn tại — cùng đúng cái bẫy đã bắt ở `roleFor`.
+ */
+export function isAllowedForActor(
+  type: CommandType,
+  role: Role,
+  myPlayerId: string | null,
+  targetPlayerId: string | null,
+): boolean {
+  if (role === "admin") return true;
+  if (SELF_SERVICE.includes(type)) {
+    return Boolean(myPlayerId && targetPlayerId && myPlayerId === targetPlayerId);
+  }
+  return isAllowedForRole(type, role);
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };

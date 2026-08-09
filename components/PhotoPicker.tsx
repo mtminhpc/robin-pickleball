@@ -1,34 +1,50 @@
 "use client";
 
 /**
- * Chọn ảnh đại diện thật cho tài khoản của mình.
+ * Chọn ảnh đại diện thật.
  *
- * Chỉ hiện khi đã đăng nhập, vì ảnh gắn với tài khoản chứ không với cái máy —
- * lưu theo máy thì đổi điện thoại là mất, đúng thứ tài khoản sinh ra để chữa.
- * Chưa đăng nhập thì vẫn thấy ảnh biểu tượng suy từ tên, y như trước.
+ * Dùng ở ba chỗ với ba đường lưu khác nhau, nên đường lưu là **tham số** chứ
+ * không gắn cứng:
+ *
+ *   • `/me` → `/api/me/avatar`, ảnh gắn với tài khoản Google.
+ *   • Trang Tham gia → `/api/events/[code]/players/[id]/photo`, người quét mã QR
+ *     tự đặt ảnh cho mình mà **không cần tài khoản nào**.
+ *   • Hộp Sửa của chủ sự kiện → cùng đường đó, đặt hộ người không mang điện thoại.
  *
  * Ảnh được thu nhỏ ngay trên máy người dùng trước khi gửi (xem
- * [lib/avatars/resize.ts](../lib/avatars/resize.ts)). Sau khi lưu xong thì hiện
- * luôn tấm vừa chọn thay vì đi tải lại từ máy chủ: nó đã nằm sẵn trong bộ nhớ,
- * và chờ một vòng mạng chỉ để thấy đúng tấm ảnh mình vừa chọn là chờ vô ích.
+ * [lib/avatars/resize.ts](../lib/avatars/resize.ts)) — ảnh chụp điện thoại 4MB
+ * gửi thẳng lên là bốn megabyte đi qua mạng 3G giữa sân. Sau khi lưu xong thì
+ * hiện luôn tấm vừa chọn thay vì đi tải lại từ máy chủ: nó đã nằm sẵn trong bộ
+ * nhớ, và chờ một vòng mạng chỉ để thấy đúng tấm mình vừa chọn là chờ vô ích.
  */
 
 import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { shrinkToDataUri } from "@/lib/avatars/resize";
-import { ACCOUNT_KEY, useAccount } from "@/hooks/useAccount";
 import { Avatar } from "@/components/Avatar";
 
 export function PhotoPicker({
-  fallbackName,
-  fallbackAvatarId,
+  name,
+  avatarId,
+  photoSrc,
+  endpoint,
+  canEdit,
+  hasPhoto,
+  size = "lg",
+  onChanged,
 }: {
-  /** Tên và ảnh biểu tượng lấy từ máy này, dùng khi chưa đăng nhập. */
-  fallbackName: string;
-  fallbackAvatarId?: string;
+  name: string;
+  avatarId?: string;
+  /** Địa chỉ ảnh đang có. Bỏ trống thì chỉ vẽ biểu tượng suy từ tên. */
+  photoSrc?: string;
+  /** Đường nhận `PUT { photo }` và `DELETE`. */
+  endpoint: string;
+  /** Chưa đủ điều kiện đổi thì vẫn hiện ảnh, chỉ giấu hai nút đi. */
+  canEdit: boolean;
+  hasPhoto: boolean;
+  size?: "md" | "lg";
+  /** Gọi sau khi lưu hoặc xoá xong, để bên ngoài tải lại phần của nó. */
+  onChanged?: () => void;
 }) {
-  const { data } = useAccount();
-  const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [preview, setPreview] = useState<string | null>(null);
@@ -36,14 +52,9 @@ export function PhotoPicker({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const user = data?.user ?? null;
-  const name = user?.displayName || fallbackName;
-
   const src =
     preview ??
-    (user
-      ? `/api/avatar/${encodeURIComponent(user.userId)}${bust > 0 ? `?v=${bust}` : ""}`
-      : undefined);
+    (photoSrc ? `${photoSrc}${bust > 0 ? `?v=${bust}` : ""}` : undefined);
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
@@ -51,7 +62,7 @@ export function PhotoPicker({
     setError(null);
     try {
       const photo = await shrinkToDataUri(file);
-      const res = await fetch("/api/me/avatar", {
+      const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ photo }),
@@ -59,7 +70,7 @@ export function PhotoPicker({
       const body = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? "Không lưu được ảnh.");
       setPreview(photo);
-      queryClient.invalidateQueries({ queryKey: ACCOUNT_KEY });
+      onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không lưu được ảnh.");
     } finally {
@@ -74,14 +85,14 @@ export function PhotoPicker({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/me/avatar", { method: "DELETE" });
+      const res = await fetch(endpoint, { method: "DELETE" });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? "Không xoá được ảnh.");
       setPreview(null);
       // Ảnh cũ còn nằm trong bộ nhớ đệm trình duyệt tới một phút. Đổi địa chỉ là
       // cách chắc chắn để thấy ngay kết quả của việc mình vừa bấm.
       setBust((n) => n + 1);
-      queryClient.invalidateQueries({ queryKey: ACCOUNT_KEY });
+      onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không xoá được ảnh.");
     } finally {
@@ -92,14 +103,8 @@ export function PhotoPicker({
   return (
     <div>
       <div className="flex items-center gap-3">
-        <Avatar
-          name={name}
-          avatarId={user?.avatarId ?? fallbackAvatarId}
-          src={src}
-          size="lg"
-          dimmed={busy}
-        />
-        {user && (
+        <Avatar name={name} avatarId={avatarId} src={src} size={size} dimmed={busy} />
+        {canEdit && (
           <div className="flex flex-col items-start gap-1">
             <input
               ref={fileRef}
@@ -114,9 +119,9 @@ export function PhotoPicker({
               onClick={() => fileRef.current?.click()}
               className="eyebrow min-h-9 text-accent-700 underline underline-offset-4 disabled:opacity-40"
             >
-              {busy ? "Đang lưu…" : "Đổi ảnh"}
+              {busy ? "Đang lưu…" : hasPhoto || preview ? "Đổi ảnh" : "Tải ảnh lên"}
             </button>
-            {(preview !== null || user.hasPhoto) && (
+            {(preview !== null || hasPhoto) && (
               <button
                 type="button"
                 disabled={busy}

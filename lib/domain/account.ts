@@ -16,9 +16,26 @@
 
 export type UserId = string;
 
+/**
+ * Tiền tố của **tài khoản vãng lai** — người chơi có ảnh thật mà không có Google.
+ *
+ * Ảnh phải nằm ở bảng `accounts` chứ không nằm trong trạng thái sự kiện: trạng
+ * thái đã phải cắt làm bốn ô vì mỗi ô Sheets chỉ chứa 50.000 ký tự, mà mười sáu
+ * tấm ảnh là hơn nửa ngân sách đó. Nên người vào bằng mã QR cũng được cấp một
+ * dòng tài khoản, chỉ khác là `email` rỗng.
+ *
+ * Tiền tố có hai việc: nhìn bảng tính là biết ngay dòng nào không phải người
+ * đăng nhập, và `isGuestUser` trả lời được câu đó mà không phải đọc Sheet.
+ */
+export const GUEST_PREFIX = "g-";
+
+export function isGuestUser(userId: UserId): boolean {
+  return userId.startsWith(GUEST_PREFIX);
+}
+
 export interface Account {
   userId: UserId;
-  /** Đã chuẩn hoá chữ thường. Đây là khoá thật để nhận ra người quay lại. */
+  /** Đã chuẩn hoá chữ thường. **Rỗng với tài khoản vãng lai** — xem `GUEST_PREFIX`. */
   email: string;
   displayName: string;
   avatarId: string;

@@ -129,7 +129,13 @@ export default function StandingsPage() {
               <strong className="text-ink">Dấu + là đang thiếu</strong> so với
               suất kỳ vọng, <strong className="text-ink">dấu − là đã đánh dư</strong>.
               Bộ xếp lịch tự ưu tiên người mang dấu + ở những vòng sau, không cần
-              ai bấm gì.
+              ai bấm gì.{" "}
+              {/* Cột "Nghỉ" trùng chữ với nút "Nghỉ tạm" ở trang Người chơi,
+                  nhưng hai thứ gần như ngược nhau, nên phải nói rõ ở đây. */}
+              Cột <strong className="text-ink">Nghỉ</strong> đếm số vòng bạn có
+              mặt mà không được xếp trận — lẻ người thì mỗi vòng phải có người
+              ngồi ngoài. Nó không liên quan tới nút{" "}
+              <em>Nghỉ tạm</em> ở trang Người chơi, vốn là rút hẳn khỏi lịch.
               {hasCatchUp && (
                 <>
                   {" "}
