@@ -120,7 +120,8 @@ export function buildHistory(
     // bảng Công bằng sẽ báo "nghỉ 7 lần" trong một buổi mới đánh 4 vòng.
     if (happened.length === 0) continue;
 
-    // Ai có mặt ở vòng này (trong tập đang xét).
+    // Ai có mặt ở vòng này trong tập đang xét — dùng để cập nhật bộ đếm của
+    // những người mà bên gọi cần xếp lịch.
     const present: number[] = [];
     for (let i = 0; i < n; i++) {
       const p = byId.get(ids[i]!);
@@ -136,7 +137,18 @@ export function buildHistory(
     }
     if (present.length === 0) continue;
 
-    const share = Math.min(1, (4 * happened.length) / present.length);
+    // Mẫu số phải là TOÀN BỘ người thật sự có mặt ở vòng lịch sử, không chỉ tập
+    // `ids`. Bộ xếp lịch truyền vào những người đang active; nếu một người vừa
+    // về mà bị loại khỏi mẫu số quá khứ, mọi người còn lại lập tức nhận thêm
+    // một khoản nợ ảo. Đo được ở ca 5 → 6 → 5 người: bốn người bị cộng sai đúng
+    // 1 suất dù bảng Công bằng (vốn còn giữ người đã về) vẫn tính đúng.
+    let allPresent = 0;
+    for (const p of state.players) {
+      if (wasPresentAt(p, round) && isAvailableAt(p, round)) allPresent += 1;
+    }
+    if (allPresent === 0) continue;
+
+    const share = Math.min(1, (4 * happened.length) / allPresent);
     for (const i of present) h.expected[i] += share;
 
     const playedThisRound = new Set<number>();

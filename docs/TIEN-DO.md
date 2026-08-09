@@ -15,7 +15,7 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.3.0 — Trang chủ xanh, dữ liệu tạm tự làm mới`.**
+**Phiên bản hiện tại: `v0.4.0 — Kiểm định công bằng 4–11 người và sân TEST`.**
 Không còn phần mã nào đang làm dở trong đợt này.
 
 | | |
@@ -27,8 +27,60 @@ Không còn phần mã nào đang làm dở trong đợt này.
 | GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-`npm test` 404 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
+`npm test` 492 bài xanh, `npm run scenarios` chạy 152 lượt/0 vấn đề,
+`npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
+
+### Bàn giao `v0.4.0 — Kiểm định công bằng 4–11 người và sân TEST` (09/08/2026)
+
+Đợt này không đổi giao diện. Trang chủ vẫn xanh–đen; toàn bộ màn hình sâu trong
+trận vẫn cam–đen. Phạm vi là mô phỏng thực tế, sửa lỗi scheduler và tạo một kho
+thử riêng có thể dùng lại ở các phiên sau.
+
+Ma trận `lib/testing/scenarios.ts` hiện có 19 tình huống × 8 cỡ nhóm từ 4 tới 11
+người (1 sân cho 4–7 người, 2 sân cho 8–11 người), mỗi buổi đánh 12 vòng. Tổng
+152 lượt mô phỏng đều qua, gồm:
+
+- buổi bình thường, người tới trễ, người về sớm, vừa tới trễ vừa về sớm;
+- nghỉ tạm/quay lại và đã về/quay lại, bảo toàn mọi tỷ số cũ;
+- huỷ trận, bỏ dở có tỷ số, sửa/gỡ tỷ số, đổi vòng, ghim trận;
+- ghim rồi cho nghỉ, từ chối xin vào, cấp suất đuổi kịp;
+- khai tới muộn, về sớm, chỉ có mặt trong một khoảng và kết thúc buổi sớm.
+
+Các lỗi tìm thấy và đã khoá bằng test hồi quy:
+
+1. Vòng chỉ còn trận đã huỷ từng làm màn hình Đang đánh đứng ở vòng trống.
+2. Rebuild từng lấp lại đúng sân/vòng vừa huỷ hoặc bỏ dở; người của trận bỏ dở
+   thậm chí có thể bị gọi sang sân khác cùng vòng.
+3. Rebuild mang lịch tương lai cũ của đội hình trước sang đội hình mới, để lại
+   “nợ công bằng” ở các ca 10 → 9 → 10 người và nghỉ/quay lại.
+4. Khi một người về, mẫu số lịch sử từng loại họ ra khỏi cả những vòng họ đã có
+   mặt, làm người còn lại nhận nợ ảo.
+5. Bộ tối ưu từng so số lượt nghỉ tuyệt đối; người tới muộn có ít lượt nghỉ lịch
+   sử nên bị cho ngồi thêm sau khi tới. Nay lượt nghỉ được so với suất kỳ vọng
+   chỉ trong các vòng người đó thực sự có mặt.
+6. Bộ mô phỏng từng dùng mốc vòng dành cho scheduler và có thể bỏ qua vòng đã
+   ghim/đổi; nay đi theo đúng vòng chưa đánh mà giao diện hiển thị.
+
+Kho thử bền vững:
+
+```powershell
+npm run seed:test-data   # chỉ tạo phần còn thiếu, không reset kết quả đang thử
+npm run dev:test         # seed rồi mở app bằng đúng kho TEST
+```
+
+- Tệp: `.data/test-sandbox.json` (được Git ignore nhưng được giữ trên máy này).
+- CLB: `CLB TEST ROBIN`; sân: `SÂN TEST · 4–11 NGƯỜI`; mã sự kiện: `TEST11`.
+- 11 người chơi TEST; mật khẩu người chơi `test1234`; quản trị `admin1234`.
+- `ROBIN_LOCAL_TEST_DATA=1` ép dùng kho này ngay cả khi máy có biến Google, nhưng
+  vẫn bị chặn ở production/Vercel. Vì vậy đường thử không thể ghi nhầm Sheet thật.
+- Đã chạy seed hai lần và đối chiếu SHA-256 không đổi; đã mở HTTP local trả 200
+  và thấy dấu `v0.4.0`; sau kiểm tra đã tắt cây tiến trình, cổng 3000 được trả lại.
+
+Cổng phát hành: 492/492 test xanh; build Next.js production sạch; TypeScript sạch.
+Tag phát hành là `v0.4.0`. Sau khi push `main`, chỉ coi là deploy thành công khi
+Vercel báo `target production`, `status Ready` và HTML production có đúng dấu
+`v0.4.0 · <7 ký tự commit>`.
 
 ### Bàn giao `v0.3.0 — Trang chủ xanh, dữ liệu tạm tự làm mới` (09/08/2026)
 
@@ -313,7 +365,9 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
-| Chạy bộ kiểm thử | `npm test` (404 bài, ~18 giây) |
+| Chạy bộ kiểm thử | `npm test` (492 bài, ~26 giây) |
+| Mở sân TEST đã có 11 người | `npm run dev:test`, vào mã `TEST11` |
+| Quét 152 lượt 4–11 người | `npm run scenarios` |
 | Soát cấu hình trước khi triển khai | `npm run check-env` |
 | Sinh `APP_SECRET` mới | `npm run new-secret` |
 | Quét công bằng 42 cấu hình | `npm run sim -- --matrix` |
@@ -556,7 +610,8 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **404 bài xanh** (`npm test`) — gồm quyền tự phục vụ, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng, khai giờ đến/về, dấu phiên bản deploy và làm mới dữ liệu tạm |
+| Kiểm thử tự động | **492 bài xanh** (`npm test`) — gồm 156 bài ma trận/kỳ vọng 4–11 người, dữ liệu sân TEST bền vững, quyền tự phục vụ, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng, khai giờ đến/về, dấu phiên bản deploy và làm mới dữ liệu tạm |
+| Kịch bản thực chiến 4–11 người | **152 lượt chạy, 0 vấn đề** (`npm run scenarios`); lệch suất kỳ vọng lớn nhất 1,29 trận ở ca 7 người, ghim trận rồi cho nghỉ |
 | **Chạy thử trên Google Sheet THẬT** | **19 phép kiểm, 0 hỏng** — lập câu lạc bộ, tạo buổi, bốn người, xếp lịch, nhập tỷ số 11–7, tổng kết, rồi đọc lại từ một tiến trình khác để chắc dữ liệu nằm trên bảng tính |
 | Kiểm tra kiểu | `npm run typecheck` sạch |
 | Quét ma trận công bằng | **42 cấu hình, 0 cấu hình bị đánh dấu** |
@@ -790,7 +845,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            404 bài kiểm thử
+tests/            492 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —

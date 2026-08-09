@@ -17,7 +17,7 @@ import type { History } from "./metrics";
 export interface Weights {
   /** Lệch suất đánh — mục tiêu chính, nên nặng nhất trong các mục tiêu mềm. */
   deficit: number;
-  /** Lệch số lần nghỉ. Phần lớn trùng với `deficit`, để nhẹ cho chắc. */
+  /** Lệch lượt nghỉ so với suất kỳ vọng; không coi các vòng vắng mặt là lượt nghỉ. */
   bye: number;
   /** Mỗi vòng đánh vượt ngưỡng mềm. */
   softStreak: number;
@@ -67,8 +67,6 @@ export interface CostContext {
   weights: Weights;
   softMax: number;
   hardMax: number;
-  /** Số người có mặt trong suốt cửa sổ (dùng để tính suất kỳ vọng). */
-  activeCount: number;
   /**
    * Ai KHÔNG nhận xếp lịch ở vòng nào, theo lời khai trước.
    *
@@ -77,6 +75,13 @@ export interface CostContext {
    * qua hoàn toàn nên không tốn gì.
    */
   unavailable?: Uint8Array;
+  /**
+   * Người đã bận ở một trận nằm ngoài `Plan` (hiện tại là trận bỏ dở).
+   *
+   * Khác `unavailable`: họ có mặt và đã vận động ở vòng đó, nhưng tuyệt đối
+   * không được đổi vào một trận khác cùng vòng.
+   */
+  blockedBusy?: Uint8Array;
   /** Số vòng trong cửa sổ, để đọc `unavailable` cho đúng ô. */
   lookahead?: number;
 }
@@ -115,6 +120,7 @@ export class Evaluator {
   private readonly playStreak: Int32Array;
   private readonly restStreak: Int32Array;
   private readonly playedThisRound: Uint8Array;
+  private readonly eligibleThisRound: Uint8Array;
 
   constructor(readonly ctx: CostContext) {
     const h = ctx.history;
@@ -129,6 +135,7 @@ export class Evaluator {
     this.playStreak = new Int32Array(h.n);
     this.restStreak = new Int32Array(h.n);
     this.playedThisRound = new Uint8Array(h.n);
+    this.eligibleThisRound = new Uint8Array(h.n);
   }
 
   /** Chỉ tổng chi phí — đường nóng của vòng lặp tối ưu. */
@@ -165,6 +172,7 @@ export class Evaluator {
       playStreak,
       restStreak,
       playedThisRound,
+      eligibleThisRound,
     } = this;
 
     let softStreakCount = 0;
@@ -179,11 +187,13 @@ export class Evaluator {
     for (let r = 0; r < plan.length; r++) {
       const round = plan[r]!;
       playedThisRound.fill(0);
+      eligibleThisRound.fill(1);
 
-      const share =
-        this.ctx.activeCount > 0
-          ? Math.min(1, (4 * round.length) / this.ctx.activeCount)
-          : 0;
+      if (unavailable) {
+        for (let i = 0; i < n; i++) {
+          if (unavailable[i * lookahead + r]) eligibleThisRound[i] = 0;
+        }
+      }
 
       for (const slot of round) {
         const [a0, a1, b0, b1] = slot.quad;
@@ -203,6 +213,13 @@ export class Evaluator {
         playedThisRound[a1] = 1;
         playedThisRound[b0] = 1;
         playedThisRound[b1] = 1;
+
+        // Trận đông cứng có thể bị admin đổi vào ngoài khoảng đã khai. Nó vẫn
+        // xảy ra thật, nên ở phép đo phương án phải coi bốn người đó có mặt.
+        eligibleThisRound[a0] = 1;
+        eligibleThisRound[a1] = 1;
+        eligibleThisRound[b0] = 1;
+        eligibleThisRound[b1] = 1;
 
         games[a0] += 1;
         games[a1] += 1;
@@ -230,7 +247,19 @@ export class Evaluator {
         courtUse[b1 * courts + c] += 1;
       }
 
+      let eligibleCount = 0;
+      for (let i = 0; i < n; i++) eligibleCount += eligibleThisRound[i]!;
+      const share =
+        eligibleCount > 0 ? Math.min(1, (4 * round.length) / eligibleCount) : 0;
+
       for (let i = 0; i < n; i++) {
+        if (!eligibleThisRound[i]) {
+          // Vắng mặt không phải là một lượt nghỉ và cũng không tạo "nợ". Nó
+          // cắt cả chuỗi đánh lẫn chuỗi ngồi chờ.
+          playStreak[i] = 0;
+          restStreak[i] = 0;
+          continue;
+        }
         expected[i] += share;
         if (playedThisRound[i]) {
           playStreak[i] += 1;
@@ -260,13 +289,16 @@ export class Evaluator {
     // Trung bình qua các vòng, để trọng số giữ nguyên ý nghĩa dù cửa sổ dài ngắn.
     const deficitSq = plan.length > 0 ? deficitAccum / plan.length : 0;
 
-    let byeMean = 0;
-    for (let i = 0; i < n; i++) byeMean += byes[i];
-    byeMean = n > 0 ? byeMean / n : 0;
-
+    // Không so số lượt nghỉ tuyệt đối. Người tới muộn đương nhiên có ít lượt
+    // nghỉ lịch sử hơn; kéo họ lên ngang nhóm cũ sẽ biến những vòng chưa có mặt
+    // thành lượt nghỉ giả và làm chính người mới bị xếp ít hơn sau khi tới.
+    //
+    // Với mỗi người, `expected - games` cũng chính là số lượt nghỉ thực tế trừ
+    // số lượt nghỉ kỳ vọng trong đúng các vòng họ có mặt. Đây là cùng đơn vị với
+    // `bye`, nhưng không lẫn khoảng vắng mặt và không chứa khoản đuổi kịp tuỳ chọn.
     let byeSq = 0;
     for (let i = 0; i < n; i++) {
-      const d = byes[i] - byeMean;
+      const d = expected[i] - games[i];
       byeSq += d * d;
     }
 

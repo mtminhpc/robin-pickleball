@@ -94,8 +94,19 @@ export function generate(opts: GenerateOptions): Plan {
     const played = new Set<number>();
     for (const s of plan[r]) for (const q of s.quad) played.add(q);
 
-    const share = n > 0 ? Math.min(1, (4 * plan[r].length) / n) : 0;
+    let eligibleCount = 0;
     for (let i = 0; i < n; i++) {
+      if (!opts.unavailable?.[i * opts.rounds + r] || played.has(i)) eligibleCount += 1;
+    }
+    const share =
+      eligibleCount > 0 ? Math.min(1, (4 * plan[r].length) / eligibleCount) : 0;
+    for (let i = 0; i < n; i++) {
+      const eligible = !opts.unavailable?.[i * opts.rounds + r] || played.has(i);
+      if (!eligible) {
+        run.playStreak[i] = 0;
+        run.restStreak[i] = 0;
+        continue;
+      }
       run.deficit[i] += share;
       if (played.has(i)) {
         run.deficit[i] -= 1;

@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { firstUnplayedRound } from "../lib/domain/rounds";
 import type { EventState } from "../lib/domain/types";
-import { fairnessReport } from "../lib/scheduler/metrics";
+import { buildHistory, fairnessReport } from "../lib/scheduler/metrics";
 import { validateMove, validateRoundSwap } from "../lib/scheduler/validate";
 import { EventSim } from "../lib/testing/harness";
 import {
@@ -307,9 +307,61 @@ describe("người về sớm", () => {
     const row = fairnessReport(sim.state).players.find((p) => p.playerId === leaving.id);
     expect(Math.abs(row!.deficit)).toBeLessThanOrEqual(1.05);
   });
+
+  it("người đã về vẫn nằm trong mẫu số suất của những vòng quá khứ", () => {
+    const sim = new EventSim({ seed: 4242, config: { courts: 1 }, planning: FAST });
+    sim.addPlayers(names(5));
+    sim.start();
+    sim.playRounds(3);
+    sim.leave(sim.state.players[0]!.id);
+
+    const activeIds = sim.state.players.filter((p) => p.status === "active").map((p) => p.id);
+    const schedulerHistory = buildHistory(sim.state, activeIds);
+    const visible = new Map(
+      fairnessReport(sim.state).players.map((p) => [p.playerId, p.expected]),
+    );
+
+    activeIds.forEach((id, i) => {
+      expect(
+        schedulerHistory.expected[i],
+        "bộ xếp lịch và bảng Công bằng phải dùng cùng mẫu số lịch sử",
+      ).toBeCloseTo(visible.get(id)!, 2);
+    });
+  });
 });
 
 describe("huỷ trận", () => {
+  it("bỏ qua vòng chỉ còn trận đã huỷ khi tìm vòng đang đánh", () => {
+    const sim = new EventSim({ seed: 7, config: { courts: 1 }, planning: FAST });
+    sim.addPlayers(names(5));
+    sim.start();
+    const target = sim.state.matches.find((m) => m.status === "scheduled")!;
+    sim.send({ type: "CancelMatch", matchId: target.id, reason: "Mưa" });
+
+    expect(firstUnplayedRound(sim.state)).toBe(target.round + 1);
+  });
+
+  it("không lấp lại đúng ô sân/vòng vừa bị huỷ", () => {
+    const sim = new EventSim({ seed: 8, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(10));
+    sim.start();
+    sim.playRounds(2);
+
+    const target = sim.state.matches.find((m) => m.status === "scheduled")!;
+    sim.send({ type: "CancelMatch", matchId: target.id, reason: "Mất sân" });
+    sim.reschedule("rebuild");
+
+    const replacements = sim.state.matches.filter(
+      (m) =>
+        m.id !== target.id &&
+        m.round === target.round &&
+        m.court === target.court &&
+        m.status !== "cancelled",
+    );
+    expect(replacements).toEqual([]);
+    expect(sim.state.matches.find((m) => m.id === target.id)?.cancelReason).toBe("Mất sân");
+  });
+
   it("huỷ trận chưa đánh không làm ai bị thiệt", () => {
     const sim = new EventSim({ seed: 9, config: { courts: 2 }, planning: FAST });
     sim.addPlayers(names(11));
@@ -325,6 +377,54 @@ describe("huỷ trận", () => {
     // Suất kỳ vọng giảm theo số trận thực sự diễn ra, nên bốn người của trận bị
     // huỷ không mang theo khoản nợ nào.
     assertFairShare(sim.state);
+  });
+
+  it("5 người vẫn luân phiên đều sau một vòng bị huỷ", () => {
+    const sim = new EventSim({ seed: 4242, config: { courts: 1 } });
+    sim.addPlayers(names(5));
+    sim.start();
+    sim.playRounds(3);
+
+    const target = sim.state.matches.find((m) => m.status === "scheduled")!;
+    sim.send({ type: "CancelMatch", matchId: target.id, reason: "Trời mưa" });
+    sim.reschedule("rebuild");
+    sim.playRounds(9);
+
+    const games = fairnessReport(sim.state).players.map((p) => p.games);
+    expect(Math.max(...games) - Math.min(...games)).toBeLessThanOrEqual(1);
+    assertFairShare(sim.state);
+  });
+
+  it("không lấp lại sân của trận bỏ dở không tính điểm", () => {
+    const sim = new EventSim({ seed: 12, config: { courts: 2 }, planning: FAST });
+    sim.addPlayers(names(10));
+    sim.start();
+    sim.playRounds(2);
+
+    const target = sim.state.matches.find((m) => m.status === "scheduled")!;
+    const victims = [...target.teamA, ...target.teamB];
+    sim.send({ type: "StartMatch", matchId: target.id });
+    sim.send({ type: "AbandonMatch", matchId: target.id, reason: "Trời mưa" });
+    sim.reschedule("rebuild");
+
+    const replacements = sim.state.matches.filter(
+      (m) =>
+        m.id !== target.id &&
+        m.round === target.round &&
+        m.court === target.court &&
+        m.status !== "cancelled",
+    );
+    expect(replacements).toEqual([]);
+    const busyTwice = victims.filter(
+      (id) =>
+        sim.state.matches.filter(
+          (m) =>
+            m.round === target.round &&
+            m.status !== "cancelled" &&
+            [...m.teamA, ...m.teamB].includes(id),
+        ).length > 1,
+    );
+    expect(busyTwice, "người vừa bỏ dở không được gọi sang sân còn lại").toEqual([]);
   });
 
   it("bỏ dở trận không tính điểm nhưng vẫn được ưu tiên xếp lại", () => {
@@ -372,6 +472,17 @@ describe("huỷ trận", () => {
     expect(after.status).toBe("submitted");
     expect(after.result?.partial).toBe(true);
     expect(after.result?.scoreA).toBe(7);
+
+    sim.reschedule("rebuild");
+    const sameCourt = sim.state.matches.filter(
+      (m) =>
+        m.id !== target.id &&
+        m.round === target.round &&
+        m.court === target.court &&
+        m.status !== "cancelled",
+    );
+    expect(sameCourt, "trận dở dang có tỷ số vẫn chiếm đúng sân/vòng đó").toEqual([]);
+    assertScheduleValid(sim.state);
   });
 });
 

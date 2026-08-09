@@ -85,9 +85,7 @@ export function planSchedule(
   const horizonRounds: number[] = [];
   for (let r = fromRound; r < fromRound + lookahead; r++) horizonRounds.push(r);
 
-  const existing = state.matches.filter(
-    (m) => m.round >= fromRound && m.status !== "cancelled" && m.status !== "abandoned",
-  );
+  const existing = state.matches.filter((m) => m.round >= fromRound);
 
   const frozenByRound = new Map<number, Slot[]>();
   const warmByRound = new Map<number, Slot[]>();
@@ -119,6 +117,34 @@ export function planSchedule(
 
   for (const m of existing) {
     const offsetOf = m.round - fromRound;
+
+    // Huỷ trận nghĩa là ô sân/vòng đó không còn dùng được; bỏ dở nghĩa là sân
+    // và bốn người đã thực sự bận ở ô đó. Cả hai đều được `reduce` giữ lại như
+    // một phần của nhật ký. Nếu đưa chúng qua đường xếp lịch bình thường thì bộ
+    // sinh sẽ lấp ngay đúng ô vừa huỷ/bỏ dở, tạo cảm giác nút Huỷ không có tác
+    // dụng (và với trận bỏ dở còn có thể xếp một người hai trận cùng vòng).
+    if (
+      (m.status === "cancelled" || m.status === "abandoned") &&
+      offsetOf >= 0 &&
+      offsetOf < lookahead
+    ) {
+      const entry = blockedByRound.get(offsetOf) ?? {
+        courts: new Set<number>(),
+        busy: new Set<number>(),
+      };
+      entry.courts.add(m.court);
+      if (m.status === "abandoned") {
+        for (const id of [...m.teamA, ...m.teamB]) {
+          const i = index.get(id);
+          if (i !== undefined) entry.busy.add(i);
+        }
+      }
+      blockedByRound.set(offsetOf, entry);
+      keptByReduce.add(m.id);
+      roundsToKeep.add(offsetOf);
+      continue;
+    }
+
     const slot = toSlot(m, index);
 
     if (!slot) {
@@ -159,9 +185,9 @@ export function planSchedule(
     // năng nhìn xa — đúng lúc cần nhất là khi số người vừa khít số chỗ trên sân.
     const committed = m.round < fromRound + state.config.commitRounds;
     const immovable =
-      m.status === "playing" ||
+      m.status !== "scheduled" ||
       m.pinned ||
-      (mode === "extend" && m.status === "scheduled" && committed);
+      (mode === "extend" && committed);
 
     // Lịch cũ vi phạm lời khai trước thì VỨT đi thay vì mang vào khởi động ấm.
     //
@@ -217,13 +243,23 @@ export function planSchedule(
     weights,
     softMax: Math.max(state.config.softMaxConsecutive, Number.isFinite(best) ? best : 0),
     hardMax: Math.max(state.config.hardMaxConsecutive, Number.isFinite(best) ? best : 0),
-    activeCount: activeIds.length,
     unavailable,
+    blockedBusy: blockedBusyMatrix(blockedByRound, activeIds.length, lookahead),
     lookahead,
   };
 
   const seed = options.seed ?? seedFrom(`${state.code}:${state.seq}:${mode}`);
   const rng = makeRng(seed);
+
+  // `rebuild` được gọi đúng lúc hoàn cảnh đã đổi (người vào/rời, khai lịch...).
+  // Mang toàn bộ lịch cũ vào làm điểm xuất phát khi đó dễ giữ nguyên món nợ của
+  // cấu hình trước: đo được ở ca 10 → 9 → 10 người, một người bị giữ tới 11 trận
+  // trong khi hai người khác chỉ có 9. Dựng mới phần chưa chốt từ lịch sử thật;
+  // các trận đã đánh/đang đánh/ghim vẫn nằm trong `frozenByRound` và không đổi.
+  const initialByRound =
+    mode === "rebuild"
+      ? frozenByRound
+      : mergeWarmStart(frozenByRound, warmByRound, lookahead);
 
   const seeded = generate({
     history,
@@ -231,7 +267,7 @@ export function planSchedule(
     rounds: lookahead,
     softMax: ctx.softMax,
     hardMax: ctx.hardMax,
-    frozenByRound: mergeWarmStart(frozenByRound, warmByRound, lookahead),
+    frozenByRound: initialByRound,
     blockedByRound,
     unavailable,
     rng,
@@ -239,7 +275,8 @@ export function planSchedule(
 
   // Khởi động ấm: các trận lấy từ lịch cũ được đưa vào phương án ban đầu nhưng
   // KHÔNG bị đông cứng, nên thuật toán sửa được nếu cần mà vẫn bám sát lịch cũ.
-  const start = unfreezeWarmStart(seeded, warmByRound);
+  const start =
+    mode === "rebuild" ? seeded : unfreezeWarmStart(seeded, warmByRound);
 
   /**
    * Cả nhóm có mặt từ vòng đầu, và không ai đang bị thiệt hay được ưu tiên.
@@ -281,7 +318,11 @@ export function planSchedule(
    */
   function followingDesign(people: number): boolean {
     for (const m of state.matches) {
-      if (m.status === "cancelled") continue;
+      // Lịch Whist tiến theo từng vòng đủ trận. Một vòng bị huỷ/bỏ dở làm nhịp
+      // đó đứt; tiếp tục lấy số vòng tuyệt đối làm pha xoay sẽ cho cùng một số
+      // người nghỉ quá nhiều (đo được ở 5 người: 11 trận so với người khác 9).
+      // Từ đây trả lại quyền cho bộ tối ưu dựa trên lịch sử thực đã diễn ra.
+      if (m.status === "cancelled" || m.status === "abandoned") return false;
       // Trận sắp được xếp lại thì không cần khớp — nó chưa xảy ra. Chỉ những
       // trận sẽ còn nguyên sau lệnh này mới quyết định thiết kế còn sống hay không.
       const seRoiDi =
@@ -399,6 +440,20 @@ export function planSchedule(
 
 
 // ---------------------------------------------------------------------------
+
+/** Dẹt hoá người đã bận ngoài `Plan` để mọi phép đổi của bộ tối ưu cùng tôn trọng. */
+function blockedBusyMatrix(
+  blocked: Map<number, { courts: Set<number>; busy: Set<number> }>,
+  players: number,
+  lookahead: number,
+): Uint8Array | undefined {
+  if (![...blocked.values()].some((entry) => entry.busy.size > 0)) return undefined;
+  const out = new Uint8Array(players * lookahead);
+  for (const [round, entry] of blocked) {
+    for (const player of entry.busy) out[player * lookahead + round] = 1;
+  }
+  return out;
+}
 
 function toSlot(m: Match, index: Map<PlayerId, number>): Slot | null {
   const quad = [m.teamA[0], m.teamA[1], m.teamB[0], m.teamB[1]].map((id) =>

@@ -1,10 +1,11 @@
 {
   "name": "robin-pickleball",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "dev:test": "tsx scripts/dev-test.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -13,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",
     "scenarios": "tsx scripts/scenarios.ts",
+    "seed:test-data": "tsx scripts/seed-test-data.ts",
     "bootstrap-sheet": "tsx scripts/bootstrap-sheet.ts",
     "check-env": "tsx scripts/check-env.ts",
     "new-secret": "tsx scripts/new-secret.ts"

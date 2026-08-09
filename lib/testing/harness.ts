@@ -10,7 +10,7 @@
 import type { Command, CommandEnvelope } from "../domain/commands";
 import { apply } from "../domain/reduce";
 import { emptyState } from "../domain/reduce";
-import { firstOpenRound } from "../domain/rounds";
+import { firstUnplayedRound } from "../domain/rounds";
 import type { Actor, EventConfig, EventState, PlayerId } from "../domain/types";
 import { DEFAULT_CONFIG } from "../domain/types";
 import { planSchedule, type PlanMode, type PlanOptions } from "../scheduler/plan";
@@ -140,7 +140,10 @@ export class EventSim {
 
   /** Đánh xong vòng còn dở sớm nhất. Trả về số vòng vừa đánh, 0 nếu hết lịch. */
   playNextRound(): number {
-    const round = firstOpenRound(this.state);
+    // Phải đi theo vòng người dùng thực sự nhìn thấy. `firstOpenRound` là mốc
+    // dành cho thuật toán và sẽ nhảy qua trận đã ghim; dùng nó ở đây khiến mô
+    // phỏng không bao giờ đánh các vòng admin vừa đổi/ghim.
+    const round = firstUnplayedRound(this.state);
     const matches = this.state.matches.filter(
       (m) => m.round === round && m.status === "scheduled",
     );

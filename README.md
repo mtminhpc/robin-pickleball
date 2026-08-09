@@ -4,7 +4,7 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Phiên bản v0.3.0 · Trạng thái: giai đoạn 3 — dùng được cả mùa, trên nhiều thiết bị.** Ứng dụng
+> **Phiên bản v0.4.0 · Trạng thái: giai đoạn 3 — dùng được cả mùa, trên nhiều thiết bị.** Ứng dụng
 > chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
 > bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
 > tuần và tháng, đăng nhập bằng tài khoản Google. Xem [lộ trình](#lộ-trình).
@@ -22,8 +22,19 @@ Dữ liệu lưu vào `.data/sheet.json`; xoá thư mục đó là chơi lại t
 sàng dùng thật thì điền biến môi trường Google và ứng dụng tự chuyển sang Google
 Sheet — xem [docs/SETUP.md](docs/SETUP.md).
 
+Muốn thử ngay với CLB, sân và 11 người mẫu đã lưu sẵn thì dùng kho sandbox riêng:
+
 ```bash
-npm test                  # 404 bài kiểm thử
+npm run dev:test   # tạo nếu thiếu, sau đó mở http://localhost:3000
+```
+
+Vào sân bằng mã `TEST11`; mật khẩu người chơi `test1234`, quản trị `admin1234`.
+Lệnh này luôn dùng `.data/test-sandbox.json`, kể cả máy đã cấu hình Google Sheet;
+chạy lại không nhân đôi hay reset buổi đang thử và không đụng dữ liệu thật.
+
+```bash
+npm test                  # 492 bài kiểm thử
+npm run scenarios         # 152 lượt thực chiến 4–11 người
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
 
@@ -178,8 +189,8 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
                   tài khoản và sổ thiết bị
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, đăng nhập Google
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
-scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            404 bài kiểm thử
+scripts/          Mô phỏng dòng lệnh, tạo dữ liệu TEST, tạo sẵn tab trong Sheet
+tests/            492 bài kiểm thử
 ```
 
 Nguyên tắc: `lib/domain` và `lib/scheduler` là hàm thuần, không đọc đồng hồ, không gọi

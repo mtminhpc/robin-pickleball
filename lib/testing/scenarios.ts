@@ -6,14 +6,15 @@
  * đọc. Hai bên phải đi đúng cùng một đường, nếu không thì bảng số trên màn hình
  * nói một đằng mà bộ kiểm thử canh một nẻo.
  *
- * Cỡ nhóm 6–9 người được chọn có chủ ý, vì mỗi cỡ là một chế độ khác hẳn nhau:
+ * Cỡ nhóm 4–11 người bao trọn các buổi nhỏ thường gặp, từ vừa đủ một sân tới
+ * hai sân có ba người luân phiên nghỉ:
  *
  * | Người | Sân | Mỗi vòng nghỉ | Điều đáng canh |
  * |---|---|---|---|
- * | 6 | 1 | 2 | Nhóm nhỏ, mọi người gặp nhau liên tục — dễ lặp cặp đôi |
- * | 7 | 1 | 3 | Số lẻ, suất nghỉ phải xoay vòng cho đều |
+ * | 4 | 1 | 0 | Vừa khít một sân — ai cũng buộc phải đánh mọi vòng |
+ * | 5–7 | 1 | 1–3 | Nhóm nhỏ, suất nghỉ phải xoay và cặp đôi dễ lặp |
  * | 8 | 2 | 0 | **Ai cũng đánh mọi vòng** — không có suất nghỉ nào để phân phối |
- * | 9 | 2 | 1 | Chỉ một người được nghỉ mỗi vòng, khắt khe nhất về xoay vòng |
+ * | 9–11 | 2 | 1–3 | Hai sân, vừa xoay nghỉ vừa giữ đa dạng cặp |
  *
  * Cỡ 8 người / 2 sân là trường hợp suy biến đáng chú ý: `achievableStreakCap`
  * trả `Infinity`, và mọi cảnh báo về "nghỉ giữa hiệp" đều vô nghĩa. Kịch bản
@@ -76,12 +77,16 @@ export function nameFor(i: number): string {
   return i < NAMES.length ? base : `${base} ${Math.floor(i / NAMES.length) + 1}`;
 }
 
-/** Cỡ nhóm được quét, kèm số sân tự nhiên cho cỡ đó. */
+/** Toàn bộ cỡ nhóm người dùng yêu cầu, kèm số sân tự nhiên cho cỡ đó. */
 export const SIZES: ScenarioSetup[] = [
+  { players: 4, courts: 1, rounds: 12 },
+  { players: 5, courts: 1, rounds: 12 },
   { players: 6, courts: 1, rounds: 12 },
   { players: 7, courts: 1, rounds: 12 },
   { players: 8, courts: 2, rounds: 12 },
   { players: 9, courts: 2, rounds: 12 },
+  { players: 10, courts: 2, rounds: 12 },
+  { players: 11, courts: 2, rounds: 12 },
 ];
 
 function fresh(setup: ScenarioSetup): EventSim {
@@ -198,6 +203,29 @@ export const SCENARIOS: Scenario[] = [
         sim.send({ type: "PausePlayer", playerId: id });
         sim.reschedule("rebuild");
         events.push(`vòng 4: ${nameOf(sim, id)} nghỉ tạm`);
+        sim.playRounds(3);
+        sim.send({ type: "ResumePlayer", playerId: id });
+        sim.reschedule("rebuild");
+        events.push(`vòng 7: ${nameOf(sim, id)} quay lại`);
+      }
+      sim.playRounds(setup.rounds - 6);
+      return { sim, events, streakAllowance: 1 };
+    },
+  },
+
+  {
+    key: "ve-roi-quay-lai",
+    title: "Rời sân rồi quay lại",
+    why: "Đây là cửa hai chiều: người đã bấm Đã về vẫn được quay lại, giữ nguyên kết quả cũ và chỉ nhận suất cho các vòng họ thật sự có mặt.",
+    stableRoster: false,
+    run(setup) {
+      const sim = fresh(setup);
+      const events: string[] = [];
+      sim.playRounds(3);
+      const id = someoneActive(sim);
+      if (id) {
+        sim.leave(id);
+        events.push(`vòng 4: ${nameOf(sim, id)} rời sân`);
         sim.playRounds(3);
         sim.send({ type: "ResumePlayer", playerId: id });
         sim.reschedule("rebuild");

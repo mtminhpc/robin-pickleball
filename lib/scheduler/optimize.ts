@@ -73,7 +73,7 @@ export function optimize(plan: Plan, opts: OptimizeOptions): OptimizeResult {
     done = i + 1;
     if ((i & 255) === 0 && Date.now() - started > budget) break;
 
-    const undo = mutate(current, movable, opts.rng, n);
+    const undo = mutate(current, movable, opts.rng, n, opts.ctx);
     if (!undo) continue;
 
     const nextCost = evaluator.total(current);
@@ -119,12 +119,13 @@ function mutate(
   movableRounds: number[],
   rng: Rng,
   n: number,
+  ctx: CostContext,
 ): Undo | null {
   const roll = rng.next();
   if (roll < 0.35) return swapWithinRound(plan, movableRounds, rng);
-  if (roll < 0.7) return swapWithBench(plan, movableRounds, rng, n);
+  if (roll < 0.7) return swapWithBench(plan, movableRounds, rng, n, ctx);
   if (roll < 0.85) return repairPairing(plan, movableRounds, rng);
-  return swapAcrossRounds(plan, movableRounds, rng);
+  return swapAcrossRounds(plan, movableRounds, rng, ctx);
 }
 
 /** Đổi chỗ hai người ở hai trận khác nhau trong cùng một vòng. */
@@ -159,6 +160,7 @@ function swapWithBench(
   rounds: number[],
   rng: Rng,
   n: number,
+  ctx: CostContext,
 ): Undo | null {
   const r = rng.pick(rounds);
   const round = plan[r];
@@ -170,7 +172,9 @@ function swapWithBench(
   if (onCourt.size >= n) return null;
 
   const bench: number[] = [];
-  for (let i = 0; i < n; i++) if (!onCourt.has(i)) bench.push(i);
+  for (let i = 0; i < n; i++) {
+    if (!onCourt.has(i) && allowedAt(ctx, i, r)) bench.push(i);
+  }
   if (bench.length === 0) return null;
 
   const slot = rng.pick(slots);
@@ -215,7 +219,12 @@ function repairPairing(plan: Plan, rounds: number[], rng: Rng): Undo | null {
  * Đây là phép duy nhất dịch chuyển được tải giữa các vòng, nên cần cho việc cân
  * bằng số trận khi có người vào hoặc rời cuộc giữa chừng.
  */
-function swapAcrossRounds(plan: Plan, rounds: number[], rng: Rng): Undo | null {
+function swapAcrossRounds(
+  plan: Plan,
+  rounds: number[],
+  rng: Rng,
+  ctx: CostContext,
+): Undo | null {
   if (rounds.length < 2) return null;
   const r1 = rng.pick(rounds);
   let r2 = rng.pick(rounds);
@@ -232,6 +241,7 @@ function swapAcrossRounds(plan: Plan, rounds: number[], rng: Rng): Undo | null {
   const a = s1.quad[p1] as number;
   const b = s2.quad[p2] as number;
   if (a === b) return null;
+  if (!allowedAt(ctx, b, r1) || !allowedAt(ctx, a, r2)) return null;
 
   // Một người không thể có hai trận trong cùng một vòng, và cũng không thể đứng
   // hai vị trí trong cùng một trận. Phải kiểm tra cả trận đang sửa chứ không chỉ
@@ -244,6 +254,14 @@ function swapAcrossRounds(plan: Plan, rounds: number[], rng: Rng): Undo | null {
     s1.quad[p1] = a;
     s2.quad[p2] = b;
   };
+}
+
+/** Có được xếp người này vào vị trí tương đối `round` trong cửa sổ không. */
+function allowedAt(ctx: CostContext, player: number, round: number): boolean {
+  const lookahead = ctx.lookahead;
+  if (!lookahead) return true;
+  const offset = player * lookahead + round;
+  return !ctx.unavailable?.[offset] && !ctx.blockedBusy?.[offset];
 }
 
 /** Người này đã có mặt ở vòng chưa, bỏ qua đúng ô sắp bị ghi đè. */

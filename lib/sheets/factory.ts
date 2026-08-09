@@ -14,11 +14,12 @@ import { LocalFileSheetsClient } from "./local";
 export type StoreKind = "google" | "local";
 
 const LOCAL_PATH = process.env.LOCAL_SHEET_PATH ?? ".data/sheet.json";
+const FORCE_TEST_LOCAL = process.env.ROBIN_LOCAL_TEST_DATA === "1";
 
 let cached: { client: SheetsClient; kind: StoreKind } | null = null;
 
 export function storeKind(): StoreKind {
-  return googleConfig() ? "google" : "local";
+  return !FORCE_TEST_LOCAL && googleConfig() ? "google" : "local";
 }
 
 /**
@@ -29,6 +30,15 @@ export function storeKind(): StoreKind {
  */
 export function getSheetsClient(): SheetsClient {
   if (cached) return cached.client;
+
+  if (FORCE_TEST_LOCAL) {
+    assertLocalAllowed();
+    console.warn(
+      `[robin-pickleball] Chế độ TEST: dùng kho cục bộ "${LOCAL_PATH}", không đụng Google Sheet.`,
+    );
+    cached = { client: new LocalFileSheetsClient(LOCAL_PATH), kind: "local" };
+    return cached.client;
+  }
 
   const google = googleConfig();
   if (google) {

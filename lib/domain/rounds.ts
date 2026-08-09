@@ -43,7 +43,10 @@ export function firstOpenRound(state: EventState): number {
 export function firstUnplayedRound(state: EventState): number {
   let earliest: number | null = null;
   for (const m of state.matches) {
-    if (m.status !== "scheduled" && m.status !== "cancelled") continue;
+    // Trận đã huỷ không còn là việc phải đánh. Tính nó là "chưa đánh" làm màn
+    // hình Đang đánh đứng mãi ở một vòng trống sau khi huỷ cả sân cuối cùng của
+    // vòng đó, trong khi lịch hợp lệ tiếp theo nằm ngay phía sau.
+    if (m.status !== "scheduled") continue;
     if (earliest === null || m.round < earliest) earliest = m.round;
   }
   return earliest ?? state.lastRound + 1;
