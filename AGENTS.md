@@ -6,8 +6,10 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 
 ## Trạng thái đã chốt
 
-- Phiên bản phát hành: `v0.4.0`, tag Git `v0.4.0`.
+- Phiên bản phát hành: `v0.4.0`, tag Git `v0.4.0`, commit mã phát hành `9d223f0`.
 - Production: https://robin-pickleball.vercel.app
+- Vercel deployment đã kiểm `Ready`: `dpl_2ZKxmvrcRFfJWvjm3Heqe6rc8GmD`.
+- HTML production trả HTTP 200 và có đúng `v0.4.0 · 9d223f0`.
 - Bản `v0.4.0` là đợt kiểm định công bằng 4–11 người: 152 lượt mô phỏng, 0 vấn đề;
   toàn bộ 492 bài test xanh, `npm run typecheck` và `npm run build` sạch.
 - Kho thử bền vững nằm ở `.data/test-sandbox.json`: chạy `npm run dev:test`, vào mã

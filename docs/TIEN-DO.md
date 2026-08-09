@@ -78,9 +78,10 @@ npm run dev:test         # seed rồi mở app bằng đúng kho TEST
   và thấy dấu `v0.4.0`; sau kiểm tra đã tắt cây tiến trình, cổng 3000 được trả lại.
 
 Cổng phát hành: 492/492 test xanh; build Next.js production sạch; TypeScript sạch.
-Tag phát hành là `v0.4.0`. Sau khi push `main`, chỉ coi là deploy thành công khi
-Vercel báo `target production`, `status Ready` và HTML production có đúng dấu
-`v0.4.0 · <7 ký tự commit>`.
+Mốc mã phát hành là commit `9d223f0`, tag `v0.4.0`; đã push cả nhánh làm việc và
+`main`. Vercel tự tạo production deployment `dpl_2ZKxmvrcRFfJWvjm3Heqe6rc8GmD`,
+`target production`, `status Ready`, gắn alias chính. HTML production trả HTTP 200
+và có đúng dấu `v0.4.0 · 9d223f0`. Không cần chạy `vercel --prod` thủ công.
 
 ### Bàn giao `v0.3.0 — Trang chủ xanh, dữ liệu tạm tự làm mới` (09/08/2026)
 
