@@ -6,22 +6,31 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 
 ## Trạng thái đã chốt
 
-- Phiên bản phát hành: `v0.4.1`, tag Git `v0.4.1`, commit mã phát hành `6ae181f`.
+- Phiên bản mã hiện tại: `v0.5.0`, nhánh phát hành
+  `codex/design-handoff-v3-v0.5.0`. Tag/Production phải cùng trỏ bản đã qua cổng
+  kiểm định; xem huy hiệu dưới phải giao diện để biết commit đang chạy.
 - Production: https://robin-pickleball.vercel.app
-- Vercel deployment đã kiểm `Ready`: `dpl_DANZBkMLZyJ7aGY3JNFWx215eeNs`.
-- HTML production trả HTTP 200 và có đúng `v0.4.1 · 6ae181f`.
-- Bản `v0.4.1` ký HMAC cookie thiết bị, lược mã máy khỏi mọi trạng thái HTTP/RSC,
-  sửa cột đuổi kịp và thêm `nosniff` cho ảnh. Toàn bộ 498 bài test xanh; 152 lượt
-  mô phỏng 4–11 người/0 vấn đề; `npm run typecheck` và `npm run build` sạch.
+- Mốc Production trước đợt này là deployment `dpl_DANZBkMLZyJ7aGY3JNFWx215eeNs`,
+  HTML `v0.4.1 · 6ae181f`. Không được nhầm mốc cũ này với việc v0.5.0 đã deploy;
+  sau khi đẩy `main` phải kiểm alias và huy hiệu lại.
+- Bản `v0.5.0` dựng sát handoff Claude Design v3: trang chủ bốn tab, danh sách
+  sự kiện theo tài khoản, quota, tài trợ ba hình dạng, Bảng vàng/trao giải và
+  kết thúc bình thường. Toàn bộ 513 bài test xanh; 152 lượt mô phỏng 4–11
+  người/0 vấn đề; `npm run typecheck` và `npm run build` sạch.
 - Kho thử bền vững nằm ở `.data/test-sandbox.json`: chạy `npm run dev:test`, vào mã
-  `TEST11`, mật khẩu người chơi `test1234`, quản trị `admin1234`. Chạy lại không
-  reset dữ liệu và không đụng Google Sheet.
+  `TEST11` để thử công bằng hoặc `TESTV5` để xem tài trợ/Bảng vàng; mật khẩu
+  người chơi `test1234`, quản trị `admin1234`. Chạy lại không reset dữ liệu và
+  không đụng Google Sheet.
 - Trên máy này CLB TEST có mã mời `H9DFHG`, 11 người TEST; SHA-256 hiện tại là
-  `401186052ECD8F279A3F413AD30818760DA95BD79A5D2E2F668026B2C720CE76`. Bốn probe
+  `FAF9167333BA9C5CD1C72065C82F06393650F133F90B7000D2EEA099565254DA`. Bốn probe
   cũ của phiên đánh giá bảo mật đã nằm trong log; probe v0.4.1 bị 403 và không ghi thêm.
 - Nhánh mặc định có các commit tài liệu bàn giao sau commit/tag production. Chênh
   lệch tài liệu đó với `main` là có chủ ý, không phải mã runtime còn làm dở.
-- Không có mã tính năng đang làm dở sau v0.4.1.
+- `EventState.presentation` chỉ giữ metadata/`assetId`; byte logo/cúp nằm trong
+  tab `event_assets`. Quota nằm ở `app_event_limits`; vé chống tạo đồng thời nằm
+  ở `app_event_reservations`.
+- App admin chỉ quản quota: `mtminhpc@gmail.com`, `prolathevt02@gmail.com`.
+  Tuyệt đối không dùng cờ app admin để cấp quyền vào sự kiện người khác.
 
 ## Bất biến bảo mật danh tính từ v0.4.1
 
@@ -45,8 +54,8 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
    hàm thuần và giữ khả năng phát lại nhật ký cho cùng một kết quả.
 4. Dữ liệu thật nằm trong Google Sheet ở Production. Không xoá Sheet, `.data`,
    tài khoản, sự kiện hay CLB nếu người dùng không yêu cầu rõ.
-5. `Mobile app design-handoff.zip` là tệp người dùng để ngoài Git. Không sửa,
-   xoá hay commit tệp đó.
+5. `Mobile app design-handoff.zip` và `Mobile app design request-handoff_v3.zip`
+   là tệp người dùng để ngoài Git. Không sửa, xoá hay commit hai tệp đó.
 
 ## Quy tắc làm mới dữ liệu khi phát hành
 
@@ -88,7 +97,7 @@ vào nó.
   + `status Ready`, rồi kiểm HTML có đúng `vX.Y.Z · <7 ký tự commit>`.
 - `claude/nang-next-16` là bản thí nghiệm lịch sử từ mốc `d24f924`, cũ hơn bốn
   bản phát hành và đụng các tệp bảo mật vừa đổi. **Không merge nhánh đó.** Muốn
-  nâng Next 16 phải tạo nhánh mới từ `v0.4.1` và làm lại có kiểm định.
+  nâng Next 16 phải tạo nhánh mới từ `v0.5.0` và làm lại có kiểm định.
 
 ## Tệp nên đọc theo thứ tự
 

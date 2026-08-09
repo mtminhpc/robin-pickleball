@@ -10,7 +10,16 @@
  * toán xếp lịch được sửa về sau.
  */
 
-import type { Actor, EventConfig, MatchId, PlayerId } from "./types";
+import type {
+  Actor,
+  AwardKind,
+  EventConfig,
+  EventSponsor,
+  MatchId,
+  PlayerId,
+  SponsorLogoShape,
+  TrophyMode,
+} from "./types";
 
 /** Thông tin tối thiểu để tạo một người chơi mới. */
 export interface PlayerSeed {
@@ -38,6 +47,27 @@ export type Command =
   | { type: "StartEvent" }
   | { type: "EndEventEarly"; reason: string }
   | { type: "FinishEvent" }
+
+  // ---- trình bày / thương mại -------------------------------------------
+  | { type: "SetSponsorLogoShape"; shape: SponsorLogoShape }
+  | {
+      type: "UpsertSponsor";
+      sponsor: Omit<EventSponsor, "createdAt" | "updatedAt">;
+    }
+  | { type: "RemoveSponsor"; sponsorId: string }
+  | { type: "ReorderSponsors"; sponsorIds: string[] }
+  | {
+      type: "UpsertAward";
+      award: {
+        id: string;
+        kind: AwardKind;
+        label: string;
+        recipientIds: PlayerId[];
+        trophyAssetId?: string;
+        trophyMode: TrophyMode;
+      };
+    }
+  | { type: "RemoveAward"; awardId: string }
 
   // ---- người chơi --------------------------------------------------------
   /** Chủ sự kiện thêm người. Trước giờ đánh vào `invited`, sau đó vào thẳng `active`. */
@@ -191,6 +221,12 @@ export const ADMIN_ONLY: readonly CommandType[] = [
   "StartEvent",
   "EndEventEarly",
   "FinishEvent",
+  "SetSponsorLogoShape",
+  "UpsertSponsor",
+  "RemoveSponsor",
+  "ReorderSponsors",
+  "UpsertAward",
+  "RemoveAward",
   "AddPlayer",
   "MarkArrived",
   "ApproveJoin",

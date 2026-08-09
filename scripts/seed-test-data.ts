@@ -17,11 +17,13 @@ import { planSchedule } from "../lib/scheduler/plan";
 import { ClubRepo } from "../lib/sheets/clubs";
 import { LocalFileSheetsClient } from "../lib/sheets/local";
 import { EventRepo } from "../lib/sheets/repo";
+import { EventAssetRepo } from "../lib/sheets/event-assets";
 
 export const TEST_DATA_PATH = resolve(
   process.env.ROBIN_TEST_DATA_PATH ?? ".data/test-sandbox.json",
 );
 export const TEST_EVENT_CODE = "TEST11";
+export const TEST_V5_EVENT_CODE = "TESTV5";
 export const TEST_PLAYER_PASSWORD = "test1234";
 export const TEST_ADMIN_PASSWORD = "admin1234";
 
@@ -45,6 +47,7 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
   const sheets = new LocalFileSheetsClient(path);
   const clubs = new ClubRepo(sheets);
   const events = new EventRepo(sheets);
+  const assets = new EventAssetRepo(sheets);
   const now = Date.now();
 
   const mine = await clubs.forDevice(OWNER_DEVICE);
@@ -165,9 +168,129 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
     event = await events.load(TEST_EVENT_CODE);
   }
 
+  // Fixture v0.5.0 tách riêng: TEST11 vẫn là sân đang đánh để thử công bằng,
+  // TESTV5 đã kết thúc để mở được Bảng vàng và xem đủ dải tài trợ.
+  let v5 = await events.load(TEST_V5_EVENT_CODE);
+  if (!v5) {
+    const record = await events.create(
+      {
+        code: TEST_V5_EVENT_CODE,
+        clubId: club.id,
+        name: "SÂN TEST V5 · TÀI TRỢ & BẢNG VÀNG",
+        status: "draft",
+        ownerUserId: "test-owner",
+        playerPassHash: "",
+        adminPassHash: await hashPassword(TEST_ADMIN_PASSWORD),
+      },
+      now + 100,
+    );
+    const actor = { kind: "admin", label: "TEST Chủ sân", ref: OWNER_DEVICE } as const;
+    const members = loadedClub.members.filter((member) => member.status === "active").slice(0, 6);
+    const tiers = ["diamond", "diamond", "gold", "gold", "silver", "silver", "partner", "partner", "custom"] as const;
+    const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    for (let i = 0; i < tiers.length; i++) {
+      await assets.put({
+        eventCode: TEST_V5_EVENT_CODE,
+        assetId: `testv5-logo-${i + 1}`,
+        kind: "sponsor",
+        mime: "image/png",
+        dataUri: tinyPng,
+        createdBy: "test-owner",
+        createdAt: now + 110 + i,
+        updatedAt: now + 110 + i,
+      });
+    }
+    const commands: CommandEnvelope[] = [
+      {
+        id: "testv5-create",
+        at: now + 100,
+        actor,
+        command: {
+          type: "CreateEvent",
+          code: TEST_V5_EVENT_CODE,
+          clubId: club.id,
+          config: { ...DEFAULT_CONFIG, name: "SÂN TEST V5 · TÀI TRỢ & BẢNG VÀNG", courts: 2 },
+        },
+      },
+      ...members.map((member, index) => ({
+        id: `testv5-player-${index + 1}`,
+        at: now + 120 + index,
+        actor,
+        command: {
+          type: "AddPlayer" as const,
+          player: { id: member.memberId, name: member.displayName, avatarId: member.avatarId, memberId: member.memberId, deviceId: member.deviceId },
+          asActive: true,
+        },
+      })),
+      { id: "testv5-start", at: now + 130, actor, command: { type: "StartEvent" as const } },
+      {
+        id: "testv5-schedule",
+        at: now + 131,
+        actor,
+        command: {
+          type: "SetSchedule" as const,
+          fromRound: 1,
+          matches: [
+            { id: "testv5-m1", round: 1, court: 1, teamA: [members[0]!.memberId, members[1]!.memberId] as [string, string], teamB: [members[2]!.memberId, members[3]!.memberId] as [string, string] },
+            { id: "testv5-m2", round: 2, court: 1, teamA: [members[0]!.memberId, members[2]!.memberId] as [string, string], teamB: [members[4]!.memberId, members[5]!.memberId] as [string, string] },
+            { id: "testv5-m3", round: 3, court: 1, teamA: [members[1]!.memberId, members[3]!.memberId] as [string, string], teamB: [members[4]!.memberId, members[5]!.memberId] as [string, string] },
+          ],
+        },
+      },
+      { id: "testv5-score-1", at: now + 132, actor, command: { type: "SubmitResult" as const, matchId: "testv5-m1", scoreA: 11, scoreB: 7, irregular: false } },
+      { id: "testv5-score-2", at: now + 133, actor, command: { type: "SubmitResult" as const, matchId: "testv5-m2", scoreA: 11, scoreB: 8, irregular: false } },
+      { id: "testv5-score-3", at: now + 134, actor, command: { type: "SubmitResult" as const, matchId: "testv5-m3", scoreA: 6, scoreB: 11, irregular: false } },
+      { id: "testv5-finish", at: now + 135, actor, command: { type: "FinishEvent" as const } },
+      { id: "testv5-shape", at: now + 136, actor, command: { type: "SetSponsorLogoShape" as const, shape: "square" as const } },
+      ...tiers.map((tier, index) => ({
+        id: `testv5-sponsor-${index + 1}`,
+        at: now + 140 + index,
+        actor,
+        command: {
+          type: "UpsertSponsor" as const,
+          sponsor: {
+            id: `testv5-sponsor-${index + 1}`,
+            name: `TEST ${tier.toUpperCase()} ${index + 1}`,
+            tier,
+            ...(tier === "custom" ? { tierLabel: "Tài trợ bóng" } : {}),
+            assetId: `testv5-logo-${index + 1}`,
+            order: index,
+          },
+        },
+      })),
+      {
+        id: "testv5-award-champion",
+        at: now + 160,
+        actor,
+        command: { type: "UpsertAward", award: { id: "testv5-champion", kind: "champion", label: "Vô địch", recipientIds: [members[0]!.memberId], trophyMode: "framed" } },
+      },
+      {
+        id: "testv5-award-tie",
+        at: now + 161,
+        actor,
+        command: { type: "UpsertAward", award: { id: "testv5-runner-up", kind: "runnerUp", label: "Á quân", recipientIds: [members[1]!.memberId, members[2]!.memberId], trophyMode: "transparent" } },
+      },
+      {
+        id: "testv5-award-custom",
+        at: now + 162,
+        actor,
+        command: { type: "UpsertAward", award: { id: "testv5-fair-play", kind: "custom", label: "Fair Play", recipientIds: [members[0]!.memberId, members[3]!.memberId], trophyMode: "framed" } },
+      },
+    ];
+    const committed = await events.commitMany(TEST_V5_EVENT_CODE, commands, {
+      record,
+      state: fold(TEST_V5_EVENT_CODE, []).state,
+      repaired: false,
+      skipped: [],
+    });
+    if (!committed.ok) throw new Error(committed.error);
+    v5 = await events.load(TEST_V5_EVENT_CODE);
+  }
+
   console.log(`Đã giữ dữ liệu TEST tại: ${path}`);
   console.log(`CLB: ${club.name} · mã mời ${club.inviteCode}`);
   console.log(`Sân/sự kiện: ${event?.state.config.name ?? TEST_EVENT_CODE} · mã ${TEST_EVENT_CODE}`);
+  console.log(`Trưng bày v0.5: ${v5?.state.config.name ?? TEST_V5_EVENT_CODE} · mã ${TEST_V5_EVENT_CODE}`);
   console.log(`Người chơi: ${loadedClub.members.filter((m) => m.status === "active").length}`);
   console.log(`Mật khẩu người chơi: ${TEST_PLAYER_PASSWORD}`);
   console.log(`Mật khẩu quản trị: ${TEST_ADMIN_PASSWORD}`);

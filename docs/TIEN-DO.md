@@ -1,7 +1,7 @@
 # Tiến độ dự án
 
-Cập nhật: 09/08/2026 · nhánh `claude/pickleball-round-robin-app-fq8sja` ·
-**đã chạy thật tại https://robin-pickleball.vercel.app**
+Cập nhật: 09/08/2026 · nhánh `codex/design-handoff-v3-v0.5.0` ·
+**đích Production: https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
 chạy thế nào, và việc gì còn dang dở. Hướng dẫn nối Google Sheet thật nằm riêng ở
@@ -15,7 +15,7 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.4.1 — Khoá lỗ hổng danh tính thiết bị`.**
+**Phiên bản hiện tại: `v0.5.0 — Claude Design handoff v3`.**
 Không còn phần mã nào đang làm dở trong đợt này.
 
 | | |
@@ -27,9 +27,37 @@ Không còn phần mã nào đang làm dở trong đợt này.
 | GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-`npm test` 498 bài xanh, `npm run scenarios` chạy 152 lượt/0 vấn đề,
+`npm test` 513 bài xanh, `npm run scenarios` chạy 152 lượt/0 vấn đề,
 `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
+
+### Ghi chú khoá phiên Codex 09/08/2026 — v0.5.0
+
+- Nguồn chuẩn giao diện là `Mobile app design request-handoff_v3.zip`, nhưng ZIP
+  vẫn nằm ngoài Git. Dựng lại bằng React/Tailwind, không chép runtime mô phỏng.
+- Trang chủ có cụm đăng nhập/Setting ba trạng thái và đúng bốn tab: Vào bằng mã,
+  Các trận đã tạo, Tạo buổi mới, Câu lạc bộ. Tạo bắt buộc Google, có ngày giờ dự
+  kiến và danh sách server chia Hôm nay/Sắp tới/Đã qua.
+- Quota mặc định 3 sự kiện chưa kết thúc. App admin `mtminhpc@gmail.com` và
+  `prolathevt02@gmail.com` đặt 3–100/vô hạn; quyền này không cho xem mật khẩu hay
+  sửa sự kiện. Tab `app_event_reservations` dùng thứ tự append để chống nhiều
+  serverless request cùng vượt lượt.
+- Tài trợ đi qua command/reducer. Kim cương, Vàng, Bạc, Đồng hành mỗi hạng tối đa
+  2; custom không giới hạn. Ba kiểu vuông/tròn/nền trong, thứ tự hạng cố định,
+  dải nằm dưới Band trên mọi tab, `Tất cả (n)` mở danh sách đầy đủ.
+- Trao giải chỉ sau `finished`: các bậc chuẩn/tự đặt, đồng giải, cúp mặc định/ảnh,
+  sửa/xoá. `FinishEvent` chỉ chạy khi không còn trận mở; nếu còn dùng luồng kết
+  thúc sớm cũ. Bảng vàng nằm trên bảng xếp hạng và có cúp trên hàng người nhận.
+- `EventConfig.scheduledAt`, `EventState.presentation` có migration không phá dữ
+  liệu cũ. Byte ảnh nằm ở `event_assets`, contain 128×128, cấm SVG/GIF, kiểm MIME
+  + magic bytes và phục vụ với `nosniff`.
+- Kho test giữ nguyên `TEST11`, CLB/sân/11 người và thêm `TESTV5`. Seed chạy lại
+  không reset/nhân đôi. Cổng cuối: 19 tệp, 513/513 test; 152 lượt công bằng/0 vấn
+  đề; Next production build và TypeScript sạch. SHA-256 kho TEST trên máy:
+  `FAF9167333BA9C5CD1C72065C82F06393650F133F90B7000D2EEA099565254DA`.
+- Smoke test local đã xem ảnh chụp trang chủ và `/e/TESTV5/standings`; `.next`
+  bị OneDrive lỗi `EINVAL` được move riêng ra thư mục temp rồi dựng lại, không
+  đụng `.data`.
 
 ### Ghi chú khoá phiên 09/08/2026 — v0.4.1
 

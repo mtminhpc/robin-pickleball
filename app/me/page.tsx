@@ -21,6 +21,7 @@ import { ACCOUNT_KEY, useAccount } from "@/hooks/useAccount";
 import { AccountBar } from "@/components/AccountBar";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { Button, Card, Empty, inputClass } from "@/components/ui";
+import { AppAdminEventLimits } from "@/components/AppAdminEventLimits";
 
 interface MeResponse {
   events: Array<{
@@ -223,6 +224,8 @@ export default function MePage() {
       )}
 
       {showDevices && data?.account && <DeviceList devices={data.account.deviceList} />}
+
+      {user?.isAppAdmin && <AppAdminEventLimits />}
 
       <AccountBar next="/me" />
 

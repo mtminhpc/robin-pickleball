@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import {
   loadRecentClubs,
   loadRecentEvents,
@@ -18,15 +19,16 @@ import {
   type RecentEvent,
   loadProfile,
 } from "@/lib/identity/device";
-import { AccountBar } from "@/components/AccountBar";
 import { Button, Field, inputClass } from "@/components/ui";
+import { Avatar } from "@/components/Avatar";
+import { signInHref, useAccount } from "@/hooks/useAccount";
 
 const HOME_ACCENT = "#087a55";
 
 export default function HomePage() {
   const [recent, setRecent] = useState<RecentEvent[]>([]);
   const [clubs, setClubs] = useState<RecentClub[]>([]);
-  const [tab, setTab] = useState<"join" | "create" | "club">("join");
+  const [tab, setTab] = useState<"join" | "created" | "create" | "club">("join");
 
   useEffect(() => {
     setRecent(loadRecentEvents());
@@ -53,13 +55,7 @@ export default function HomePage() {
             </p>
           </div>
         </div>
-        <Link
-          href="/me"
-          className="inline-flex min-h-tap shrink-0 items-center gap-2 border border-ink px-3 font-display text-[10px] font-extrabold uppercase hover:bg-ink hover:text-paper"
-        >
-          <SettingsIcon />
-          Setting
-        </Link>
+        <HomeAccount />
       </header>
 
       <section className="relative overflow-hidden bg-ink px-5 pb-5 pt-6 text-paper">
@@ -91,7 +87,7 @@ export default function HomePage() {
 
       <section className="px-4 pt-5">
         <HomeSectionHead n="01">Bắt đầu</HomeSectionHead>
-        <div className="grid grid-cols-3 border border-line bg-surface" role="tablist" aria-label="Cách bắt đầu">
+        <div className="grid grid-cols-4 border border-line bg-surface" role="tablist" aria-label="Cách bắt đầu">
           <TabButton
             id="home-tab-join"
             controls="home-panel-join"
@@ -99,6 +95,14 @@ export default function HomePage() {
             onClick={() => setTab("join")}
           >
             Vào bằng mã
+          </TabButton>
+          <TabButton
+            id="home-tab-created"
+            controls="home-panel-created"
+            active={tab === "created"}
+            onClick={() => setTab("created")}
+          >
+            Các trận đã tạo
           </TabButton>
           <TabButton
             id="home-tab-create"
@@ -118,7 +122,15 @@ export default function HomePage() {
           </TabButton>
         </div>
 
-        {tab === "join" ? <JoinByCode /> : tab === "create" ? <CreateEvent /> : <ClubEntry />}
+        {tab === "join" ? (
+          <JoinByCode />
+        ) : tab === "created" ? (
+          <CreatedEvents />
+        ) : tab === "create" ? (
+          <CreateEvent />
+        ) : (
+          <ClubEntry />
+        )}
       </section>
 
       {recent.length > 0 && (
@@ -163,12 +175,6 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Cuối trang chứ không phải đầu: người mở app ra là để vào buổi đánh, và
-          không ai bị bắt đăng nhập mới dùng được. */}
-      <div className="px-4 pt-5">
-        <AccountBar next="/" variant="home" />
-      </div>
-
       <footer className="mx-4 mt-5 flex items-start justify-between gap-3 border-t border-line pt-4 text-[10px] leading-relaxed text-mute-600">
         <p>
           <strong className="flex items-center gap-1 font-display text-ink">
@@ -186,6 +192,46 @@ export default function HomePage() {
         </a>
       </footer>
     </main>
+  );
+}
+
+function HomeAccount() {
+  const account = useAccount();
+  const user = account.data?.user;
+  const setting = (
+    <Link
+      href="/me"
+      aria-label="Mở Setting"
+      className="inline-flex min-h-tap shrink-0 items-center gap-1.5 px-2 font-display text-[9px] font-extrabold uppercase hover:bg-ink hover:text-paper"
+    >
+      <SettingsIcon /> Setting
+    </Link>
+  );
+
+  if (!account.data?.enabled) return <div className="border border-ink">{setting}</div>;
+  if (!user) {
+    return (
+      <div className="flex min-h-tap items-stretch border border-ink">
+        <a
+          href={signInHref("/")}
+          className="inline-flex items-center px-2 font-display text-[9px] font-extrabold uppercase hover:bg-[#087a55] hover:text-white"
+        >
+          Đăng nhập Google
+        </a>
+        <span className="w-px bg-ink" aria-hidden />
+        {setting}
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-tap min-w-0 items-stretch border border-ink">
+      <Link href="/me" className="flex min-w-0 items-center gap-1.5 px-2 hover:bg-mute-300">
+        <Avatar name={user.displayName} avatarId={user.avatarId} userId={user.userId} size="sm" />
+        <span className="max-w-20 truncate text-[10px] font-bold">{user.displayName}</span>
+      </Link>
+      <span className="w-px bg-ink" aria-hidden />
+      {setting}
+    </div>
   );
 }
 
@@ -315,14 +361,122 @@ function JoinByCode() {
   );
 }
 
+interface OwnedEvent {
+  code: string;
+  name: string;
+  status: "draft" | "running" | "finished";
+  scheduledAt: number | null;
+  createdAt: number;
+  courts: number;
+  players: number;
+  sponsors: Array<{ id: string; name: string; assetId: string }>;
+}
+
+function CreatedEvents() {
+  const account = useAccount();
+  const query = useQuery<{
+    events: OwnedEvent[];
+    quota: { used: number; limit: number | null; remaining: number | null };
+  }>({
+    queryKey: ["owned-events"],
+    enabled: Boolean(account.data?.user),
+    queryFn: async () => {
+      const response = await fetch("/api/events");
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Không tải được sự kiện.");
+      return body;
+    },
+  });
+
+  if (!account.data?.user) {
+    return (
+      <div id="home-panel-created" role="tabpanel" aria-labelledby="home-tab-created" className="border border-t-0 border-line bg-surface p-5">
+        <p className="text-sm font-semibold">Đăng nhập để xem các sự kiện do bạn tạo.</p>
+        {account.data?.enabled && (
+          <a href={signInHref("/")} className="mt-4 inline-flex min-h-tap items-center bg-[#087a55] px-4 font-display text-[10px] font-extrabold uppercase text-white">
+            Đăng nhập Google
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  const events = query.data?.events ?? [];
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endToday = startToday + 86_400_000;
+  const groups = [
+    { title: "Hôm nay", items: events.filter((event) => eventTime(event) >= startToday && eventTime(event) < endToday) },
+    { title: "Sắp tới", items: events.filter((event) => eventTime(event) >= endToday) },
+    { title: "Đã qua", items: events.filter((event) => eventTime(event) < startToday) },
+  ];
+
+  return (
+    <div id="home-panel-created" role="tabpanel" aria-labelledby="home-tab-created" className="space-y-4 border border-t-0 border-line bg-surface p-4">
+      {query.data && (
+        <div className="flex items-center justify-between border-l-4 border-[#087a55] bg-paper px-3 py-2 text-xs">
+          <strong>Sự kiện đang mở</strong>
+          <span className="font-mono font-bold text-[#087a55]">
+            {query.data.quota.used}/{query.data.quota.limit ?? "∞"}
+          </span>
+        </div>
+      )}
+      {query.isLoading && <p className="text-sm text-mute-600">Đang tải…</p>}
+      {query.error && <p className="text-sm text-accent-700">{(query.error as Error).message}</p>}
+      {!query.isLoading && events.length === 0 && <p className="text-sm text-mute-600">Bạn chưa tạo sự kiện nào.</p>}
+      {groups.map((group) => group.items.length > 0 && (
+        <section key={group.title}>
+          <h3 className="eyebrow mb-2 text-ink">{group.title}</h3>
+          <div className="divide-y divide-line border-y border-line">
+            {group.items.map((event) => <OwnedEventCard key={event.code} event={event} />)}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function eventTime(event: OwnedEvent): number {
+  return event.scheduledAt ?? event.createdAt;
+}
+
+function OwnedEventCard({ event }: { event: OwnedEvent }) {
+  const first = event.sponsors[0];
+  return (
+    <Link href={`/e/${event.code}`} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-3 bg-paper py-3 hover:bg-mute-300">
+      <div className="grid size-12 place-items-center overflow-hidden border border-ink bg-ink text-white">
+        {first ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={`/api/events/${event.code}/assets/${first.assetId}`} alt={first.name} className="size-full object-contain" />
+        ) : (
+          <span className="font-display text-[10px] font-extrabold">RP</span>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="truncate font-display text-sm font-extrabold uppercase">{event.name}</p>
+        <p className="mt-1 text-[10px] text-mute-600">
+          {new Date(eventTime(event)).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" })} · {event.courts} sân · {event.players} người
+        </p>
+        {event.sponsors.length > 1 && <p className="mt-1 text-[9px] font-bold text-[#087a55]">+{event.sponsors.length - 1} logo tài trợ</p>}
+      </div>
+      <div className="text-right">
+        <span className="block font-mono text-[11px] font-bold text-[#087a55]">{event.code}</span>
+        <span className="text-[9px] uppercase text-mute-600">{event.status === "draft" ? "Sắp diễn ra" : event.status === "running" ? "Đang đánh" : "Đã xong"}</span>
+      </div>
+    </Link>
+  );
+}
+
 function CreateEvent() {
   const router = useRouter();
+  const account = useAccount();
   const [name, setName] = useState("");
   const [courts, setCourts] = useState(2);
   const [pointsTo, setPointsTo] = useState(11);
   const [winBy2, setWinBy2] = useState(true);
   const [playerPassword, setPlayerPassword] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [scheduledAt, setScheduledAt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -341,6 +495,7 @@ function CreateEvent() {
           winBy2,
           playerPassword,
           adminPassword,
+          scheduledAt: scheduledAt ? new Date(scheduledAt).getTime() : null,
         }),
       });
       const body = (await res.json()) as { code?: string; error?: string };
@@ -363,7 +518,12 @@ function CreateEvent() {
       aria-labelledby="home-tab-create"
       className="border border-t-0 border-line bg-surface p-5"
     >
-      <form onSubmit={submit} className="space-y-4">
+      {!account.data?.user ? (
+        <div className="space-y-4">
+          <p className="text-sm font-semibold">Chỉ tài khoản Google được tạo sự kiện. Tham gia và nhập điểm vẫn không cần đăng nhập.</p>
+          {account.data?.enabled && <a href={signInHref("/")} className="inline-flex min-h-tap items-center bg-[#087a55] px-4 font-display text-[10px] font-extrabold uppercase text-white">Đăng nhập Google</a>}
+        </div>
+      ) : <form onSubmit={submit} className="space-y-4">
         <Field label="Tên buổi đánh">
           <input
             value={name}
@@ -371,6 +531,10 @@ function CreateEvent() {
             placeholder="Tối thứ ba sân Hoa Lư"
             className={`${inputClass} !bg-paper`}
           />
+        </Field>
+
+        <Field label="Ngày giờ dự kiến" hint="Không bắt buộc.">
+          <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className={`${inputClass} !bg-paper`} />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -441,7 +605,7 @@ function CreateEvent() {
         >
           {busy ? "Đang tạo…" : "Tạo buổi đánh"}
         </HomePrimaryButton>
-      </form>
+      </form>}
     </div>
   );
 }

@@ -23,6 +23,7 @@ import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { Avatar } from "@/components/Avatar";
 import { Button, Empty, Marker, SectionHead } from "@/components/ui";
+import { AwardsBoard } from "@/components/AwardsBoard";
 
 export default function StandingsPage() {
   const { data } = useEvent();
@@ -41,7 +42,7 @@ export default function StandingsPage() {
   if (!data || !table || !fair) return null;
   const { state, role } = data;
 
-  if (table.main.length === 0 && table.provisional.length === 0) {
+  if (table.main.length === 0 && table.provisional.length === 0 && state.presentation.awards.length === 0) {
     return (
       <div className="pt-6">
         <Empty>Chưa có trận nào xong. Bảng xếp hạng sẽ hiện ở đây.</Empty>
@@ -50,7 +51,9 @@ export default function StandingsPage() {
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] lg:items-start lg:gap-12">
+    <div className="space-y-8">
+      <AwardsBoard code={state.code} />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] lg:items-start lg:gap-12">
       <div>
         <SectionHead n="01" aside="hiệu số / trận">
           Xếp hạng
@@ -60,6 +63,7 @@ export default function StandingsPage() {
             key={row.playerId}
             row={row}
             player={state.players.find((p) => p.id === row.playerId)}
+            awards={state.presentation.awards.filter((award) => award.recipientIds.includes(row.playerId))}
           />
         ))}
 
@@ -75,6 +79,7 @@ export default function StandingsPage() {
                 key={row.playerId}
                 row={row}
                 player={state.players.find((p) => p.id === row.playerId)}
+                awards={state.presentation.awards.filter((award) => award.recipientIds.includes(row.playerId))}
                 action={
                   role === "admin" && state.status === "running" ? (
                     <Button
@@ -97,6 +102,7 @@ export default function StandingsPage() {
             ))}
           </>
         )}
+      </div>
       </div>
 
       <div>
@@ -235,6 +241,7 @@ function StandingRowView({
   row,
   player,
   action,
+  awards = [],
 }: {
   row: StandingRow;
   /**
@@ -244,6 +251,7 @@ function StandingRowView({
    */
   player?: Player;
   action?: React.ReactNode;
+  awards?: Array<{ id: string; label: string }>;
 }) {
   return (
     <div className="flex items-center gap-3 border-b border-line py-3.5">
@@ -268,6 +276,7 @@ function StandingRowView({
           </span>
           {row.hasLeft && <Marker>đã về</Marker>}
           {row.hasPartial && <Marker tone="accent">có trận dở dang</Marker>}
+          {awards.map((award) => <span key={award.id} title={award.label} aria-label={award.label} className="text-sm">🏆</span>)}
         </div>
         <div className="mt-0.5 text-[11px] text-mute-600">
           {row.games} trận · {row.wins}T {row.losses}B · tổng {signed(row.diff)}

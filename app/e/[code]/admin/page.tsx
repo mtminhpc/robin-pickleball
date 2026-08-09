@@ -15,6 +15,7 @@ import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { PasswordGate } from "@/components/PasswordGate";
 import { Button, Card, Dialog, Empty, Field, inputClass } from "@/components/ui";
+import { SponsorManager } from "@/components/SponsorManager";
 
 export default function AdminPage() {
   const { code } = useParams<{ code: string }>();
@@ -38,6 +39,9 @@ export default function AdminPage() {
 
   const readyCount = state.players.filter(
     (p) => p.status === "confirmed" || p.status === "active",
+  ).length;
+  const openMatches = state.matches.filter(
+    (match) => match.status === "scheduled" || match.status === "playing",
   ).length;
 
   return (
@@ -63,6 +67,8 @@ export default function AdminPage() {
       <QrSection code={code} />
 
       {data.ownerByAccount && <PasswordSection code={code} />}
+
+      <SponsorManager code={code} />
 
       <Card className="space-y-4 p-5">
         <h2 className="font-semibold">Cấu hình</h2>
@@ -110,16 +116,23 @@ export default function AdminPage() {
 
       {state.status === "running" && (
         <Card className="space-y-3 border-line p-5">
-          <h2 className="font-semibold text-accent-700">Kết thúc sớm</h2>
-          <p className="text-sm text-mute-700">
-            Huỷ toàn bộ trận chưa đánh và chốt bảng xếp hạng. Không mở lại được.
-            Hiện còn{" "}
-            {state.matches.filter((m) => m.status === "scheduled").length} trận
-            chưa đánh từ vòng {firstUnplayedRound(state)}.
-          </p>
-          <Button tone="danger" full onClick={() => setEnding(true)}>
-            Kết thúc buổi đánh
-          </Button>
+          <h2 className={`font-semibold ${openMatches > 0 ? "text-accent-700" : ""}`}>
+            {openMatches > 0 ? "Kết thúc sớm" : "Hoàn tất buổi đánh"}
+          </h2>
+          {openMatches > 0 ? (
+            <>
+              <p className="text-sm text-mute-700">
+                Huỷ toàn bộ trận chưa đánh và chốt bảng xếp hạng. Không mở lại được.
+                Hiện còn {openMatches} trận mở từ vòng {firstUnplayedRound(state)}.
+              </p>
+              <Button tone="danger" full onClick={() => setEnding(true)}>Kết thúc sớm</Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-mute-700">Không còn trận nào chờ hoặc đang đánh. Bạn có thể chốt kết quả bình thường để mở phần Trao giải.</p>
+              <Button tone="primary" full onClick={() => queue.send({ type: "FinishEvent" })}>Hoàn tất &amp; mở trao giải</Button>
+            </>
+          )}
         </Card>
       )}
 

@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { oauthEnabled } from "@/lib/auth/google-oauth";
 import { USER_COOKIE } from "@/lib/auth/user-session";
 import { currentUser } from "@/lib/api/user";
+import { isAppAdminEmail } from "@/lib/domain/app-admin";
 
 export async function GET(request: NextRequest) {
   const enabled = oauthEnabled();
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
       /** Có ảnh tự tải lên hay chưa — để biết có hiện nút Xoá ảnh không. */
       hasPhoto: Boolean(me.account.prefs.photo),
       devices: me.devices.length,
+      isAppAdmin: isAppAdminEmail(me.account.email),
     },
   });
 }

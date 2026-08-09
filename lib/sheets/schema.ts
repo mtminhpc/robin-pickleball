@@ -16,6 +16,9 @@ export const TABS = {
   events: "events",
   accounts: "accounts",
   devices: "devices",
+  eventAssets: "event_assets",
+  appEventLimits: "app_event_limits",
+  appEventReservations: "app_event_reservations",
 } as const;
 
 /** Tab nhật ký của một sự kiện: nguồn sự thật, chỉ ghi thêm không sửa. */
@@ -81,6 +84,31 @@ export const HEADERS = {
     "avatar_id",
     "last_seen",
     "recent_events_json",
+  ],
+  [TABS.eventAssets]: [
+    "event_code",
+    "asset_id",
+    "kind",
+    "mime",
+    "data_uri",
+    "active",
+    "created_by",
+    "created_at",
+    "updated_at",
+  ],
+  [TABS.appEventLimits]: [
+    "email",
+    "limit",
+    "granted_by",
+    "updated_at",
+    "active",
+  ],
+  [TABS.appEventReservations]: [
+    "user_id",
+    "token",
+    "status",
+    "created_at",
+    "updated_at",
   ],
 } as const;
 

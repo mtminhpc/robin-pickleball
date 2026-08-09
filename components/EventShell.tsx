@@ -22,6 +22,7 @@ import { EventProvider, useEvent, type EventSnapshot } from "@/hooks/useEventSta
 import { MutationQueueProvider, useMutationQueue } from "@/hooks/useMutationQueue";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { rememberEvent } from "@/lib/identity/device";
+import { SponsorStrip } from "@/components/SponsorStrip";
 
 export function EventShell({
   code,
@@ -55,6 +56,7 @@ function ShellInner({ code, children }: { code: string; children: ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <SaveStatusBanner />
           <Band code={code} />
+          <SponsorStrip code={code} />
           {/* Thanh dưới nằm TRONG dòng chảy chứ không `fixed`, nên không cần
               chừa khoảng đệm dưới cho nó như bản trước. */}
           <main className="flex-1 px-4 pb-10 lg:px-10 lg:pb-12">{children}</main>

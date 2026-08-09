@@ -18,6 +18,7 @@ export interface AccountInfo {
   /** Đã tự tải ảnh lên hay chưa. Ảnh Google không tính. */
   hasPhoto: boolean;
   devices: number;
+  isAppAdmin: boolean;
 }
 
 export interface SessionInfo {

@@ -31,6 +31,8 @@ export interface ScoringConfig {
 
 export interface EventConfig {
   name: string;
+  /** Ngày giờ dự kiến bắt đầu, epoch mili-giây; `null` nếu chưa hẹn. */
+  scheduledAt: number | null;
   /** Số sân chạy song song. */
   courts: number;
   scoring: ScoringConfig;
@@ -71,6 +73,7 @@ export interface EventConfig {
 
 export const DEFAULT_CONFIG: EventConfig = {
   name: "Buổi đánh Pickleball",
+  scheduledAt: null,
   courts: 2,
   scoring: { pointsTo: 11, winBy2: true },
   softMaxConsecutive: 2,
@@ -229,11 +232,62 @@ export interface Match {
 
 export type EventStatus = "draft" | "running" | "finished";
 
+// ---------------------------------------------------------------------------
+// Trình bày sự kiện: nhà tài trợ và giải thưởng
+// ---------------------------------------------------------------------------
+
+export type SponsorLogoShape = "square" | "round" | "transparent";
+export type SponsorTier = "diamond" | "gold" | "silver" | "partner" | "custom";
+
+export interface EventSponsor {
+  id: string;
+  name: string;
+  tier: SponsorTier;
+  /** Bắt buộc với hạng tự đặt, ví dụ "Tài trợ áo đấu". */
+  tierLabel?: string;
+  /** Ảnh nằm ở tab `event_assets`, không nhét data URI vào trạng thái. */
+  assetId: string;
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type AwardKind =
+  | "champion"
+  | "runnerUp"
+  | "third"
+  | "encouragement"
+  | "custom";
+export type TrophyMode = "framed" | "transparent";
+
+export interface EventAward {
+  id: string;
+  kind: AwardKind;
+  label: string;
+  recipientIds: PlayerId[];
+  /** Bỏ trống để dùng cúp mặc định của app. */
+  trophyAssetId?: string;
+  trophyMode: TrophyMode;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EventPresentation {
+  sponsorLogoShape: SponsorLogoShape;
+  sponsors: EventSponsor[];
+  awards: EventAward[];
+}
+
+export function emptyPresentation(): EventPresentation {
+  return { sponsorLogoShape: "square", sponsors: [], awards: [] };
+}
+
 export interface EventState {
   code: string;
   clubId: string | null;
   status: EventStatus;
   config: EventConfig;
+  presentation: EventPresentation;
   players: Player[];
   matches: Match[];
   /** Vòng cao nhất đã được sinh; 0 nghĩa là chưa sinh vòng nào. */
@@ -258,6 +312,33 @@ export interface EventState {
   updatedAt: number;
   /** clientCommandId đã xử lý — để gửi lại lệnh không nhân đôi kết quả. */
   appliedCommandIds: string[];
+}
+
+/**
+ * Bổ sung các trường ra đời sau v0.4.1 cho snapshot cũ mà không xoá dữ liệu.
+ * Hàm trả bản mới để các tầng đọc có thể gọi an toàn trên dữ liệu đang đệm.
+ */
+export function withEventDefaults(state: EventState): EventState {
+  return {
+    ...state,
+    config: {
+      ...DEFAULT_CONFIG,
+      ...state.config,
+      scoring: { ...DEFAULT_CONFIG.scoring, ...state.config?.scoring },
+      scheduledAt:
+        typeof state.config?.scheduledAt === "number" ? state.config.scheduledAt : null,
+    },
+    presentation: {
+      ...emptyPresentation(),
+      ...(state.presentation ?? {}),
+      sponsors: Array.isArray(state.presentation?.sponsors)
+        ? state.presentation.sponsors
+        : [],
+      awards: Array.isArray(state.presentation?.awards)
+        ? state.presentation.awards
+        : [],
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

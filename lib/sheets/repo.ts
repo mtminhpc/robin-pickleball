@@ -23,7 +23,7 @@
 
 import type { CommandEnvelope } from "../domain/commands";
 import { apply, emptyState, fold } from "../domain/reduce";
-import type { EventState } from "../domain/types";
+import { withEventDefaults, type EventState } from "../domain/types";
 import type { SheetsClient, WriteOp } from "./client";
 import { indexToColumn, rowRange } from "./client";
 import {
@@ -353,6 +353,25 @@ export class EventRepo {
     return out;
   }
 
+  /** Các sự kiện do đúng tài khoản tạo, phục vụ tab "Các trận đã tạo" và quota. */
+  async listByOwner(
+    ownerUserId: string,
+  ): Promise<Array<{ record: EventRecord; state: EventState }>> {
+    if (!ownerUserId) return [];
+    const [index] = await this.sheets.batchGet([
+      `${TABS.events}!A:${indexToColumn(EVENT_COLUMNS.length - 1)}`,
+    ]);
+    const out: Array<{ record: EventRecord; state: EventState }> = [];
+    (index?.values ?? []).forEach((row, i) => {
+      if (i === 0 || row[COL.owner_user_id] !== ownerUserId) return;
+      const state = parseSnapshot(
+        joinState(row.slice(STATE_COLUMN_START, STATE_COLUMN_START + STATE_CELLS)),
+      );
+      if (state) out.push({ record: toRecord(row, i), state });
+    });
+    return out;
+  }
+
   async create(
     record: Omit<EventRecord, "rowIndex" | "seq" | "updatedAt">,
     createdAt: number,
@@ -511,7 +530,7 @@ function parseSnapshot(json: string): EventState | null {
     const parsed = JSON.parse(json) as EventState;
     // Kiểm sơ bộ cho chắc: chuỗi bị cắt cụt vẫn có thể tình cờ hợp lệ JSON.
     if (!Array.isArray(parsed.players) || !Array.isArray(parsed.matches)) return null;
-    return parsed;
+    return withEventDefaults(parsed);
   } catch {
     return null;
   }

@@ -15,6 +15,9 @@ import { getSheetsClient } from "./factory";
 import { AccountRepo } from "./accounts";
 import { ClubRepo, type LoadedClub } from "./clubs";
 import { EventRepo, type EventRecord } from "./repo";
+import { AppEventLimitRepo } from "./app-event-limits";
+import { EventAssetRepo } from "./event-assets";
+import { EventCreationReservationRepo } from "./event-reservations";
 
 /** Bao lâu thì chấp nhận dữ liệu cũ. Ghi thì xoá đệm ngay nên không ai phải chờ. */
 const TTL_SECONDS = 5;
@@ -97,6 +100,23 @@ export async function withEventLock<T>(
     // Chỉ dọn khi mình là lệnh cuối, để không xoá mất hàng đợi của lệnh đến sau.
     if (inFlight.get(code) === queued) inFlight.delete(code);
   }
+}
+
+/** Xếp hàng thao tác quota theo tài khoản trong cùng một instance server. */
+export function withAccountLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+  return withEventLock(`account:${userId}`, fn);
+}
+
+export function getAppEventLimitRepo(): AppEventLimitRepo {
+  return new AppEventLimitRepo(getSheetsClient());
+}
+
+export function getEventAssetRepo(): EventAssetRepo {
+  return new EventAssetRepo(getSheetsClient());
+}
+
+export function getEventCreationReservationRepo(): EventCreationReservationRepo {
+  return new EventCreationReservationRepo(getSheetsClient());
 }
 
 // ---------------------------------------------------------------------------

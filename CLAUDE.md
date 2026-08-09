@@ -9,7 +9,29 @@ Trước khi sửa bất kỳ thứ gì, hãy đọc đầy đủ:
 
 Không coi một `git push` là đã phát hành: nhánh tính năng chỉ tạo Vercel Preview,
 còn Production đi từ `main` và phải được kiểm lại qua alias công khai. Không sửa
-hay commit tệp `Mobile app design-handoff.zip` của người dùng.
+hay commit hai ZIP handoff của người dùng.
+
+## Trạng thái cuối phiên Codex 09/08/2026 — v0.5.0
+
+- Mã v0.5.0 nằm trên `codex/design-handoff-v3-v0.5.0`, dựng từ handoff Claude
+  Design v3; trang chủ xanh–đen có đúng 4 tab và cụm đăng nhập/Setting. Các màn
+  hình sâu vẫn Modernist cam–đen.
+- Chỉ tài khoản Google tạo sự kiện. Mặc định tối đa 3 sự kiện chưa kết thúc;
+  `finished` trả lại lượt. Hai app admin là `mtminhpc@gmail.com` và
+  `prolathevt02@gmail.com`, chỉ quản lý hạn mức 3–100/vô hạn trong Setting.
+- Tài trợ: Kim cương/Vàng/Bạc/Đồng hành đều tối đa 2; hạng tự đặt không giới hạn;
+  đủ vuông/tròn/nền trong, sửa/xoá/sắp xếp và dải trên mọi tab sự kiện.
+- Giải thưởng chỉ trao sau khi kết thúc: giải chuẩn/tự đặt, đồng giải, một người
+  nhiều giải, cúp mặc định/ảnh tải lên; Bảng vàng đứng trước xếp hạng và hàng xếp
+  hạng có cúp nhỏ.
+- Snapshot cũ tự bổ sung `scheduledAt`/`presentation`; ảnh tách vào
+  `event_assets`, có magic-byte + MIME + `nosniff`. Lớp danh tính v0.4.1 giữ nguyên.
+- Cổng cuối: 19 tệp, 513/513 test; 152 lượt kịch bản công bằng/0 vấn đề; build và
+  typecheck sạch. `TEST11` được giữ; `TESTV5` là fixture tài trợ/Bảng vàng.
+- SHA-256 kho TEST trên máy sau khi thêm `TESTV5`:
+  `FAF9167333BA9C5CD1C72065C82F06393650F133F90B7000D2EEA099565254DA`.
+- Nếu tiếp tục: đọc `AGENTS.md` và đầu `docs/TIEN-DO.md`; không sửa lại phần đã
+  xanh nếu không có bằng chứng lỗi. Hai ZIP handoff vẫn untracked có chủ ý.
 
 ## Trạng thái cuối phiên 09/08/2026 — v0.4.1
 

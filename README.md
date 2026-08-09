@@ -4,10 +4,11 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Phiên bản v0.4.1 · Trạng thái: giai đoạn 3 — dùng được cả mùa, trên nhiều thiết bị.** Ứng dụng
+> **Phiên bản v0.5.0 · Trạng thái: handoff Claude Design v3 đã triển khai.** Ứng dụng
 > chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
 > bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
-> tuần và tháng, đăng nhập bằng tài khoản Google. Xem [lộ trình](#lộ-trình).
+> tuần và tháng, đăng nhập Google, sự kiện đã tạo, nhà tài trợ và Bảng vàng.
+> Xem [lộ trình](#lộ-trình).
 
 ## Chạy thử ngay
 
@@ -29,12 +30,13 @@ Muốn thử ngay với CLB, sân và 11 người mẫu đã lưu sẵn thì dù
 npm run dev:test   # tạo nếu thiếu, sau đó mở http://localhost:3000
 ```
 
-Vào sân bằng mã `TEST11`; mật khẩu người chơi `test1234`, quản trị `admin1234`.
+Vào sân bằng mã `TEST11` để thử logic 4–11 người, hoặc `TESTV5` để xem đủ dải
+tài trợ và Bảng vàng; mật khẩu người chơi `test1234`, quản trị `admin1234`.
 Lệnh này luôn dùng `.data/test-sandbox.json`, kể cả máy đã cấu hình Google Sheet;
 chạy lại không nhân đôi hay reset buổi đang thử và không đụng dữ liệu thật.
 
 ```bash
-npm test                  # 498 bài kiểm thử
+npm test                  # 513 bài kiểm thử
 npm run scenarios         # 152 lượt thực chiến 4–11 người
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```
@@ -49,7 +51,12 @@ npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 > tệp khoá thứ hai: hai tệp khoá cho cùng một dự án thì sớm muộn cũng lệch nhau,
 > và khi đó máy này cài ra một bộ thư viện còn máy kia ra bộ khác.
 
-> **Lưu ý nâng từ v0.4.0:** v0.4.1 thay cookie thiết bị không ký bằng cookie HMAC
+> **Lưu ý nâng lên v0.5.0:** snapshot cũ được bổ sung mặc định, không xoá hoặc
+> reset tài khoản, CLB, sự kiện hay tỷ số. `ClientDataRefresh` chỉ dọn dữ liệu
+> tạm theo version và bảo toàn hồ sơ/lịch sử/hàng đợi chưa gửi. Lớp bảo vệ danh
+> tính HMAC của v0.4.1 vẫn giữ nguyên.
+>
+> **Lưu ý bảo mật từ v0.4.1:** v0.4.1 thay cookie thiết bị không ký bằng cookie HMAC
 > `httpOnly`, vì bản cũ từng phát mã máy trong trạng thái công khai. Không có hồ
 > sơ, lịch sử, tỷ số, tài khoản hay CLB nào bị xoá. Người đã đăng nhập vẫn được
 > nhận ra qua tài khoản; người chỉ dùng danh tính ẩn danh cũ có thể cần nhận lại

@@ -147,6 +147,19 @@ function checkPermission(
   ctx: Extract<Awaited<ReturnType<typeof resolveContext>>, { role: string }>,
 ): string | null {
   if (
+    [
+      "SetSponsorLogoShape",
+      "UpsertSponsor",
+      "RemoveSponsor",
+      "ReorderSponsors",
+      "UpsertAward",
+      "RemoveAward",
+    ].includes(command.type) &&
+    !ctx.ownerByAccount
+  ) {
+    return "Chỉ tài khoản đã tạo sự kiện mới quản lý nhà tài trợ và giải thưởng.";
+  }
+  if (
     (command.type === "ClaimPlayer" || command.type === "RequestJoin") &&
     !ctx.deviceId &&
     !ctx.userId

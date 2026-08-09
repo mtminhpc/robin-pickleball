@@ -12,6 +12,8 @@ import { err, ok, type Result } from "./commands";
 import { firstOpenRound, firstUnplayedRound, roundIsPlayed } from "./rounds";
 import type {
   EventState,
+  EventAward,
+  EventSponsor,
   Match,
   MatchId,
   Player,
@@ -21,8 +23,10 @@ import type {
 import {
   DEFAULT_CONFIG,
   closePresence,
+  emptyPresentation,
   isFrozen,
   openPresence,
+  withEventDefaults,
 } from "./types";
 
 export function emptyState(code: string): EventState {
@@ -30,7 +34,8 @@ export function emptyState(code: string): EventState {
     code,
     clubId: null,
     status: "draft",
-    config: { ...DEFAULT_CONFIG },
+    config: { ...DEFAULT_CONFIG, scoring: { ...DEFAULT_CONFIG.scoring } },
+    presentation: emptyPresentation(),
     players: [],
     matches: [],
     lastRound: 0,
@@ -61,10 +66,10 @@ export function apply(
   // Lệnh trùng vẫn tính là một dòng nhật ký đã đọc qua, nếu không thì ảnh chụp
   // sẽ mãi mãi bị coi là lỗi thời sau mỗi lần hàng đợi offline gửi lại.
   if (state.appliedCommandIds.includes(envelope.id)) {
-    return ok({ ...state, processed: state.processed + 1 });
+    return ok({ ...withEventDefaults(state), processed: state.processed + 1 });
   }
 
-  const next = structuredClone(state) as EventState;
+  const next = withEventDefaults(structuredClone(state) as EventState);
   const outcome = applyInPlace(next, envelope);
   if (!outcome.ok) return outcome;
 
@@ -302,8 +307,18 @@ function applyInPlace(
 ): Result<null> {
   const { command: c, at, actor } = envelope;
 
-  // Sự kiện đã chốt thì không nhận thêm gì, trừ việc xem lại nhật ký.
-  if (state.status === "finished" && c.type !== "UpdateConfig") {
+  // Sau khi chốt chỉ phần trình bày còn được sửa: nhà tài trợ có thể được
+  // nghiệm thu lại và giải thưởng chỉ được trao sau thời điểm này.
+  const allowedAfterFinish = new Set([
+    "UpdateConfig",
+    "SetSponsorLogoShape",
+    "UpsertSponsor",
+    "RemoveSponsor",
+    "ReorderSponsors",
+    "UpsertAward",
+    "RemoveAward",
+  ]);
+  if (state.status === "finished" && !allowedAfterFinish.has(c.type)) {
     return err("Sự kiện đã kết thúc, không thể thay đổi.");
   }
 
@@ -357,8 +372,115 @@ function applyInPlace(
 
     case "FinishEvent": {
       if (state.status !== "running") return err("Sự kiện chưa bắt đầu.");
+      const open = state.matches.some(
+        (m) => m.status === "scheduled" || m.status === "playing",
+      );
+      if (open) {
+        return err("Vẫn còn trận chưa hoàn tất. Hãy kết thúc sớm nếu muốn dừng ngay.");
+      }
       state.status = "finished";
       state.finishedAt = at;
+      return ok(null);
+    }
+
+    // ---- trình bày / thương mại -----------------------------------------
+    case "SetSponsorLogoShape": {
+      if (!(["square", "round", "transparent"] as const).includes(c.shape)) {
+        return err("Hình dạng logo không hợp lệ.");
+      }
+      state.presentation.sponsorLogoShape = c.shape;
+      return ok(null);
+    }
+
+    case "UpsertSponsor": {
+      const sponsor = validateSponsor(c.sponsor, at);
+      if (!sponsor.ok) return sponsor;
+      const existingIndex = state.presentation.sponsors.findIndex(
+        (item) => item.id === sponsor.value.id,
+      );
+      const next = [...state.presentation.sponsors];
+      const existing = existingIndex >= 0 ? next[existingIndex] : undefined;
+      const value: EventSponsor = {
+        ...sponsor.value,
+        createdAt: existing?.createdAt ?? at,
+        updatedAt: at,
+      };
+      if (existingIndex >= 0) next[existingIndex] = value;
+      else next.push(value);
+
+      if (value.tier !== "custom") {
+        const count = next.filter((item) => item.tier === value.tier).length;
+        if (count > 2) return err("Mỗi hạng tài trợ chuẩn chỉ được tối đa 2 logo.");
+      }
+      state.presentation.sponsors = sortSponsors(next);
+      return ok(null);
+    }
+
+    case "RemoveSponsor": {
+      const before = state.presentation.sponsors.length;
+      state.presentation.sponsors = state.presentation.sponsors.filter(
+        (item) => item.id !== c.sponsorId,
+      );
+      if (before === state.presentation.sponsors.length) {
+        return err("Không tìm thấy nhà tài trợ.");
+      }
+      return ok(null);
+    }
+
+    case "ReorderSponsors": {
+      const current = state.presentation.sponsors;
+      if (
+        c.sponsorIds.length !== current.length ||
+        new Set(c.sponsorIds).size !== current.length ||
+        c.sponsorIds.some((id) => !current.some((item) => item.id === id))
+      ) {
+        return err("Danh sách sắp xếp nhà tài trợ không hợp lệ.");
+      }
+      const positions = new Map(c.sponsorIds.map((id, index) => [id, index]));
+      state.presentation.sponsors = sortSponsors(
+        current.map((item) => ({ ...item, order: positions.get(item.id) ?? item.order })),
+      );
+      return ok(null);
+    }
+
+    case "UpsertAward": {
+      if (state.status !== "finished") {
+        return err("Chỉ được trao giải sau khi sự kiện đã kết thúc.");
+      }
+      const award = validateAward(state, c.award, at);
+      if (!award.ok) return award;
+      const existingIndex = state.presentation.awards.findIndex(
+        (item) => item.id === award.value.id,
+      );
+      if (
+        award.value.kind !== "custom" &&
+        state.presentation.awards.some(
+          (item) => item.kind === award.value.kind && item.id !== award.value.id,
+        )
+      ) {
+        return err("Mỗi bậc giải chuẩn chỉ được tạo một lần.");
+      }
+      const existing = existingIndex >= 0 ? state.presentation.awards[existingIndex] : undefined;
+      const value: EventAward = {
+        ...award.value,
+        createdAt: existing?.createdAt ?? at,
+        updatedAt: at,
+      };
+      if (existingIndex >= 0) state.presentation.awards[existingIndex] = value;
+      else state.presentation.awards.push(value);
+      state.presentation.awards = sortAwards(state.presentation.awards);
+      return ok(null);
+    }
+
+    case "RemoveAward": {
+      if (state.status !== "finished") {
+        return err("Chỉ được sửa giải sau khi sự kiện đã kết thúc.");
+      }
+      const before = state.presentation.awards.length;
+      state.presentation.awards = state.presentation.awards.filter(
+        (item) => item.id !== c.awardId,
+      );
+      if (before === state.presentation.awards.length) return err("Không tìm thấy giải.");
       return ok(null);
     }
 
@@ -809,4 +931,103 @@ function applyInPlace(
 
 function exhaustive(c: never): Result<null> {
   return err(`Lệnh không xác định: ${JSON.stringify(c)}`);
+}
+
+const SPONSOR_TIER_ORDER = {
+  diamond: 0,
+  gold: 1,
+  silver: 2,
+  partner: 3,
+  custom: 4,
+} as const;
+
+function validateSponsor(
+  input: Omit<EventSponsor, "createdAt" | "updatedAt">,
+  at: number,
+): Result<EventSponsor> {
+  const tiers = ["diamond", "gold", "silver", "partner", "custom"] as const;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.id)) return err("Mã nhà tài trợ không hợp lệ.");
+  const name = input.name.trim().slice(0, 60);
+  if (name.length < 2) return err("Tên nhà tài trợ phải có ít nhất 2 ký tự.");
+  if (!tiers.includes(input.tier)) return err("Hạng tài trợ không hợp lệ.");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.assetId)) return err("Mã ảnh logo không hợp lệ.");
+  const tierLabel = input.tierLabel?.trim().slice(0, 40);
+  if (input.tier === "custom" && (!tierLabel || tierLabel.length < 2)) {
+    return err("Hạng tự đặt cần có tên.");
+  }
+  return ok({
+    id: input.id,
+    name,
+    tier: input.tier,
+    ...(input.tier === "custom" ? { tierLabel } : {}),
+    assetId: input.assetId,
+    order: Number.isFinite(input.order) ? Math.max(0, Math.floor(input.order)) : 0,
+    createdAt: at,
+    updatedAt: at,
+  });
+}
+
+function sortSponsors(items: EventSponsor[]): EventSponsor[] {
+  return [...items].sort(
+    (a, b) =>
+      SPONSOR_TIER_ORDER[a.tier] - SPONSOR_TIER_ORDER[b.tier] ||
+      a.order - b.order ||
+      a.createdAt - b.createdAt,
+  );
+}
+
+const AWARD_ORDER = {
+  champion: 0,
+  runnerUp: 1,
+  third: 2,
+  encouragement: 3,
+  custom: 4,
+} as const;
+
+function validateAward(
+  state: EventState,
+  input: Omit<EventAward, "createdAt" | "updatedAt">,
+  at: number,
+): Result<EventAward> {
+  const kinds = ["champion", "runnerUp", "third", "encouragement", "custom"] as const;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.id)) return err("Mã giải không hợp lệ.");
+  if (!kinds.includes(input.kind)) return err("Bậc giải không hợp lệ.");
+  const label = input.label.trim().slice(0, 40);
+  const labels: Record<Exclude<EventAward["kind"], "custom">, readonly string[]> = {
+    champion: ["Vô địch", "Giải nhất"],
+    runnerUp: ["Á quân", "Giải nhì"],
+    third: ["Giải ba"],
+    encouragement: ["Khuyến khích"],
+  };
+  if (input.kind === "custom") {
+    if (label.length < 2) return err("Giải tự đặt cần có tên.");
+  } else if (!labels[input.kind].includes(label)) {
+    return err("Tên giải không khớp với bậc đã chọn.");
+  }
+  const recipientIds = [...new Set(input.recipientIds)];
+  if (recipientIds.length === 0) return err("Hãy chọn ít nhất một người nhận giải.");
+  const known = new Set(state.players.map((player) => player.id));
+  if (recipientIds.some((id) => !known.has(id))) return err("Giải có người nhận không tồn tại.");
+  if (!(["framed", "transparent"] as const).includes(input.trophyMode)) {
+    return err("Kiểu hiển thị cúp không hợp lệ.");
+  }
+  if (input.trophyAssetId && !/^[A-Za-z0-9_-]{1,64}$/.test(input.trophyAssetId)) {
+    return err("Mã ảnh cúp không hợp lệ.");
+  }
+  return ok({
+    id: input.id,
+    kind: input.kind,
+    label,
+    recipientIds,
+    ...(input.trophyAssetId ? { trophyAssetId: input.trophyAssetId } : {}),
+    trophyMode: input.trophyMode,
+    createdAt: at,
+    updatedAt: at,
+  });
+}
+
+function sortAwards(items: EventAward[]): EventAward[] {
+  return [...items].sort(
+    (a, b) => AWARD_ORDER[a.kind] - AWARD_ORDER[b.kind] || a.createdAt - b.createdAt,
+  );
 }
