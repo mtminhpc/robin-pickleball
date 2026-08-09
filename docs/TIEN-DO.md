@@ -15,7 +15,7 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.2.0 — Danh tính người chơi`. Ứng dụng đã chạy thật.**
+**Phiên bản hiện tại: `v0.2.1 — Dấu phiên bản triển khai`. Ứng dụng đã chạy thật.**
 Không còn phần mã nào đang làm dở trong đợt này.
 
 | | |
@@ -26,8 +26,30 @@ Không còn phần mã nào đang làm dở trong đợt này.
 | Vercel ↔ GitHub | Đã nối. Đẩy commit lên nhánh này là Vercel tự dựng lại |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-`npm test` 397 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
+`npm test` 400 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
+
+### Bàn giao bản vá `v0.2.1 — Dấu phiên bản triển khai` (09/08/2026)
+
+Sau khi push `v0.2.0`, `vercel ls robin-pickleball` cho thấy deployment mới nhất
+đã **Ready nhưng chỉ là Preview**; alias production `robin-pickleball.vercel.app`
+vẫn trỏ tới deployment cũ khoảng hai giờ trước. Đây là lý do không được kết luận
+“đã deploy” chỉ từ việc `git push` thành công.
+
+Bản vá này thêm `VersionBadge` vào root layout nên nó hiện trên mọi trang:
+
+- Vercel nối Git: `v0.2.1 · <7 ký tự đầu của commit>`.
+- Chạy trên máy: `v0.2.1 · local`.
+- Mobile: huy hiệu nằm trên thanh điều hướng dưới; desktop: sát góc dưới phải.
+
+Phiên bản lấy trực tiếp từ `package.json` qua `lib/version.ts`, không chép một
+con số riêng vào component. Ba bài test canh phiên bản package, cách cắt commit
+và nhãn `local`. Khi phát hành bản sau phải tăng version trong `package.json` và
+lockfile; giao diện sẽ tự theo.
+
+Sau khi commit/push bản vá này, phải chạy production deploy và kiểm lại cả hai
+điều: `vercel inspect https://robin-pickleball.vercel.app` báo `target production`
++ `status Ready`, và HTML giao diện chứa đúng `v0.2.1 · <commit mới>`.
 
 ### Bàn giao phiên `v0.2.0 — Danh tính người chơi` (09/08/2026)
 
@@ -258,7 +280,7 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
-| Chạy bộ kiểm thử | `npm test` (397 bài, ~15 giây) |
+| Chạy bộ kiểm thử | `npm test` (400 bài, ~15 giây) |
 | Soát cấu hình trước khi triển khai | `npm run check-env` |
 | Sinh `APP_SECRET` mới | `npm run new-secret` |
 | Quét công bằng 42 cấu hình | `npm run sim -- --matrix` |
@@ -501,7 +523,7 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **397 bài xanh** (`npm test`) — gồm quyền tự phục vụ, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng và khai giờ đến/về |
+| Kiểm thử tự động | **400 bài xanh** (`npm test`) — gồm quyền tự phục vụ, tài khoản vãng lai, ảnh người chơi, cảnh báo đổi vòng, khai giờ đến/về và dấu phiên bản deploy |
 | **Chạy thử trên Google Sheet THẬT** | **19 phép kiểm, 0 hỏng** — lập câu lạc bộ, tạo buổi, bốn người, xếp lịch, nhập tỷ số 11–7, tổng kết, rồi đọc lại từ một tiến trình khác để chắc dữ liệu nằm trên bảng tính |
 | Kiểm tra kiểu | `npm run typecheck` sạch |
 | Quét ma trận công bằng | **42 cấu hình, 0 cấu hình bị đánh dấu** |
@@ -735,7 +757,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            397 bài kiểm thử
+tests/            400 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —

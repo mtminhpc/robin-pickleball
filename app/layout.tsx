@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Archivo } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/QueryProvider";
+import { VersionBadge } from "@/components/VersionBadge";
 
 /**
  * Archivo là phông của bản thiết kế. Nạp qua `next/font` chứ không qua `@import`
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="vi" className={archivo.variable}>
       <body>
         <QueryProvider>{children}</QueryProvider>
+        <VersionBadge />
       </body>
     </html>
   );
