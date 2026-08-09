@@ -1,7 +1,7 @@
 # Tiến độ dự án
 
-Cập nhật: 08/08/2026 · nhánh `claude/pickleball-round-robin-app-fq8sja` · sau GĐ3
-và một phiên dọn nốt phần còn lại
+Cập nhật: 09/08/2026 · nhánh `claude/pickleball-round-robin-app-fq8sja` ·
+**đã chạy thật tại https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
 chạy thế nào, và việc gì còn dang dở. Hướng dẫn nối Google Sheet thật nằm riêng ở
@@ -15,42 +15,103 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-Mã nguồn **xong và đã kiểm chứng** tới hết GĐ3, cộng thêm bỏ gộp máy khỏi tài
-khoản và đệm tổng kết. `npm test` 217 bài xanh, `npm run build` sạch. Không có
+**Ứng dụng đã chạy thật.** Không còn việc triển khai nào chờ nữa.
+
+| | |
+|---|---|
+| Địa chỉ | https://robin-pickleball.vercel.app |
+| Dữ liệu | Google Sheet thật, đã kiểm bằng cách đọc lại 7 mã buổi |
+| Đăng nhập Google | **Đã bật và đã Publish** — ai có tài khoản Google cũng vào được |
+| Vercel ↔ GitHub | Đã nối. Đẩy commit lên nhánh này là Vercel tự dựng lại |
+| Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
+
+`npm test` 361 bài xanh, `npm run typecheck` và `npm run build` sạch. Không có
 việc nào đang dở dang giữa chừng trong mã.
 
-Bản nâng lên Next.js 16.3.0 nằm sẵn ở nhánh `claude/nang-next-16`, cố ý chưa gộp
-— xem [mục dưới](#nhánh-claudenang-next-16--làm-xong-chờ-gộp).
+Bản nâng lên Next.js 16.3.0 nằm sẵn ở nhánh `claude/nang-next-16`, **cố ý chưa
+gộp** — xem [mục dưới](#nhánh-claudenang-next-16--làm-xong-chờ-gộp). Giờ đã có
+một bản Next 15 chạy thật làm mốc so sánh, nên đánh vài buổi trên đó trước rồi
+mới nâng.
 
-Việc còn lại **không phải viết mã**, mà là **triển khai** — và nó đang chờ ba
-thứ chỉ chủ dự án làm được, vì đều cần đăng nhập vào tài khoản riêng:
+### Bảy biến môi trường trên Vercel
 
-1. Tạo service account Google + chia sẻ một Google Sheet (**bắt buộc**, thiếu là
-   bản thật từ chối khởi động)
-2. Tạo OAuth client để bật đăng nhập (tuỳ chọn)
-3. Đăng nhập Vercel
+Đều đã đặt ở môi trường **Production**. Không cần làm lại, ghi ở đây để biết cái
+nào phục vụ việc gì:
 
-Từng bước ở [SETUP.md](SETUP.md), kèm mục *Thứ tự phụ thuộc* giải quyết cái vòng
-lặp dễ vướng: redirect URI cần địa chỉ thật của bản deploy, mà địa chỉ đó chỉ có
-sau lần deploy đầu.
+| Biến | Dùng để | Thiếu thì sao |
+|---|---|---|
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Ghi vào Google Sheet | Bản thật **từ chối khởi động** |
+| `GOOGLE_PRIVATE_KEY` | ↑ | ↑ |
+| `SHEET_ID` | ↑ | ↑ |
+| `APP_SECRET` | Ký cookie phiên và cookie tài khoản | ↑ |
+| `GOOGLE_OAUTH_CLIENT_ID` | Đăng nhập Google | Nút đăng nhập lặng lẽ ẩn đi |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | ↑ | ↑ |
+| `APP_URL` | Dựng `redirect_uri` đúng khi ở sau proxy | `redirect_uri_mismatch` |
 
-### Bắt đầu lại trên máy mới
+Giá trị của cả bảy cũng nằm trong `.env.local` ngay trong thư mục dự án, và **tệp
+đó được OneDrive đồng bộ sang máy mới** — xem mục kế tiếp.
+
+Xem lại bất cứ lúc nào: `npx vercel env ls production` (chỉ hiện tên, giá trị đã
+mã hoá).
+
+### Bắt đầu lại trên máy mới (qua OneDrive)
+
+Thư mục dự án nằm trong OneDrive, nên máy mới **đã có sẵn gần như mọi thứ** —
+kể cả `.git`, `.env.local` và `.vercel`. Khác hẳn tình huống clone từ GitHub.
+
+Đợi OneDrive đồng bộ xong (biểu tượng dấu tích xanh trên thư mục), rồi:
 
 ```powershell
-npm install        # BẮT BUỘC chạy lại — xem lưu ý OneDrive bên dưới
-npm test           # 217 bài, xác nhận máy mới chạy đúng
+npm install
+```
+
+```powershell
+npm test
+```
+
+```powershell
 npm run dev
 ```
 
-Ba thứ **không nằm trong git** nên máy mới sẽ không có, và đó là đúng:
+**`npm install` vẫn bắt buộc**, dù `node_modules` có được đồng bộ. Nó chứa hàng
+chục nghìn tệp nhỏ và cả tệp nhị phân biên dịch riêng cho từng máy — để OneDrive
+chép qua thì vừa chậm hàng giờ vừa hay hỏng giữa chừng. Cách nhanh nhất là xoá đi
+rồi cài lại:
 
-| Thiếu gì | Hậu quả | Cách xử lý |
+```powershell
+Remove-Item -Recurse -Force node_modules; npm install
+```
+
+Cái gì có sẵn, cái gì phải làm lại:
+
+| Thứ | Máy mới có? | Ghi chú |
 |---|---|---|
-| `.env.local` | Chạy ở kho thử, không nối Google Sheet | Tạo lại theo [SETUP.md](SETUP.md). Chạy thử ở nhà thì không cần |
-| `.data\` | Không có dữ liệu buổi đánh cũ | Bình thường — nó chỉ là dữ liệu bấm thử |
-| `node_modules\` | Chưa cài | `npm install` |
+| Mã nguồn + `.git` | ✅ OneDrive chép sang | Lịch sử commit nguyên vẹn |
+| `.env.local` (7 biến, có bí mật) | ✅ | **Không nằm trong git**, nhưng OneDrive không quan tâm `.gitignore` |
+| `.env.local.bak`, `client_secret_*.json` | ✅ | Bản sao cùng những bí mật đó |
+| `.vercel\` (liên kết dự án) | ✅ | Nhưng vẫn phải `npx vercel login` — đăng nhập nằm ở hồ sơ người dùng Windows, không nằm trong dự án |
+| `.data\` (kho tệp chạy thử) | ✅ | Chỉ là dữ liệu bấm thử, xoá được |
+| `node_modules\` | ⚠️ có nhưng đừng tin | Cài lại như trên |
+| Đăng nhập Vercel CLI | ❌ | `npx vercel login` |
+| Đăng nhập Google Cloud | ❌ | Chỉ cần khi đụng tới OAuth hoặc service account |
 
-### Bốn cái bẫy đã mất thời gian, đừng vấp lại
+### Ba điều về OneDrive, đọc trước khi mở trên máy thứ hai
+
+1. **Đừng mở dự án trên hai máy cùng lúc.** OneDrive không biết gì về git; hai
+   máy cùng ghi vào `.git` là đường chắc chắn nhất để hỏng kho lưu trữ. Dùng xong
+   máy nào thì đóng trình soạn thảo và tắt máy chủ dev, đợi đồng bộ xong mới mở
+   máy kia.
+
+2. **Bí mật của bạn đang nằm trên đám mây OneDrive.** `.env.local`,
+   `.env.local.bak` và `client_secret_*.json` chứa khoá ghi vào Google Sheet và
+   mã bí mật OAuth. Git đã chặn cả ba, nhưng OneDrive thì vẫn chép lên. Đó là cái
+   giá của việc dùng OneDrive để chuyển máy — chấp nhận được vì đây là OneDrive
+   riêng của bạn, nhưng **đừng chia sẻ thư mục này cho ai**.
+
+3. **Xoá `client_secret_*.json` khi xong việc.** Mọi giá trị trong đó đã nằm ở
+   Vercel và `.env.local` rồi, giữ thêm một bản chỉ tăng chỗ để lộ.
+
+### Sáu cái bẫy đã mất thời gian, đừng vấp lại
 
 | Bẫy | Triệu chứng | Cách tránh |
 |---|---|---|
@@ -58,6 +119,8 @@ Ba thứ **không nằm trong git** nên máy mới sẽ không có, và đó l�
 | **`npm run build` khi `npm run dev` đang chạy** | Trang mất sạch định dạng, chữ đen nền trắng | Dừng dev trước. Hai lệnh cùng ghi vào `.next` |
 | **Ghi thẳng vào `.data\sheet.json` từ tiến trình khác** trong lúc máy chủ chạy | Kết quả lúc đạt lúc hỏng với cùng một đoạn mã | Đã sửa hẳn: kho nay đọc lại tệp trước mỗi thao tác. Nhưng vẫn còn lớp đệm 60 giây của Next cho câu lạc bộ và tài khoản |
 | **`node_modules` nằm trong OneDrive** | Đồng bộ rất chậm, thỉnh thoảng hỏng tệp giữa chừng | Đừng chờ OneDrive đồng bộ `node_modules`. Máy mới cứ `npm install` lại từ đầu |
+| **OneDrive khoá tệp trong `.next` lúc dev đang chạy** | Máy chủ dev đột nhiên trả lỗi 500 hàng loạt, log hiện `EBUSY: resource busy or locked, open '.next\types\app\layout.ts'` | Dừng `npm run dev` rồi chạy lại. Không phải lỗi trong mã — OneDrive giữ tệp trong lúc Next muốn ghi đè. Nếu tái diễn nhiều, tạm dừng đồng bộ OneDrive trong lúc code |
+| **Tin vào log console của trình duyệt sau khi sửa mã** | Thấy hàng loạt `ReferenceError: X is not defined` dù mã đã đúng | Đó là lịch sử tích luỹ từ những lần Fast Refresh hỏng lúc đang sửa dở. Mở tab mới rồi đọc lại console — trắng thì là sạch thật |
 
 ---
 
@@ -115,7 +178,7 @@ Chỉ cần `cd` vào thư mục rồi `npm run dev`. Không phải `npm install
 |---|---|
 | Dừng máy chủ | `Ctrl + C` trong PowerShell |
 | Xoá sạch dữ liệu, chơi lại từ đầu | Xoá thư mục `.data` |
-| Chạy bộ kiểm thử | `npm test` (217 bài, ~15 giây) |
+| Chạy bộ kiểm thử | `npm test` (361 bài, ~15 giây) |
 | Soát cấu hình trước khi triển khai | `npm run check-env` |
 | Sinh `APP_SECRET` mới | `npm run new-secret` |
 | Quét công bằng 42 cấu hình | `npm run sim -- --matrix` |
@@ -358,7 +421,7 @@ tới đúng giờ chỉ còn 4–5).
 
 | Loại | Kết quả |
 |---|---|
-| Kiểm thử tự động | **217 bài xanh** (`npm test`) — thêm 5 bài cho việc gỡ máy khỏi tài khoản và 5 bài cho kho Google Sheet |
+| Kiểm thử tự động | **361 bài xanh** (`npm test`) — thêm 5 bài cho việc gỡ máy khỏi tài khoản và 5 bài cho kho Google Sheet |
 | **Chạy thử trên Google Sheet THẬT** | **19 phép kiểm, 0 hỏng** — lập câu lạc bộ, tạo buổi, bốn người, xếp lịch, nhập tỷ số 11–7, tổng kết, rồi đọc lại từ một tiến trình khác để chắc dữ liệu nằm trên bảng tính |
 | Kiểm tra kiểu | `npm run typecheck` sạch |
 | Quét ma trận công bằng | **42 cấu hình, 0 cấu hình bị đánh dấu** |
@@ -500,23 +563,23 @@ gia, và ô nhập mật khẩu có thêm dòng *"Bạn tạo buổi này mà qu
 
 ### Việc nhỏ chưa làm
 
-- **Triển khai Vercel.** Tôi không deploy hộ được vì cần tài khoản của bạn. Mã đã
-  sẵn sàng: nối repo vào Vercel, dán bốn biến môi trường trong
-  [SETUP.md](SETUP.md) là chạy. **Bắt buộc phải có biến Google** — kho tệp cục bộ
-  không sống được trên Vercel, và ứng dụng cố ý báo lỗi ngay lúc khởi động thay vì
-  âm thầm mất dữ liệu.
-
-  > Phần Google Sheet **đã nối và chạy thật rồi**: service account, bảng tính,
-  > `.env.local`, và 19 phép kiểm chạy trọn một buổi đánh trên Sheet thật. Còn
-  > lại đúng phần Vercel.
-- **Bật đăng nhập Google.** Cần OAuth client trong tài khoản Google Cloud của
-  bạn nên tôi không làm hộ được. Mã đã sẵn sàng: điền hai biến trong
-  [SETUP.md](SETUP.md#đăng-nhập-bằng-tài-khoản-google-tuỳ-chọn) là nút hiện ra.
-
-  > Từ đợt ảnh đại diện thật, hai biến này quyết định **nhiều hơn trước**: thiếu
-  > chúng thì không ai đăng nhập được, mà không đăng nhập thì không đặt được ảnh
-  > thật và không lấy lại được quyền chủ khi quên mật khẩu. Mọi thứ vẫn chạy như
-  > cũ, chỉ là ba tính năng đó nằm im.
+- **Dọn dữ liệu thử trên Google Sheet thật.** Bảng tính đang có rác từ những lần
+  bấm thử, và nay chúng đọc được qua một trang web công khai (tuy phải biết mã
+  sáu ký tự): các buổi tên `THỬ — xoá được buổi` (mã `JP6XGT`, `RVUQ3T`,
+  `TDVF23`), `THU - bam tay tren Sheet that` (`4YKN4W`), `Buoi toi thu ba`
+  (`WWFDYH`), `Tối thứ ba · Sân Hoa Lư` (`H9CH6W`), cùng các tab `log__*` và
+  `view__*` đi kèm. Trong tab `clubs` cũng có `THỬ — xoá được CLB`,
+  `CLB Toi Thu Ba`, `TÊN CŨ`/`TÊN MỚI SỬA TAY`.
+- **Xoá `client_secret_*.json`** trong thư mục dự án. Mọi giá trị đã nằm ở Vercel
+  và `.env.local`.
+- **Thay mã bí mật OAuth.** Mã hiện dùng đã từng hiện ra trong một ảnh chụp màn
+  hình gửi qua chat. Rủi ro thấp — nó vô dụng nếu không kiểm soát được một trong
+  hai địa chỉ redirect — nhưng app nay đã Publish nên không còn hàng rào test
+  user che nữa. Cách thay: **Clients** → `Robin local` → *Add secret*, xoá mã cũ,
+  *Download JSON*, rồi đẩy lên Vercel và deploy lại.
+- **Màn hình khai trước có mặt.** Lệnh `DeclareAvailability` và phần xét quyền đã
+  chạy, kiểm thử đã phủ, nhưng **chưa có giao diện nào gọi tới nó**. Người chơi
+  hiện không tự khai "tôi đến muộn, 8 giờ mới tới" được.
 
 ### Đã cân nhắc và cố ý không làm
 
@@ -591,7 +654,7 @@ lib/sheets/       Google Sheet thật, kho chạy thử, bộ nhớ đệm, bả
 lib/auth/         Mật khẩu, cookie phiên, chặn dò, OAuth Google, ký HMAC
 lib/testing/      Bộ khung chạy thử một sự kiện bằng lệnh
 scripts/          Mô phỏng dòng lệnh, tạo sẵn tab trong Sheet
-tests/            217 bài kiểm thử
+tests/            361 bài kiểm thử
 ```
 
 Nguyên tắc giữ suốt dự án: `lib/domain` và `lib/scheduler` là **hàm thuần** —
