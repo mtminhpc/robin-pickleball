@@ -35,8 +35,15 @@ hay commit hai ZIP handoff của người dùng.
   đặt nó thẳng trên nền giấy. Muốn chỉnh thì kéo chặng **tối** chứ đừng làm tối cả dải.
 - `/api/events` trả thêm `tier`, `tierLabel`, `sponsorLogoShape` cho thẻ sự kiện trang
   chủ. `ImageEditor` có thêm `variant="tile"` và khe `aside`.
-- Cổng: 579/579 test, 152 lượt công bằng/0 vấn đề, typecheck và build sạch. Kho thử
-  không đổi (SHA `07f6e822…`).
+- Đã phát hành thật: tag `v0.7.0` = `41e4f39`, `main` = `9f9a98d`, Production kiểm qua
+  alias công khai với `data-app-version="v0.7.0 · 9f9a98d"` và
+  `data-app-codename="Ánh kim"`.
+- Cổng: 581/581 test, 152 lượt công bằng/0 vấn đề, typecheck và build sạch. **Không
+  chạy `npm run lint`** — ESLint chưa cấu hình, lệnh đó mở hỏi tương tác rồi treo.
+- Kho thử `.data/test-sandbox.json` **đã đổi** so với các phiên trước: có thêm buổi
+  thật `UPC3YR` do chủ dự án tạo khi thử tay. Đừng xoá nó, và đừng dùng SHA-256 của
+  tệp làm mốc đối chiếu nữa — kiểm `TEST11`/`TESTV5`/`TESTV6` còn đủ dữ liệu thì đúng
+  hơn.
 
 ## Trạng thái cuối phiên 10/08/2026 — v0.6.2
 

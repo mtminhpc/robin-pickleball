@@ -12,7 +12,8 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 
 ## Trạng thái đã chốt
 
-- Phiên bản mã hiện tại: `v0.7.0 «Ánh kim»`, nhánh phát hành `claude/v0.7.0-anh-kim`.
+- Phiên bản mã hiện tại: `v0.7.0 «Ánh kim»` — tag `v0.7.0` = `41e4f39`, nhánh phát
+  hành `claude/v0.7.0-anh-kim`, `main` = `9f9a98d` (hơn tag một commit tài liệu).
   Tag/Production phải cùng trỏ bản đã qua cổng kiểm định; xem huy hiệu dưới phải giao
   diện để biết commit đang chạy.
 - **Mỗi số nhỏ (minor) mang một tên hiệu**, khai ở `APP_CODENAME` trong `lib/version.ts`.
@@ -26,7 +27,7 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 - `v0.6.1` đã phát hành (tag `v0.6.1` = `e648329`). `v0.6.2` là bản vá cuộc đua
   `ensureTab` phát hiện ngay ở lượt deploy đó (tag `v0.6.2` = `a30a0ab`) — xem mục dưới.
 - Huy hiệu Production hiện commit **mới nhất của `main`**, nên commit chỉ-sửa-tài-liệu
-  cũng làm phần hash đổi trong khi mã chạy không đổi. Đối chiếu phần `v0.6.x` trước,
+  cũng làm phần hash đổi trong khi mã chạy không đổi. Đối chiếu phần `vX.Y.Z` trước,
   hash sau; muốn biết mã nào đang chạy thì so với tag.
 - Mốc Production trước đợt v0.6.0 là `v0.5.1 · a54125f`; sau khi đẩy `main` phải kiểm
   alias và huy hiệu lại, không coi push nhánh tính năng là đã phát hành.
@@ -163,7 +164,13 @@ vào nó.
   fast-forward/merge commit đã kiểm vào `main` rồi push `main`.
 - Sau push không kết luận đã deploy. Phải chạy
   `vercel inspect https://robin-pickleball.vercel.app`, đợi `target production`
-  + `status Ready`, rồi kiểm HTML có đúng `vX.Y.Z · <7 ký tự commit>`.
+  + `status Ready`, rồi kiểm HTML có đúng `vX.Y.Z · <7 ký tự commit>`. Lệnh gọn:
+  `curl -s https://robin-pickleball.vercel.app | grep -o 'data-app-version="[^"]*"'`.
+  `vercel inspect` đọc **alias**, nên nếu nó vẫn trả deployment cũ thì lượt mới còn
+  đang build — `vercel ls robin-pickleball` xem trạng thái, đừng kết luận sớm.
+- Bốn lệnh là cổng phát hành: `npm test`, `npm run scenarios`, `npm run typecheck`,
+  `npm run build`. **Không có lint** — `next lint` chưa được cấu hình, chạy vào là nó
+  mở hỏi tương tác rồi treo.
 - `claude/nang-next-16` là bản thí nghiệm lịch sử từ mốc `d24f924`, cũ hơn bốn
   bản phát hành và đụng các tệp bảo mật vừa đổi. **Không merge nhánh đó.** Muốn
   nâng Next 16 phải tạo nhánh mới từ `v0.5.0` và làm lại có kiểm định.
@@ -174,3 +181,14 @@ vào nó.
 2. `docs/TIEN-DO.md`
 3. `README.md`
 4. `docs/SETUP.md` khi đụng Google/Vercel/OAuth
+
+## Hai tệp ZIP ở gốc kho
+
+`Mobile app design request-handoff_v3.zip` và `Mobile app design-handoff.zip` là bản
+thiết kế gốc từ Claude Design, **untracked có chủ ý**. Đừng commit, đừng sửa, đừng
+xoá. Cần đọc thì giải nén ra thư mục tạm.
+
+Bản `v3` là bản đang có hiệu lực cho phần nhà tài trợ và Bảng vàng: mở
+`project/Robin Pickleball - Nhà tài trợ.dc.html`, hệ ánh kim nằm ở khối `<style>` đầu
+tệp (`.f-*`, `.mt-*`, `.scr`). Khi bản dựng lệch bản thiết kế, **bản thiết kế đúng** —
+trừ những chỗ đã ghi rõ là lệch có chủ ý trong `docs/TIEN-DO.md`.

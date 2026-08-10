@@ -27,19 +27,23 @@ qua điện thoại thì "bản Ánh kim" dễ nói hơn dãy số. Bản vá gi
 | Địa chỉ | https://robin-pickleball.vercel.app |
 | Production đang chạy | `v0.7.0 — Ánh kim`, đã kiểm huy hiệu qua alias công khai |
 | Cách đọc huy hiệu | Huy hiệu hiện commit **mới nhất của `main`**, nên một commit chỉ-sửa-tài-liệu cũng làm phần hash đổi mà mã chạy vẫn y nguyên — so phần `v0.x.y` trước, hash sau, tên hiệu chỉ để gọi tên |
-| `main` / nhánh / tag | `main` = `origin/main` = `claude/v0.7.0-anh-kim`; tag `v0.7.0`. Các mốc trước: `v0.6.2` (`a30a0ab`), `v0.6.1` (`e648329`) |
+| `main` / nhánh / tag | Tag `v0.7.0` = **`41e4f39`** (mã chạy). `main` = `origin/main` = **`9f9a98d`**, hơn tag đúng một commit chỉ-sửa-tài-liệu. Nhánh phát hành `claude/v0.7.0-anh-kim` đã đẩy lên GitHub. Mốc trước: `v0.6.2` (`a30a0ab`), `v0.6.1` (`e648329`) |
 | Dữ liệu | Google Sheet thật, đã kiểm bằng cách đọc lại 7 mã buổi |
 | Đăng nhập Google | **Đã bật và đã Publish** — ai có tài khoản Google cũng vào được |
 | Vercel ↔ GitHub | Đã nối. Nhánh thường → Preview; `main` → Production |
 | GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-Các cổng trên mã phát hành đã xanh: `npm test` 579/579; `npm run scenarios`
+Các cổng trên mã phát hành đã xanh: `npm test` 581/581; `npm run scenarios`
 152 lượt/0 vấn đề; `npm run typecheck` và `npm run build` sạch.
+
+> `npm run lint` **không chạy được**: dự án chưa cấu hình ESLint nên `next lint` mở
+> hỏi tương tác rồi treo. Đừng cắm nó vào cổng phát hành hay vào hook; bốn lệnh trên
+> mới là cổng.
 
 ### Chưa kiểm — việc đầu tiên của phiên sau
 
-Phần này quan trọng hơn mọi mục khác trong tệp: **đừng đọc "579/579 xanh" thành "mọi
+Phần này quan trọng hơn mọi mục khác trong tệp: **đừng đọc "581/581 xanh" thành "mọi
 thứ đã được người thật dùng thử".**
 
 - **Quản lý nhà tài trợ (v0.7.0): đã chạy cục bộ, chưa chạy trên Production.** Chủ dự
@@ -121,6 +125,22 @@ mọi điểm**, và người dùng nói thẳng là xấu. Đối chiếu lại
   Đừng đọc con số đổi này thành "kho thử bị hỏng".
 - Không đụng miền nghiệp vụ, lệnh, quyền hay lược đồ dữ liệu. Đây thuần tầng trình bày
   cộng ba trường đọc thêm ở `/api/events`.
+
+**Sửa phần nhìn tài trợ/giải thưởng thì mở đúng những tệp này:**
+
+| Tệp | Giữ gì | Màn trong bản thiết kế |
+|---|---|---|
+| `components/Metal.tsx` | Gradient khung/chữ, `MetalFrame`, `MetalText`, `TrophyIcon`, ánh xạ hạng → chất liệu | 1g, 2c |
+| `components/SponsorStrip.tsx` | Dải dưới băng tiêu đề, cả ba hình dạng, hộp thoại *Tất cả* | 1d, 1e, 1f |
+| `components/SponsorManager.tsx` | Màn quản lý, chip chọn hạng, khối thêm inline | 1h |
+| `components/AwardsBoard.tsx` | Bảng vàng và hộp thoại trao giải | 2a, 2b |
+| `app/e/[code]/standings/page.tsx` | Đánh số mục, cúp nhỏ ở hàng xếp hạng | 2a |
+| `app/page.tsx` + `app/api/events/route.ts` | Hàng tài trợ trên thẻ sự kiện, ba trường mới | 1c |
+| `components/ImageEditor.tsx` | Ô tải ảnh nét đứt (`variant="tile"`) | 1h, 2b |
+
+Bản thiết kế gốc nằm trong `Mobile app design request-handoff_v3.zip` ở gốc kho —
+**untracked có chủ ý, đừng commit và đừng sửa**. Giải nén ra thư mục tạm mà đọc; hệ
+ánh kim nằm ở khối `<style>` đầu tệp `.dc.html` (các lớp `.f-*`, `.mt-*`, `.scr`).
 
 ### Ghi chú khoá phiên 10/08/2026 — v0.6.2
 
@@ -634,10 +654,12 @@ Cái gì có sẵn, cái gì phải làm lại:
 3. **Xoá `client_secret_*.json` khi xong việc.** Mọi giá trị trong đó đã nằm ở
    Vercel và `.env.local` rồi, giữ thêm một bản chỉ tăng chỗ để lộ.
 
-### Tám cái bẫy đã mất thời gian, đừng vấp lại
+### Mười cái bẫy đã mất thời gian, đừng vấp lại
 
 | Bẫy | Triệu chứng | Cách tránh |
 |---|---|---|
+| **Chạy `npm run lint`** | Lệnh mở hỏi "How would you like to configure ESLint?" rồi treo | Dự án chưa cấu hình ESLint. Cổng phát hành là `npm test`, `npm run scenarios`, `npm run typecheck`, `npm run build` — không có lint |
+| **Dùng SHA-256 của `.data/test-sandbox.json` làm mốc đối chiếu** | Băm khác mốc ghi trong tài liệu, tưởng kho thử hỏng | Mỗi lần có người thử tay trên `dev:test` là kho đổi — đó là điều bình thường. Kiểm bằng việc `TEST11`/`TESTV5`/`TESTV6` còn đủ dữ liệu, đừng so chuỗi băm |
 | **Thêm tab Google Sheet mới rồi đọc nó từ đường nóng** | Lần gọi đầu sau deploy trả 500 rồi tự khỏi; request khác cùng lúc lại 200 | Nhiều hàm serverless cùng chạy `ensureTab` và đua nhau `addSheet`. Đã vá ở v0.6.2 — thua cuộc đua thì coi như xong. Đừng cho rằng lượt chạy đầu là tuần tự |
 | **Chạy `next build` rồi `next dev` liên tiếp trên OneDrive** | `[Error: EINVAL: invalid argument, readlink '.next\...']`, dev không khởi động nổi | `rm -rf .next` rồi chạy lại. Không phải lỗi mã — hai lệnh để lại `.next` ở dạng OneDrive không đọc symlink được |
 | **Sửa tệp tiếng Việt bằng PowerShell** (`Get-Content -Raw` + `-replace` + ghi lại) | Toàn bộ dấu tiếng Việt biến thành `Tiáº¿n Ä‘á»™` | Chỉ dùng công cụ soạn thảo. PowerShell 5.1 đọc mặc định theo bảng mã ANSI nên hỏng mã hoá UTF-8 |
