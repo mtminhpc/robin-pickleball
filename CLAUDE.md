@@ -11,6 +11,25 @@ Không coi một `git push` là đã phát hành: nhánh tính năng chỉ tạo
 còn Production đi từ `main` và phải được kiểm lại qua alias công khai. Không sửa
 hay commit hai ZIP handoff của người dùng.
 
+## Trạng thái cuối phiên 10/08/2026 — v0.6.2
+
+- `v0.6.1` đã phát hành thật (tag `v0.6.1`, `main` = `e648329`, Production huy hiệu
+  `v0.6.1 · e648329`). `v0.6.2` là bản vá đi ngay sau nó.
+- **Lỗi thật quan sát được ở lượt deploy v0.6.1 đầu tiên**: `/e/HY62PJ` trả 500 trong
+  khi `/api/events/HY62PJ/state` trả 200 ở đúng khoảnh khắc đó, rồi tự khỏi. Nguyên
+  nhân: `ensureTab` trong `lib/sheets/google.ts` là check-then-act không nguyên tử —
+  hai hàm serverless cùng là hàm đầu tiên đọc `event_deletions`, cùng thấy tab chưa
+  có, cùng gọi `addSheet`; Google từ chối cái đến sau và lỗi đó nổi thẳng thành 500.
+- Trước v0.6.1 rủi ro này nhỏ vì các tab mới chỉ được tạo từ những đường hẹp. Từ
+  v0.6.1 `event_deletions` được đọc trong `readEvent` — đường mà **mọi** trang và API
+  đều đi qua — nên bán kính ảnh hưởng rộng hẳn.
+- Bản vá: thua cuộc đua không còn là lỗi. `addSheet` hỏng thì đọc lại danh sách tab;
+  tab đã có nghĩa là ai đó tạo hộ, coi như xong, và **không** ghi thêm dòng tiêu đề
+  (người thắng đã ghi). Kiểm bằng trạng thái thật chứ không dò chuỗi lỗi của Google.
+- `tests/google.test.ts` thêm 4 bài. Bài "thua cuộc đua" đã được xác nhận là **fail
+  nếu gỡ bản vá** — nó canh đúng thứ cần canh, không phải bài xanh vô nghĩa.
+- Cổng: 579/579 test, 152 lượt công bằng/0 vấn đề, build và typecheck sạch.
+
 ## Trạng thái cuối phiên 10/08/2026 — v0.6.1
 
 - Nhánh `codex/v0.6.1-unlimited-sponsors-event-delete`, dựng tiếp phần Codex làm dở

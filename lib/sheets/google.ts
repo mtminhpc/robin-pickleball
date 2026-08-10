@@ -129,6 +129,21 @@ export class GoogleSheetsClient implements SheetsClient {
     return [...(await this.loadSheetIds()).keys()];
   }
 
+  /**
+   * Tạo tab nếu chưa có.
+   *
+   * Hai lần đọc trước khi ghi vẫn **không** làm việc này nguyên tử: đọc rồi mới ghi
+   * thì hai hàm serverless vẫn có thể cùng lọt qua và cùng gọi `addSheet`. Google
+   * từ chối cái đến sau, và trước v0.6.1 lời từ chối đó nổi thẳng lên thành 500.
+   *
+   * Chuyện đó đã xảy ra thật ở lượt deploy v0.6.1 đầu tiên. Nó nghiêm trọng hơn các
+   * đợt thêm tab trước vì `event_deletions` được đọc từ `readEvent` — đường nóng nhất
+   * của cả ứng dụng, nên mọi trang và mọi API đều có thể là hàm đầu tiên tạo nó.
+   *
+   * Cách xử: thua cuộc đua thì **không phải lỗi**. Đọc lại danh sách tab; tab đã có
+   * nghĩa là ai đó vừa tạo hộ, coi như xong. Kiểm bằng trạng thái thật chứ không dò
+   * chuỗi lỗi của Google — lời văn ấy có thể đổi hoặc đổi ngôn ngữ bất cứ lúc nào.
+   */
   async ensureTab(tab: string, headers: readonly string[]): Promise<void> {
     const known = await this.loadSheetIds();
     if (known.has(tab)) return;
@@ -136,12 +151,18 @@ export class GoogleSheetsClient implements SheetsClient {
     // Có thể một hàm khác vừa tạo tab này. Đọc lại trước khi kết luận là chưa có.
     if ((await this.loadSheetIds(true)).has(tab)) return;
 
-    await this.call(`${API}/${this.config.spreadsheetId}:batchUpdate`, {
-      method: "POST",
-      body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: tab } } }],
-      }),
-    });
+    try {
+      await this.call(`${API}/${this.config.spreadsheetId}:batchUpdate`, {
+        method: "POST",
+        body: JSON.stringify({
+          requests: [{ addSheet: { properties: { title: tab } } }],
+        }),
+      });
+    } catch (error) {
+      // Người thắng cuộc đua cũng ghi dòng tiêu đề, nên trả về ở đây là đủ.
+      if ((await this.loadSheetIds(true)).has(tab)) return;
+      throw error;
+    }
     await this.loadSheetIds(true);
 
     await this.batch([{ kind: "append", tab, values: [[...headers]] }]);

@@ -32,10 +32,12 @@ const { privateKey } = generateKeyPairSync("rsa", {
  * serverless khác vừa tạo thêm tab.
  */
 function fakeGoogle(tabs: string[]) {
-  const calls = { token: 0, meta: 0, values: 0 };
+  const calls = { token: 0, meta: 0, values: 0, addSheet: 0, appendCells: 0 };
   /** Các dải thật sự được gửi lên, theo từng lời gọi. */
   const sentRanges: string[][] = [];
   const state = { tabs };
+  /** Cắm vào giữa lời gọi `addSheet` để dựng lại một cuộc đua giữa hai hàm. */
+  const hooks: { onAddSheet?: (title: string) => void } = {};
 
   const fetchImpl = async (url: string | URL, init?: RequestInit) => {
     const href = String(url);
@@ -62,10 +64,36 @@ function fakeGoogle(tabs: string[]) {
       });
     }
 
+    if (href.endsWith(":batchUpdate")) {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        requests?: Array<{ addSheet?: { properties: { title: string } }; appendCells?: unknown }>;
+      };
+      const added = body.requests?.[0]?.addSheet?.properties.title;
+
+      if (added !== undefined) {
+        calls.addSheet++;
+        // Một hàm serverless khác có thể vừa tạo tab này xong.
+        if (hooks.onAddSheet) hooks.onAddSheet(added);
+        if (state.tabs.includes(added)) {
+          return new Response(
+            JSON.stringify({
+              error: { code: 400, message: `A sheet with the name "${added}" already exists.` },
+            }),
+            { status: 400, headers: { "content-type": "application/json" } },
+          );
+        }
+        state.tabs = [...state.tabs, added];
+        return json({ replies: [{}] });
+      }
+
+      calls.appendCells++;
+      return json({ replies: [{}] });
+    }
+
     throw new Error(`Bài kiểm thử chưa lo tới lời gọi này: ${href} ${init?.method ?? "GET"}`);
   };
 
-  return { calls, sentRanges, state, fetchImpl };
+  return { calls, sentRanges, state, hooks, fetchImpl };
 }
 
 function json(body: unknown) {
@@ -173,6 +201,88 @@ describe("đọc dải ô từ Google Sheet", () => {
         [],
         [["clubs!A:F"]],
       ]);
+    } finally {
+      g.restore();
+    }
+  });
+});
+
+/**
+ * Cuộc đua tạo tab.
+ *
+ * Đây là lỗi thật ở lượt deploy `v0.6.1` đầu tiên: `/e/HY62PJ` trả 500 trong khi
+ * `/api/events/HY62PJ/state` trả 200 ở đúng khoảnh khắc đó. Hai hàm serverless cùng
+ * là hàm đầu tiên đọc `event_deletions`, cùng thấy tab chưa có, cùng gọi `addSheet`;
+ * Google từ chối cái đến sau và lời từ chối ấy nổi thẳng lên thành 500.
+ *
+ * Từ v0.6.1 tab đó được đọc trong `readEvent` — đường mà mọi trang và mọi API đều đi
+ * qua — nên thua cuộc đua phải là chuyện bình thường, không phải lỗi.
+ */
+describe("tạo tab khi nhiều hàm cùng chạy", () => {
+  it("thua cuộc đua thì coi như xong, không ném lỗi và không ghi đè tiêu đề", async () => {
+    const g = fresh(["events"]);
+    try {
+      // Đúng giữa lời gọi `addSheet` của mình, một hàm khác tạo xong tab.
+      g.hooks.onAddSheet = (title) => {
+        g.state.tabs = [...g.state.tabs, title];
+      };
+
+      await expect(
+        g.client.ensureTab("event_deletions", ["event_code", "action"]),
+      ).resolves.toBeUndefined();
+
+      expect(g.calls.addSheet).toBe(1);
+      // Người thắng cuộc đua đã ghi dòng tiêu đề rồi. Ghi thêm lần nữa sẽ thành hai
+      // dòng tiêu đề, và dòng thứ hai bị đọc nhầm thành dữ liệu.
+      expect(g.calls.appendCells).toBe(0);
+    } finally {
+      g.restore();
+    }
+  });
+
+  it("tab chưa có thì vẫn tạo và ghi đúng một dòng tiêu đề", async () => {
+    const g = fresh(["events"]);
+    try {
+      await g.client.ensureTab("event_deletions", ["event_code", "action"]);
+      expect(g.state.tabs).toContain("event_deletions");
+      expect(g.calls.addSheet).toBe(1);
+      expect(g.calls.appendCells).toBe(1);
+    } finally {
+      g.restore();
+    }
+  });
+
+  it("tab đã biết từ trước thì không gọi tạo lần nào", async () => {
+    const g = fresh(["events", "event_deletions"]);
+    try {
+      await g.client.ensureTab("event_deletions", ["event_code", "action"]);
+      expect(g.calls.addSheet).toBe(0);
+      expect(g.calls.appendCells).toBe(0);
+    } finally {
+      g.restore();
+    }
+  });
+
+  it("lỗi thật vẫn nổi lên, không bị nuốt chung với cuộc đua", async () => {
+    // Phân biệt bằng trạng thái thật — tab có tồn tại hay không — chứ không dò chuỗi
+    // lỗi của Google. Ở đây `addSheet` hỏng mà tab vẫn chưa có: đó là lỗi thật.
+    const g = fresh(["events"]);
+    try {
+      globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+        const href = String(url);
+        if (href.endsWith(":batchUpdate")) {
+          return new Response(
+            JSON.stringify({ error: { code: 403, message: "The caller does not have permission" } }),
+            { status: 403, headers: { "content-type": "application/json" } },
+          );
+        }
+        return g.fetchImpl(url, init);
+      }) as typeof fetch;
+
+      await expect(
+        g.client.ensureTab("event_deletions", ["event_code", "action"]),
+      ).rejects.toThrow(/403/);
+      expect(g.state.tabs).not.toContain("event_deletions");
     } finally {
       g.restore();
     }

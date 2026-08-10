@@ -6,14 +6,19 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 
 ## Trạng thái đã chốt
 
-- Phiên bản mã hiện tại: `v0.6.1`, nhánh phát hành
+- Phiên bản mã hiện tại: `v0.6.2`, nhánh phát hành
   `codex/v0.6.1-unlimited-sponsors-event-delete`. Tag/Production phải cùng trỏ bản
   đã qua cổng kiểm định; xem huy hiệu dưới phải giao diện để biết commit đang chạy.
 - Production: https://robin-pickleball.vercel.app
-- **`v0.6.1` mới chỉ commit tại máy** theo yêu cầu người dùng: chưa push, chưa tag,
-  chưa fast-forward `main`, chưa deploy. Production vẫn đang chạy `v0.6.0 · 4e41af4`.
+- `v0.6.1` đã phát hành (tag `v0.6.1`, `main` = `e648329`). `v0.6.2` là bản vá cuộc
+  đua `ensureTab` phát hiện ngay ở lượt deploy đó — xem mục dưới.
 - Mốc Production trước đợt v0.6.0 là `v0.5.1 · a54125f`; sau khi đẩy `main` phải kiểm
   alias và huy hiệu lại, không coi push nhánh tính năng là đã phát hành.
+- **`ensureTab` không nguyên tử, và từ v0.6.1 điều đó quan trọng.** Tab mới nay có thể
+  được tạo từ `readEvent`, đường mà mọi trang và API đều đi qua, nên nhiều hàm
+  serverless dễ cùng tạo một lúc. Lượt deploy v0.6.1 đầu tiên đã trả 500 vì vậy.
+  Từ v0.6.2, `addSheet` hỏng mà đọc lại thấy tab đã có thì coi như xong. Khi thêm tab
+  mới, đừng cho rằng lần chạy đầu là tuần tự.
 - Bản `v0.6.1` bỏ trần 2 logo ở mọi hạng tài trợ và thêm **xóa mềm sự kiện**. Xóa chỉ
   ghi cờ vào tab append-only `event_deletions`; **không** xóa dòng `events`, snapshot,
   nhật ký tỷ số hay ảnh. Chủ xóa được buổi `draft`/`finished` của chính mình, App admin
@@ -57,6 +62,9 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 - Cổng v0.6.0: 560/560 test, 152 lượt công bằng/0 vấn đề, typecheck/build sạch;
   Chrome điện thoại và Edge desktop tải TESTV6 đúng, ETag 304, public state không
   phát `userId`/`deviceId` và kho TEST không đổi SHA.
+- Cổng v0.6.2: 579/579 test (thêm 4 bài cuộc đua `ensureTab` trong `tests/google.test.ts`;
+  bài chính đã xác nhận fail nếu gỡ bản vá), 152 lượt công bằng/0 vấn đề, build và
+  typecheck sạch.
 - Cổng v0.6.1: 575/575 test, 152 lượt công bằng/0 vấn đề, typecheck/build sạch. Smoke
   cục bộ trên `npm run dev:test`: `TESTV5` bị đặt cờ xóa thì `/api/events/TESTV5/state`
   và `/mutate` trả `410`, `/e/TESTV5` và các trang con trả `404`, `TESTV6` không đổi;

@@ -15,10 +15,12 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.6.1 — tài trợ không giới hạn và xóa sự kiện an toàn`.**
-Mã tính năng đã hoàn tất và đã qua cổng, nhưng **mới chỉ commit tại máy**: chưa push,
-chưa tag, chưa fast-forward `main`, chưa deploy. Production vẫn đang chạy
-`v0.6.0 · 4e41af4`. Đây là lựa chọn có chủ ý của người dùng, không phải việc bỏ dở.
+**Phiên bản hiện tại: `v0.6.2 — vá cuộc đua tạo tab`**, đi ngay sau
+`v0.6.1 — tài trợ không giới hạn và xóa sự kiện an toàn`.
+
+`v0.6.1` đã phát hành thật: tag `v0.6.1`, `main` = `e648329`, Production đã kiểm qua
+alias công khai với huy hiệu `v0.6.1 · e648329`. `v0.6.2` vá một lỗi lộ ra đúng ở lượt
+deploy đó — chi tiết ở mục ghi chú v0.6.2 bên dưới.
 
 | | |
 |---|---|
@@ -29,8 +31,35 @@ chưa tag, chưa fast-forward `main`, chưa deploy. Production vẫn đang chạ
 | GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-Các cổng trên mã phát hành đã xanh: `npm test` 575/575; `npm run scenarios`
+Các cổng trên mã phát hành đã xanh: `npm test` 579/579; `npm run scenarios`
 152 lượt/0 vấn đề; `npm run typecheck` và `npm run build` sạch.
+
+### Ghi chú khoá phiên 10/08/2026 — v0.6.2
+
+**Lỗi thật, quan sát được trên Production, không phải giả định.** Ngay sau khi
+`v0.6.1` lên, lần gọi đầu tiên tới `/e/HY62PJ` trả **500** trong khi
+`/api/events/HY62PJ/state` trả **200** ở đúng khoảnh khắc đó; các lần sau đều 200.
+
+Nguyên nhân nằm ở `ensureTab` (`lib/sheets/google.ts`): nó đọc danh sách tab hai lần
+rồi mới ghi, nhưng đọc-rồi-ghi thì vẫn không nguyên tử. Hai hàm serverless cùng là
+hàm đầu tiên đọc `event_deletions`, cùng thấy tab chưa có, cùng gọi `addSheet`.
+Google từ chối cái đến sau, và lời từ chối ấy nổi thẳng lên thành 500.
+
+Điều khiến nó đáng vá chứ không đáng bỏ qua: **trước v0.6.1, tab mới chỉ được tạo từ
+những đường hẹp** (`event_staff`, `event_auth`, `account_assets`, `event_copies`).
+Từ v0.6.1, `event_deletions` được đọc trong `readEvent` — đường mà mọi trang và mọi
+API đều đi qua — nên bất kỳ request nào cũng có thể là hàm tạo tab đầu tiên, và bán
+kính ảnh hưởng của cuộc đua rộng hẳn ra.
+
+Bản vá coi **thua cuộc đua là chuyện bình thường**: `addSheet` hỏng thì đọc lại danh
+sách tab; tab đã có nghĩa là ai đó vừa tạo hộ, trả về luôn và **không** ghi thêm dòng
+tiêu đề — người thắng đã ghi rồi, ghi nữa sẽ thành hai dòng tiêu đề và dòng thứ hai
+bị đọc nhầm thành dữ liệu. Điều kiện phân biệt là **trạng thái thật** (tab có tồn tại
+không), không phải dò chuỗi lỗi của Google; lời văn ấy có thể đổi hoặc đổi ngôn ngữ.
+
+`tests/google.test.ts` thêm 4 bài: thua cuộc đua, tạo mới bình thường, tab đã biết,
+và lỗi thật (403) vẫn phải nổi lên chứ không bị nuốt chung. Bài đầu đã được xác nhận
+**fail nếu gỡ bản vá** — nó canh đúng thứ cần canh.
 
 ### Ghi chú khoá phiên 10/08/2026 — v0.6.1
 
