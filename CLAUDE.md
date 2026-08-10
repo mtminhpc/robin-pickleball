@@ -11,6 +11,13 @@ Không coi một `git push` là đã phát hành: nhánh tính năng chỉ tạo
 còn Production đi từ `main` và phải được kiểm lại qua alias công khai. Không sửa
 hay commit hai ZIP handoff của người dùng.
 
+> **Việc còn nợ, làm trước khi nhận việc mới:** luồng bấm nút *Xóa sự kiện* (v0.6.1)
+> **chưa ai chạy qua**, kể cả trên Production — kho thử gắn buổi vào `userId` giả
+> `test-owner` nên không đăng nhập được để hiện nút. Tầng hàm và đường đọc HTTP thì
+> đã kiểm thật. Chi tiết và các bước cần làm nằm ở mục **Chưa kiểm — việc đầu tiên
+> của phiên sau** trong `docs/TIEN-DO.md`. Đừng đọc "579/579 xanh" thành "đã có người
+> dùng thử".
+
 ## Trạng thái cuối phiên 10/08/2026 — v0.6.2
 
 - `v0.6.1` đã phát hành thật (tag `v0.6.1`, `main` = `e648329`, Production huy hiệu
@@ -33,8 +40,8 @@ hay commit hai ZIP handoff của người dùng.
 ## Trạng thái cuối phiên 10/08/2026 — v0.6.1
 
 - Nhánh `codex/v0.6.1-unlimited-sponsors-event-delete`, dựng tiếp phần Codex làm dở
-  (phiên đó hết quota). **Mới commit tại máy**: chưa push, chưa tag, chưa fast-forward
-  `main`, chưa deploy — người dùng chọn dừng ở đó. Production vẫn là `v0.6.0 · 4e41af4`.
+  (phiên đó hết quota). Đã phát hành: tag `v0.6.1`, `main` = `e648329`, Production
+  từng chạy `v0.6.1 · e648329` trước khi `v0.6.2` thay nó vài phút sau.
 - Bỏ trần 2 logo ở mọi hạng tài trợ. Thứ tự Kim cương → Vàng → Bạc → Đồng hành → tự
   đặt và thứ tự trong hạng không đổi; `SponsorStrip` vốn đã hiện `Tất cả (n)`.
 - Xóa sự kiện là **xóa mềm** qua tab append-only `event_deletions`; dòng mới nhất của

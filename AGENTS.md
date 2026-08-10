@@ -4,14 +4,22 @@
 trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp này chỉ giữ những
 điều dễ làm hỏng dự án nếu một phiên mới không biết.
 
+> **Việc còn nợ:** luồng bấm nút *Xóa sự kiện* (v0.6.1) chưa ai chạy qua trên giao
+> diện, kể cả Production. Tầng hàm và đường đọc HTTP đã kiểm thật; phần bấm nút thì
+> chưa, vì kho thử gắn buổi vào `userId` giả `test-owner`. Xem mục **Chưa kiểm —
+> việc đầu tiên của phiên sau** trong `docs/TIEN-DO.md`.
+
 ## Trạng thái đã chốt
 
 - Phiên bản mã hiện tại: `v0.6.2`, nhánh phát hành
   `codex/v0.6.1-unlimited-sponsors-event-delete`. Tag/Production phải cùng trỏ bản
   đã qua cổng kiểm định; xem huy hiệu dưới phải giao diện để biết commit đang chạy.
 - Production: https://robin-pickleball.vercel.app
-- `v0.6.1` đã phát hành (tag `v0.6.1`, `main` = `e648329`). `v0.6.2` là bản vá cuộc
-  đua `ensureTab` phát hiện ngay ở lượt deploy đó — xem mục dưới.
+- `v0.6.1` đã phát hành (tag `v0.6.1` = `e648329`). `v0.6.2` là bản vá cuộc đua
+  `ensureTab` phát hiện ngay ở lượt deploy đó (tag `v0.6.2` = `a30a0ab`) — xem mục dưới.
+- Huy hiệu Production hiện commit **mới nhất của `main`**, nên commit chỉ-sửa-tài-liệu
+  cũng làm phần hash đổi trong khi mã chạy không đổi. Đối chiếu phần `v0.6.x` trước,
+  hash sau; muốn biết mã nào đang chạy thì so với tag.
 - Mốc Production trước đợt v0.6.0 là `v0.5.1 · a54125f`; sau khi đẩy `main` phải kiểm
   alias và huy hiệu lại, không coi push nhánh tính năng là đã phát hành.
 - **`ensureTab` không nguyên tử, và từ v0.6.1 điều đó quan trọng.** Tab mới nay có thể

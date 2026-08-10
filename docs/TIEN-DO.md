@@ -25,6 +25,10 @@ deploy đó — chi tiết ở mục ghi chú v0.6.2 bên dưới.
 | | |
 |---|---|
 | Địa chỉ | https://robin-pickleball.vercel.app |
+| Production đang chạy | `v0.6.2`, đã kiểm huy hiệu qua alias công khai |
+| Mã của `v0.6.2` | Tag `v0.6.2` = **`a30a0ab`**. Huy hiệu hiện commit **mới nhất của `main`**, nên một commit chỉ-sửa-tài-liệu cũng làm phần hash đổi mà mã chạy vẫn y nguyên — so phần `v0.6.x` trước, hash sau |
+| `main` / nhánh / tag | `main` = `origin/main` = `codex/v0.6.1-unlimited-sponsors-event-delete`; tag `v0.6.1` (`e648329`) và `v0.6.2` (`a30a0ab`) |
+| Tên nhánh gây hiểu nhầm | Nhánh tên `...v0.6.1...` nhưng đang mang cả `v0.6.2`. Bản vá đi ngay sau nên không tách nhánh mới |
 | Dữ liệu | Google Sheet thật, đã kiểm bằng cách đọc lại 7 mã buổi |
 | Đăng nhập Google | **Đã bật và đã Publish** — ai có tài khoản Google cũng vào được |
 | Vercel ↔ GitHub | Đã nối. Nhánh thường → Preview; `main` → Production |
@@ -33,6 +37,28 @@ deploy đó — chi tiết ở mục ghi chú v0.6.2 bên dưới.
 
 Các cổng trên mã phát hành đã xanh: `npm test` 579/579; `npm run scenarios`
 152 lượt/0 vấn đề; `npm run typecheck` và `npm run build` sạch.
+
+### Chưa kiểm — việc đầu tiên của phiên sau
+
+Phần này quan trọng hơn mọi mục khác trong tệp: **đừng đọc "579/579 xanh" thành "mọi
+thứ đã được người thật dùng thử".**
+
+- **Luồng bấm nút xóa sự kiện chưa ai chạy qua, kể cả trên Production.** Lý do: kho
+  thử `.data/test-sandbox.json` gắn buổi vào `test-owner` — một `userId` giả không ứng
+  với tài khoản Google nào — nên không đăng nhập được để hiện nút. Phiên trước cũng
+  không dùng tài khoản Google của chủ dự án để đăng nhập hộ.
+- Những gì **đã** được kiểm thật: chính sách/use-case xóa ở tầng hàm (15 bài trong
+  `tests/v061.test.ts`), và đường đọc qua HTTP — đặt cờ xóa cho `TESTV5` rồi gọi thẳng
+  API thì `state`/`mutate` trả `410`, trang trả `404`, khôi phục xong dữ liệu về
+  nguyên vẹn. Ba route mới trả `401`/`403` đúng khi chưa đăng nhập, cả cục bộ lẫn
+  Production.
+- **Việc cần làm:** đăng nhập Google trên Production, tạo một buổi nháp, bấm *Xóa sự
+  kiện*, kiểm bốn điều — modal hiện; bấm Hủy thì không có request nào; gõ sai mã thì
+  nút vẫn khóa; gõ đúng mã thì buổi biến khỏi *Các trận đã tạo* lẫn *Gần đây*, và ô
+  quota giảm 1. Sau đó đăng nhập App admin, vào `/me`, tra mã vừa xóa rồi Khôi phục.
+- Muốn thử cục bộ thì phải sửa `scripts/seed-test-data.ts` cho một buổi mang
+  `ownerUserId` khớp tài khoản Google thật của người kiểm; hiện chưa làm.
+- Nếu có gì sai, `v0.6.0` (`4e41af4`) là mốc quay lại an toàn.
 
 ### Ghi chú khoá phiên 10/08/2026 — v0.6.2
 
@@ -546,10 +572,12 @@ Cái gì có sẵn, cái gì phải làm lại:
 3. **Xoá `client_secret_*.json` khi xong việc.** Mọi giá trị trong đó đã nằm ở
    Vercel và `.env.local` rồi, giữ thêm một bản chỉ tăng chỗ để lộ.
 
-### Sáu cái bẫy đã mất thời gian, đừng vấp lại
+### Tám cái bẫy đã mất thời gian, đừng vấp lại
 
 | Bẫy | Triệu chứng | Cách tránh |
 |---|---|---|
+| **Thêm tab Google Sheet mới rồi đọc nó từ đường nóng** | Lần gọi đầu sau deploy trả 500 rồi tự khỏi; request khác cùng lúc lại 200 | Nhiều hàm serverless cùng chạy `ensureTab` và đua nhau `addSheet`. Đã vá ở v0.6.2 — thua cuộc đua thì coi như xong. Đừng cho rằng lượt chạy đầu là tuần tự |
+| **Chạy `next build` rồi `next dev` liên tiếp trên OneDrive** | `[Error: EINVAL: invalid argument, readlink '.next\...']`, dev không khởi động nổi | `rm -rf .next` rồi chạy lại. Không phải lỗi mã — hai lệnh để lại `.next` ở dạng OneDrive không đọc symlink được |
 | **Sửa tệp tiếng Việt bằng PowerShell** (`Get-Content -Raw` + `-replace` + ghi lại) | Toàn bộ dấu tiếng Việt biến thành `Tiáº¿n Ä‘á»™` | Chỉ dùng công cụ soạn thảo. PowerShell 5.1 đọc mặc định theo bảng mã ANSI nên hỏng mã hoá UTF-8 |
 | **`npm run build` khi `npm run dev` đang chạy** | Trang mất sạch định dạng, chữ đen nền trắng | Dừng dev trước. Hai lệnh cùng ghi vào `.next` |
 | **Ghi thẳng vào `.data\sheet.json` từ tiến trình khác** trong lúc máy chủ chạy | Kết quả lúc đạt lúc hỏng với cùng một đoạn mã | Đã sửa hẳn: kho nay đọc lại tệp trước mỗi thao tác. Nhưng vẫn còn lớp đệm 60 giây của Next cho câu lạc bộ và tài khoản |
