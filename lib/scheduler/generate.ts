@@ -14,6 +14,8 @@ export interface GenerateOptions {
   history: History;
   /** Số sân dùng được, đã trừ các sân bị trận đông cứng chiếm. */
   courts: number;
+  /** Danh sách số thứ tự sân hoạt động cho từng vòng; vắng mặt = 1…courts legacy. */
+  courtNumbersByRound?: number[][];
   rounds: number;
   softMax: number;
   hardMax: number;
@@ -72,7 +74,10 @@ export function generate(opts: GenerateOptions): Plan {
       for (const q of blocked.busy) busy.add(q);
     }
     const freeCourts: number[] = [];
-    for (let c = 1; c <= opts.courts; c++) {
+    const courtNumbers =
+      opts.courtNumbersByRound?.[r] ??
+      Array.from({ length: opts.courts }, (_, index) => index + 1);
+    for (const c of courtNumbers) {
       if (!takenCourts.has(c)) freeCourts.push(c);
     }
 

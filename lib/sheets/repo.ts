@@ -183,6 +183,7 @@ export class EventRepo {
     code: string,
     envelopes: CommandEnvelope[],
     loaded: LoadedEvent,
+    options: { allOrNothing?: boolean } = {},
   ): Promise<CommitResult> {
     if (envelopes.length === 0) return { ok: false, error: "Không có lệnh nào." };
 
@@ -192,7 +193,7 @@ export class EventRepo {
     for (const [i, envelope] of envelopes.entries()) {
       const result = apply(state, envelope);
       if (!result.ok) {
-        if (i === 0) return { ok: false, error: result.error };
+        if (i === 0 || options.allOrNothing) return { ok: false, error: result.error };
         break;
       }
       state = result.value;

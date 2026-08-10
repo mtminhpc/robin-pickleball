@@ -56,6 +56,20 @@ export async function POST(
     return fail(400, "Thiếu lệnh hoặc mã lệnh.");
   }
 
+  if (
+    [
+      "AddCourt",
+      "SetCourtAvailability",
+      "ArchiveCourt",
+      "SetPlayerPlan",
+      "ConfirmPlayerSpan",
+      "TransferMatch",
+    ].includes(command.type) ||
+    (command.type === "UpdateConfig" && command.patch.courts !== undefined)
+  ) {
+    return fail(400, "Thay đổi sân hoặc ca chơi phải xem trước và xác nhận khi đang online.");
+  }
+
   const ctx = await resolveContext(request, code);
   if (isResponse(ctx)) return ctx;
 

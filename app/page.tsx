@@ -665,6 +665,7 @@ function CreateEvent() {
   const [name, setName] = useState("");
   const [venueAddress, setVenueAddress] = useState("");
   const [courts, setCourts] = useState(2);
+  const [courtNames, setCourtNames] = useState<string[]>(["", ""]);
   const [expectedPlayers, setExpectedPlayers] = useState(8);
   const [targetGamesPerPlayer, setTargetGamesPerPlayer] = useState(6);
   const [estimatedMatchMinutes, setEstimatedMatchMinutes] = useState(15);
@@ -702,6 +703,7 @@ function CreateEvent() {
           name,
           venueAddress,
           courts,
+          courtNames,
           expectedPlayers,
           targetGamesPerPlayer,
           estimatedMatchMinutes,
@@ -802,7 +804,13 @@ function CreateEvent() {
               min={1}
               max={8}
               value={courts}
-              onChange={(e) => setCourts(Number(e.target.value))}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setCourts(next);
+                setCourtNames((current) =>
+                  Array.from({ length: Math.max(0, next) }, (_, index) => current[index] ?? ""),
+                );
+              }}
               className={`${inputClass} !bg-paper tabular-nums`}
             />
           </Field>
@@ -827,6 +835,29 @@ function CreateEvent() {
             />
           </Field>
         </div>
+
+        <details className="border border-line bg-paper p-3">
+          <summary className="cursor-pointer font-display text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#087a55]">
+            Đặt tên từng sân (tuỳ chọn)
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {courtNames.map((courtName, index) => (
+              <Field key={index} label={`Sân ${index + 1}`}>
+                <input
+                  value={courtName}
+                  maxLength={40}
+                  onChange={(event) =>
+                    setCourtNames((current) =>
+                      current.map((value, item) => item === index ? event.target.value : value),
+                    )
+                  }
+                  placeholder={`Sân ${index + 1}`}
+                  className={`${inputClass} !bg-white`}
+                />
+              </Field>
+            ))}
+          </div>
+        </details>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Phút mỗi trận">

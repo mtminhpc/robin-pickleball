@@ -16,7 +16,15 @@
 
 import type { MatchSeed } from "../domain/commands";
 import { firstOpenRound } from "../domain/rounds";
-import { isAvailableAt, wasPresentAt, type EventState, type Match, type PlayerId } from "../domain/types";
+import {
+  activeCourtsAt,
+  courtLabelAt,
+  isEligibleAt,
+  wasPresentAt,
+  type EventState,
+  type Match,
+  type PlayerId,
+} from "../domain/types";
 import { DEFAULT_WEIGHTS, type CostContext, type Plan, type Slot, type Weights } from "./cost";
 import { generate } from "./generate";
 import { achievableStreakCap, buildHistory, type History } from "./metrics";
@@ -28,6 +36,8 @@ export type PlanMode = "extend" | "rebuild";
 
 export interface PlanOptions {
   mode?: PlanMode;
+  /** Mốc cấu trúc đã preview; luôn được chặn không sớm hơn phần lịch còn mở. */
+  fromRound?: number;
   /** Ghi đè số vòng cần có phía trước; mặc định lấy `lookaheadRounds`. */
   lookahead?: number;
   weights?: Partial<Weights>;
@@ -52,7 +62,7 @@ export function planSchedule(
   options: PlanOptions = {},
 ): PlanOutcome {
   const mode = options.mode ?? "extend";
-  const fromRound = firstOpenRound(state);
+  const fromRound = Math.max(firstOpenRound(state), options.fromRound ?? 1);
   const activeIds = state.players.filter((p) => p.status === "active").map((p) => p.id);
 
   if (activeIds.length < 4) {
@@ -65,19 +75,21 @@ export function planSchedule(
     };
   }
 
-  const courts = Math.max(1, state.config.courts);
-  const usableCourts = Math.min(courts, Math.floor(activeIds.length / 4));
-  if (usableCourts < 1) {
+  const lookahead = Math.max(1, options.lookahead ?? state.config.lookaheadRounds);
+  const courtNumbersByRound = Array.from({ length: lookahead }, (_, offset) =>
+    activeCourtsAt(state, fromRound + offset).map((court) => court.order),
+  );
+  const courts = Math.max(0, ...courtNumbersByRound.map((items) => items.length));
+  if (courts < 1) {
     return {
       fromRound,
       matches: [],
-      blocked: `${activeIds.length} người không đủ cho một trận đôi.`,
+      blocked: "Tạm dừng — chưa có sân hoạt động.",
       optimization: null,
       hardViolations: 0,
     };
   }
 
-  const lookahead = Math.max(1, options.lookahead ?? state.config.lookaheadRounds);
   const history = buildHistory(state, activeIds);
   const index = history.index;
 
@@ -112,7 +124,7 @@ export function planSchedule(
   const viPhamKhaiBao = (m: Match): boolean =>
     [...m.teamA, ...m.teamB].some((id) => {
       const p = byId.get(id);
-      return p ? !isAvailableAt(p, m.round) : false;
+      return p ? !isEligibleAt(p, m.round) : false;
     });
 
   for (const m of existing) {
@@ -225,7 +237,10 @@ export function planSchedule(
   // Bảng "ai không có mặt ở vòng nào", theo lời khai trước của từng người.
   // Chỉ dựng khi thật sự có người khai — phần lớn buổi thì không ai khai gì, và
   // khi đó cả bước này lẫn khoản phạt trong hàm chi phí đều được bỏ qua.
-  const coKhaiBao = activeIds.some((id) => byId.get(id)?.available);
+  const coKhaiBao = activeIds.some((id) => {
+    const player = byId.get(id);
+    return Boolean(player && ((player.availability?.length ?? 0) > 0 || player.available));
+  });
   let unavailable: Uint8Array | undefined;
   if (coKhaiBao) {
     unavailable = new Uint8Array(activeIds.length * lookahead);
@@ -233,7 +248,7 @@ export function planSchedule(
       const p = byId.get(id);
       if (!p) return;
       for (let r = 0; r < lookahead; r++) {
-        if (!isAvailableAt(p, fromRound + r)) unavailable![i * lookahead + r] = 1;
+        if (!isEligibleAt(p, fromRound + r)) unavailable![i * lookahead + r] = 1;
       }
     });
   }
@@ -264,6 +279,7 @@ export function planSchedule(
   const seeded = generate({
     history,
     courts,
+    courtNumbersByRound,
     rounds: lookahead,
     softMax: ctx.softMax,
     hardMax: ctx.hardMax,
@@ -389,6 +405,12 @@ export function planSchedule(
     const people = activeIds.length;
     if (!hasWhistDesign(people)) return null;
     if (Math.floor(people / 4) > courts) return null;
+    if (
+      courtNumbersByRound.some(
+        (round) =>
+          round.length !== courts || round.some((court, index) => court !== index + 1),
+      )
+    ) return null;
     if (unavailable) return null;
     if (!nhomCoDinhTuDau()) return null;
     if (!followingDesign(people)) return null;
@@ -427,7 +449,7 @@ export function planSchedule(
     timeBudgetMs: options.timeBudgetMs,
   });
 
-  const matches = toSeeds(result.plan, history, fromRound, state.seq, keptByReduce);
+  const matches = toSeeds(state, result.plan, history, fromRound, state.seq, keptByReduce);
 
   return {
     fromRound,
@@ -507,6 +529,7 @@ function unfreezeWarmStart(plan: Plan, warm: Map<number, Slot[]>): Plan {
  * không bao giờ đụng id của một trận cũ đã bị dời đi chỗ khác.
  */
 function toSeeds(
+  state: EventState,
   plan: Plan,
   history: History,
   fromRound: number,
@@ -519,10 +542,14 @@ function toSeeds(
     for (const slot of round) {
       if (slot.sourceId && keptByReduce.has(slot.sourceId)) continue;
       const [a0, a1, b0, b1] = slot.quad;
+      const court = state.courts.find((item) => item.order === slot.court);
+      const label = court ? courtLabelAt(court, roundNo) : undefined;
       out.push({
         id: slot.sourceId ?? `m${seq}-${roundNo}-${slot.court}`,
         round: roundNo,
         court: slot.court,
+        courtId: court?.id,
+        courtLabelId: label?.id,
         teamA: [history.ids[a0] as PlayerId, history.ids[a1] as PlayerId],
         teamB: [history.ids[b0] as PlayerId, history.ids[b1] as PlayerId],
       });

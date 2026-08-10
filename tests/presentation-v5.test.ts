@@ -168,7 +168,8 @@ describe("ảnh sự kiện và tương thích snapshot", () => {
     expect(upgraded.config.estimatedMatchMinutes).toBe(15);
     expect(upgraded.config.courtTurnoverMinutes).toBe(3);
     expect(upgraded.presentation).toEqual({ sponsorLogoShape: "square", sponsors: [], awards: [] });
-    expect(upgraded.players).toBe(old.players);
+    expect(upgraded.players).toEqual(old.players);
+    expect(old.players).toEqual([]);
   });
 });
 

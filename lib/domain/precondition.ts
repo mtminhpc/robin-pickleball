@@ -83,6 +83,25 @@ function preconditionValue(state: EventState, command: Command): unknown | undef
       ];
     }
 
+    case "TransferMatch": {
+      const target = findMatch(state, command.matchId);
+      return [
+        "transfer",
+        matchStamp(target),
+        command.toCourtId,
+        state.courts,
+        state.matches
+          .filter(
+            (match) =>
+              match.id !== command.matchId &&
+              (match.status === "playing" ||
+                (target && match.round === target.round && match.status === "scheduled")),
+          )
+          .map(matchStamp)
+          .sort(byJson),
+      ];
+    }
+
     case "SetSchedule":
       return [
         "schedule",
@@ -102,6 +121,8 @@ function preconditionValue(state: EventState, command: Command): unknown | undef
     case "RemovePlayer":
     case "GrantCatchUp":
     case "DeclareAvailability":
+    case "SetPlayerPlan":
+    case "ConfirmPlayerSpan":
     case "UpdateProfile":
     case "ClaimPlayer":
     case "LinkAccount":
@@ -116,6 +137,7 @@ function preconditionValue(state: EventState, command: Command): unknown | undef
               name: player.name,
               catchUpCredit: player.catchUpCredit,
               available: player.available ?? null,
+              availability: player.availability,
               presence: player.presence,
               userId: player.userId ?? "",
             }
@@ -138,6 +160,13 @@ function preconditionValue(state: EventState, command: Command): unknown | undef
           .sort()
           .map((key) => [key, state.config[key as keyof typeof state.config]]),
       ];
+
+    case "AddCourt":
+    case "RenameCourt":
+    case "ReorderCourts":
+    case "SetCourtAvailability":
+    case "ArchiveCourt":
+      return ["courts", state.courts];
 
     case "StartEvent":
     case "EndEventEarly":
@@ -188,6 +217,8 @@ function matchStamp(match: Match | undefined) {
   return {
     id: match.id,
     round: match.round,
+    courtId: match.courtId,
+    courtLabelId: match.courtLabelId,
     court: match.court,
     courtWave: match.courtWave,
     teamA: match.teamA,

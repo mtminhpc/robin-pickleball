@@ -16,7 +16,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { Command } from "@/lib/domain/commands";
 import { firstUnplayedRound } from "@/lib/domain/rounds";
-import type { EventState, Match, PlayerId } from "@/lib/domain/types";
+import { matchCourtName, type EventState, type Match, type PlayerId } from "@/lib/domain/types";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { Avatar } from "@/components/Avatar";
@@ -180,8 +180,8 @@ export default function LivePage() {
 function NextUpRow({ match, state, code }: { match: Match; state: EventState; code: string }) {
   return (
     <div className="flex items-center gap-3 border-b border-line py-3.5 text-[13px]">
-      <span className="w-4 flex-none font-display text-[11px] font-extrabold text-mute-600">
-        {match.court}
+      <span title={matchCourtName(state, match)} className="w-14 flex-none truncate font-display text-[9px] font-extrabold uppercase text-mute-600">
+        {matchCourtName(state, match)}
       </span>
       <NextUpTeam ids={match.teamA} state={state} code={code} />
       <span className="text-[10px] tracking-[0.1em] text-mute-600">VS</span>

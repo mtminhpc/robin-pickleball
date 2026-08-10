@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/api/user";
 import { DEFAULT_EVENT_LIMIT, isAppAdminEmail } from "@/lib/domain/app-admin";
 import type { CommandEnvelope } from "@/lib/domain/commands";
 import { emptyState } from "@/lib/domain/reduce";
+import { courtLabelAt } from "@/lib/domain/types";
 import {
   excludeDeletedEvents,
   getAppEventLimitRepo,
@@ -108,6 +109,17 @@ export async function POST(
         name: `${source.config.name} — bản sao`.slice(0, 80),
         scheduledAt: null,
       };
+      const copiedCourts = source.courts.map((court, index) => {
+        const name = courtLabelAt(court, Math.max(1, source.lastRound + 1)).name;
+        const id = randomUUID();
+        return {
+          id,
+          order: index + 1,
+          labels: [{ id: randomUUID(), name, effectiveFromRound: 1 }],
+          availability: [{ from: 1, to: null }],
+          archived: false,
+        };
+      });
       const existingTarget = await repo.load(newCode);
       const record = existingTarget?.record ?? await repo.create({
           code: newCode,
@@ -123,7 +135,13 @@ export async function POST(
         id: `copy-${newCode}-create`,
         at: now,
         actor,
-        command: { type: "CreateEvent", code: newCode, clubId: source.clubId, config },
+        command: {
+          type: "CreateEvent",
+          code: newCode,
+          clubId: source.clubId,
+          config,
+          courts: copiedCourts,
+        },
       }];
       for (const [index, player] of source.players.filter((item) => item.status !== "rejected").entries()) {
         envelopes.push({

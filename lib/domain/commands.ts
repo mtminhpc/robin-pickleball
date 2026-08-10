@@ -14,8 +14,11 @@ import type {
   Actor,
   AwardKind,
   EventConfig,
+  EventCourt,
   EventSponsor,
   MatchId,
+  PlannedSpan,
+  RoundSpan,
   PlayerId,
   SponsorLogoShape,
   TrophyMode,
@@ -36,6 +39,8 @@ export interface MatchSeed {
   id: MatchId;
   round: number;
   court: number;
+  courtId?: string;
+  courtLabelId?: string;
   courtWave?: number;
   teamA: [PlayerId, PlayerId];
   teamB: [PlayerId, PlayerId];
@@ -43,7 +48,14 @@ export interface MatchSeed {
 
 export type Command =
   // ---- vòng đời sự kiện --------------------------------------------------
-  | { type: "CreateEvent"; code: string; clubId: string | null; config: EventConfig }
+  | {
+      type: "CreateEvent";
+      code: string;
+      clubId: string | null;
+      config: EventConfig;
+      /** v0.8; vắng mặt thì reducer dựng Sân 1…N như log cũ. */
+      courts?: EventCourt[];
+    }
   | { type: "UpdateConfig"; patch: Partial<EventConfig> }
   | { type: "StartEvent" }
   | { type: "EndEventEarly"; reason: string }
@@ -148,6 +160,33 @@ export type Command =
       fromRound: number | null;
       toRound: number | null;
     }
+  /** v0.8: thay toàn bộ các ca dự kiến; reducer chuẩn hoá/gộp và giữ ID ổn định. */
+  | {
+      type: "SetPlayerPlan";
+      playerId: PlayerId;
+      availability: PlannedSpan[];
+      effectiveRound: number;
+    }
+  /** Xác nhận người chơi đã đến/quay lại đúng một ca dự kiến. */
+  | { type: "ConfirmPlayerSpan"; playerId: PlayerId; spanId: string }
+
+  // ---- cấu trúc sân ------------------------------------------------------
+  | { type: "AddCourt"; court: EventCourt; effectiveRound: number }
+  | {
+      type: "RenameCourt";
+      courtId: string;
+      labelId: string;
+      name: string;
+      effectiveRound: number;
+    }
+  | { type: "ReorderCourts"; courtIds: string[]; effectiveRound: number }
+  | {
+      type: "SetCourtAvailability";
+      courtId: string;
+      availability: RoundSpan[];
+      effectiveRound: number;
+    }
+  | { type: "ArchiveCourt"; courtId: string; archived: boolean; effectiveRound: number }
 
   // ---- lịch thi đấu ------------------------------------------------------
   /**
@@ -155,7 +194,15 @@ export type Command =
    * Dùng cho cả lần sinh lịch đầu tiên lẫn mọi lần xếp lại phần đuôi.
    * Các trận đã đông cứng (đã đánh, đã huỷ, hoặc bị ghim) không bị đụng tới.
    */
-  | { type: "SetSchedule"; fromRound: number; matches: MatchSeed[] }
+  | {
+      type: "SetSchedule";
+      fromRound: number;
+      matches: MatchSeed[];
+      /** Có mặt ở confirm cấu trúc để EventShell hiện banner revision mới. */
+      changeKind?: string;
+      /** Chỉ áp lịch khi intent command trong cùng batch đã thắng replay. */
+      requiresCommandIds?: string[];
+    }
   /** Admin dời một trận sang vòng/sân khác. Trận đó thành "ghim". */
   | { type: "ReorderMatch"; matchId: MatchId; toRound: number; toCourt: number }
   /** Đưa đúng một trận tương lai lên sân vừa trống, không dời cả vòng. */
@@ -165,6 +212,17 @@ export type Command =
       toRound: number;
       toCourt: number;
       startNow: boolean;
+    }
+  /** Chuyển đúng trận chờ/đang chơi sang một sân trống, giữ toàn bộ dữ liệu trận. */
+  | {
+      type: "TransferMatch";
+      matchId: MatchId;
+      toCourtId: string;
+      toCourtLabelId: string;
+      effectiveRound: number;
+      closeSourceAfter: boolean;
+      /** Tạo sân và chuyển trận trong đúng một reducer action. */
+      newCourt?: EventCourt;
     }
   /**
    * Đổi chỗ toàn bộ hai vòng cho nhau.
@@ -256,9 +314,17 @@ export const ADMIN_ONLY: readonly CommandType[] = [
   "ResumePlayer",
   "RemovePlayer",
   "GrantCatchUp",
+  "SetPlayerPlan",
+  "ConfirmPlayerSpan",
+  "AddCourt",
+  "RenameCourt",
+  "ReorderCourts",
+  "SetCourtAvailability",
+  "ArchiveCourt",
   "SetSchedule",
   "ReorderMatch",
   "PromoteMatch",
+  "TransferMatch",
   "SwapRounds",
   "PinMatch",
   "CancelMatch",
@@ -311,6 +377,8 @@ export const SELF_SERVICE: readonly CommandType[] = [
   "ResumePlayer",
   "UpdateProfile",
   "DeclareAvailability",
+  "SetPlayerPlan",
+  "ConfirmPlayerSpan",
 ];
 
 /**
@@ -340,6 +408,10 @@ export interface EventCapabilities {
   canManagePresentation: boolean;
   canChangePasswords: boolean;
   canCopyEvent: boolean;
+  canManageStructure: boolean;
+  canManagePlayerPlans: boolean;
+  canViewIdentityFlags: boolean;
+  canManageRoles: boolean;
 }
 
 const NO_CAPABILITIES: EventCapabilities = {
@@ -354,6 +426,10 @@ const NO_CAPABILITIES: EventCapabilities = {
   canManagePresentation: false,
   canChangePasswords: false,
   canCopyEvent: false,
+  canManageStructure: false,
+  canManagePlayerPlans: false,
+  canViewIdentityFlags: false,
+  canManageRoles: false,
 };
 
 export function capabilitiesForRole(role: Role): EventCapabilities {
@@ -375,6 +451,8 @@ export function capabilitiesForRole(role: Role): EventCapabilities {
       canFinishNormally: true,
       canEndEarly: true,
       canManageConfig: true,
+      canManageStructure: true,
+      canManagePlayerPlans: true,
     };
   }
   if (role === "manager") {
@@ -385,6 +463,9 @@ export function capabilitiesForRole(role: Role): EventCapabilities {
       canManageSchedule: true,
       canEditAnyScore: true,
       canFinishNormally: true,
+      canManageStructure: true,
+      canManagePlayerPlans: true,
+      canViewIdentityFlags: true,
     };
   }
   if (role === "operator") {
@@ -424,6 +505,13 @@ const MANAGER_ONLY = new Set<CommandType>([
   "RemovePlayer",
   "GrantCatchUp",
   "SwapRounds",
+  "SetPlayerPlan",
+  "AddCourt",
+  "RenameCourt",
+  "ReorderCourts",
+  "SetCourtAvailability",
+  "ArchiveCourt",
+  "TransferMatch",
 ]);
 
 const OPERATOR_COMMANDS = new Set<CommandType>([
@@ -433,6 +521,7 @@ const OPERATOR_COMMANDS = new Set<CommandType>([
   "RejectJoin",
   "PausePlayer",
   "ResumePlayer",
+  "ConfirmPlayerSpan",
   "SetSchedule",
   "ReorderMatch",
   "PromoteMatch",

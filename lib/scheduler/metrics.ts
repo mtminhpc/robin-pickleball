@@ -15,7 +15,7 @@
 
 import { firstOpenRound } from "../domain/rounds";
 import type { EventState, Match, Player, PlayerId } from "../domain/types";
-import { isAvailableAt, wasPresentAt } from "../domain/types";
+import { activeCourtsAt, isAvailableAt, wasPresentAt } from "../domain/types";
 
 /** Trận thực sự đã diễn ra (kể cả bỏ dở) — trận huỷ khi chưa đánh thì không. */
 export function didHappen(m: Match): boolean {
@@ -85,7 +85,7 @@ export function buildHistory(
   throughRound?: number,
 ): History {
   const n = ids.length;
-  const courts = Math.max(1, state.config.courts);
+  const courts = Math.max(1, state.courts.length);
   const index = new Map<PlayerId, number>();
   ids.forEach((id, i) => index.set(id, i));
 
@@ -336,7 +336,7 @@ export function canRespectStreakCap(
 export function feasibilityWarnings(state: EventState): string[] {
   const out: string[] = [];
   const active = state.players.filter((p) => p.status === "active").length;
-  const courts = state.config.courts;
+  const courts = activeCourtsAt(state, firstOpenRound(state)).length;
   const usable = Math.min(courts, Math.floor(active / 4));
   const soft = state.config.softMaxConsecutive;
 

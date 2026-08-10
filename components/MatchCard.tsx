@@ -21,7 +21,7 @@
 
 import type { Command } from "@/lib/domain/commands";
 import { canEditResult } from "@/lib/domain/rules";
-import type { Actor, EventState, Match, Player, PlayerId } from "@/lib/domain/types";
+import { matchCourtName, type Actor, type EventState, type Match, type Player, type PlayerId } from "@/lib/domain/types";
 import { Avatar } from "@/components/Avatar";
 import { Button, Marker } from "@/components/ui";
 
@@ -61,7 +61,7 @@ export function MatchCard({
     >
       <div className="mb-4 flex items-center justify-between gap-2">
         <span className="font-display text-[11px] font-extrabold uppercase tracking-[0.16em] text-mute-700">
-          Sân {match.court}
+          {matchCourtName(state, match)}
         </span>
         <span className="flex items-center gap-2">
           {match.pinned && <Marker tone="ink">đã ghim</Marker>}

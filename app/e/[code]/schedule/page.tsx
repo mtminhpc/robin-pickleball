@@ -16,7 +16,8 @@ import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import type { Command } from "@/lib/domain/commands";
 import { firstUnplayedRound } from "@/lib/domain/rounds";
-import type { EventState, Match, PlayerId } from "@/lib/domain/types";
+import { activeCourtsAt, courtLabelAt, type EventState, type Match, type PlayerId } from "@/lib/domain/types";
+import type { StructureIntent } from "@/lib/domain/structure";
 import { suggestedPromotions, validateMove, validatePromoteMatch } from "@/lib/scheduler/validate";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
@@ -24,15 +25,21 @@ import { Avatar } from "@/components/Avatar";
 import { pendingScoreFor } from "@/components/MatchCard";
 import { ScoreEntryDialog } from "@/components/ScoreEntryDialog";
 import { Button, Dialog, Empty, SectionHead } from "@/components/ui";
+import { useStructureChange, type StructurePreviewResponse } from "@/hooks/useStructureChange";
+import { StructurePreviewDialog } from "@/components/StructurePreviewDialog";
 
 export default function SchedulePage() {
   const { code } = useParams<{ code: string }>();
   const { data } = useEvent();
   const queue = useMutationQueue();
+  const structure = useStructureChange(code);
 
   const [scoring, setScoring] = useState<Match | null>(null);
   const [promotingCourt, setPromotingCourt] = useState<number | null>(null);
   const [moving, setMoving] = useState<Match | null>(null);
+  const [transferring, setTransferring] = useState<Match | null>(null);
+  const [quickCourt, setQuickCourt] = useState(false);
+  const [structureDialog, setStructureDialog] = useState<{ title: string; preview: StructurePreviewResponse | null } | null>(null);
 
   const rounds = useMemo(() => {
     if (!data) return [];
@@ -56,7 +63,8 @@ export default function SchedulePage() {
   // Mốc "đã đánh chưa", không phải mốc "thuật toán còn xếp lại được": vòng vừa
   // bị ghim vẫn chưa đánh, dán nhãn "đã xong" cho nó là nói sai với người dùng.
   const open = firstUnplayedRound(state);
-  const freeCourts = Array.from({ length: state.config.courts }, (_, index) => index + 1).filter(
+  const activeCourts = activeCourtsAt(state, open);
+  const freeCourts = activeCourts.map((court) => court.order).filter(
     (court) => !state.matches.some(
       (match) =>
         match.court === court &&
@@ -64,17 +72,47 @@ export default function SchedulePage() {
           (match.round === open && match.status === "scheduled")),
     ),
   );
+  const previewIntent = async (title: string, intent: StructureIntent) => {
+    setStructureDialog({ title, preview: null });
+    try {
+      const preview = await structure.preview(intent);
+      setStructureDialog({ title, preview });
+    } catch {
+      setStructureDialog(null);
+    }
+  };
+  const confirmStructure = async (token: string) => {
+    try {
+      await structure.confirm(token);
+      setStructureDialog(null);
+      setTransferring(null);
+      setQuickCourt(false);
+    } catch {
+      // Giữ preview để người dùng thấy kế hoạch nào vừa bị stale/chặn.
+    }
+  };
 
   if (rounds.length === 0) {
     return (
-      <div className="pt-6">
+      <div className="space-y-4 pt-6">
         <Empty>Chưa có lịch. Bắt đầu buổi đánh để hệ thống xếp.</Empty>
+        {capabilities.canManageStructure && state.status === "running" && (
+          <Button tone="primary" full onClick={() => setQuickCourt(true)}>Thêm sân để tiếp tục</Button>
+        )}
+        <QuickCourtDialog open={quickCourt} fromRound={open} onClose={() => setQuickCourt(false)} onIntent={(intent) => void previewIntent("Thêm sân và xếp lại lịch", intent)} />
+        <StructurePreviewDialog open={structureDialog !== null} title={structureDialog?.title ?? "Xem trước lịch"} preview={structureDialog?.preview ?? null} busy={structure.busy} onClose={() => setStructureDialog(null)} onConfirm={confirmStructure} />
       </div>
     );
   }
 
   return (
     <>
+      {capabilities.canManageStructure && state.status === "running" && (
+        <section className="mb-5 flex flex-wrap items-center justify-between gap-3 border-l-4 border-accent bg-surface p-4">
+          <div><p className="font-display text-xs font-extrabold uppercase">Điều phối sân nhanh</p><p className="mt-1 text-xs text-mute-700">Thêm sân, đóng sân hoặc chuyển nguyên trạng một trận.</p></div>
+          <Button tone="primary" onClick={() => setQuickCourt(true)}>+ Thêm sân</Button>
+        </section>
+      )}
       {isAdmin && state.status === "running" && freeCourts.length > 0 && (
         <section className="mb-5 border-l-4 border-accent bg-surface p-4">
           <p className="font-display text-xs font-extrabold uppercase">Sân vừa trống</p>
@@ -117,6 +155,15 @@ export default function SchedulePage() {
                       Đổi vị trí với một trận tương lai
                     </button>
                   )}
+                  {capabilities.canManageStructure && (m.status === "scheduled" || m.status === "playing") && (
+                    <button
+                      type="button"
+                      onClick={() => setTransferring(m)}
+                      className="mb-2 ml-4 min-h-9 text-[10px] font-bold uppercase tracking-wide text-accent-700 underline underline-offset-4"
+                    >
+                      Chuyển sân
+                    </button>
+                  )}
                 </div>
               ))}
 
@@ -154,6 +201,10 @@ export default function SchedulePage() {
           setMoving(null);
         }}
       />
+      <QuickCourtDialog open={quickCourt} fromRound={open} onClose={() => setQuickCourt(false)} onIntent={(intent) => void previewIntent("Thêm sân và xếp lại lịch", intent)} />
+      <TransferCourtDialog match={transferring} fromRound={open} onClose={() => setTransferring(null)} onIntent={(intent) => void previewIntent("Chuyển sân và giữ nguyên trận", intent)} />
+      <StructurePreviewDialog open={structureDialog !== null} title={structureDialog?.title ?? "Xem trước lịch"} preview={structureDialog?.preview ?? null} busy={structure.busy} onClose={() => setStructureDialog(null)} onConfirm={confirmStructure} />
+      {structure.error && <p className="fixed bottom-20 left-4 right-4 z-50 bg-accent p-3 text-xs font-bold text-white lg:left-auto lg:w-96">{structure.error}</p>}
     </>
   );
 }
@@ -258,8 +309,8 @@ function ScheduleRow({
 
   const body = (
     <>
-      <span className="w-4 flex-none font-display text-[11px] font-extrabold text-mute-600">
-        {match.court}
+      <span title={matchCourtName(state, match)} className="w-14 flex-none truncate font-display text-[9px] font-extrabold uppercase text-mute-600">
+        {matchCourtName(state, match)}
       </span>
       <TeamCell code={code} ids={match.teamA} state={state} />
       <span
@@ -282,6 +333,60 @@ function ScheduleRow({
     <button type="button" onClick={() => onOpen!(match)} className={`${cls} hover:bg-ink/[0.04]`}>
       {body}
     </button>
+  );
+}
+
+function matchCourtName(state: EventState, match: Match): string {
+  const court = state.courts.find((item) => item.id === match.courtId) ?? state.courts.find((item) => item.order === match.court);
+  if (!court) return `Sân ${match.court}`;
+  return court.labels.find((label) => label.id === match.courtLabelId)?.name ?? courtLabelAt(court, match.round).name;
+}
+
+function QuickCourtDialog({ open, fromRound, onClose, onIntent }: { open: boolean; fromRound: number; onClose: () => void; onIntent: (intent: StructureIntent) => void }) {
+  const [name, setName] = useState("");
+  const [to, setTo] = useState<string>("");
+  if (!open) return null;
+  return (
+    <Dialog open onClose={onClose} title="Thêm sân">
+      <h2 className="font-display text-lg font-extrabold uppercase">Thêm sân</h2>
+      <label className="mt-4 block text-xs">Tên sân<input autoFocus value={name} maxLength={40} onChange={(event) => setName(event.target.value)} placeholder="Ví dụ: Sân số 9" className="mt-1 min-h-tap w-full border border-line px-3" /></label>
+      <label className="mt-3 block text-xs">Đến vòng<select value={to} onChange={(event) => setTo(event.target.value)} className="mt-1 min-h-tap w-full border border-line px-3"><option value="">Đến cuối</option>{Array.from({ length: 20 }, (_, index) => fromRound + index).map((round) => <option key={round} value={round}>{round}</option>)}</select></label>
+      <div className="mt-4 grid grid-cols-2 gap-2"><Button onClick={onClose}>Huỷ</Button><Button tone="primary" disabled={!name.trim()} onClick={() => onIntent({ type: "add-court", courtId: crypto.randomUUID(), labelId: crypto.randomUUID(), name, availability: [{ from: fromRound, to: to === "" ? null : Number(to) }], requestedFromRound: fromRound })}>Xem trước</Button></div>
+    </Dialog>
+  );
+}
+
+function TransferCourtDialog({ match, fromRound, onClose, onIntent }: { match: Match | null; fromRound: number; onClose: () => void; onIntent: (intent: StructureIntent) => void }) {
+  const { data } = useEvent();
+  const [courtId, setCourtId] = useState("");
+  const [newName, setNewName] = useState("");
+  const [closeSource, setCloseSource] = useState(false);
+  if (!match || !data) return null;
+  const candidates = activeCourtsAt(data.state, match.round).filter(
+    (court) => court.id !== match.courtId && !data.state.matches.some(
+      (other) => other.id !== match.id && other.courtId === court.id && (other.status === "playing" || (other.round === match.round && other.status === "scheduled")),
+    ),
+  );
+  const submit = () => {
+    const target = candidates.find((court) => court.id === courtId);
+    if (target) {
+      onIntent({ type: "transfer-match", matchId: match.id, toCourtId: target.id, toCourtLabelId: courtLabelAt(target, match.round).id, closeSourceAfter: closeSource, requestedFromRound: fromRound });
+      return;
+    }
+    if (newName.trim()) {
+      const id = crypto.randomUUID();
+      onIntent({ type: "transfer-match", matchId: match.id, toCourtId: id, closeSourceAfter: closeSource, requestedFromRound: fromRound, newCourt: { courtId: id, labelId: crypto.randomUUID(), name: newName, availability: [{ from: fromRound, to: null }] } });
+    }
+  };
+  return (
+    <Dialog open onClose={onClose} title="Chuyển sân">
+      <h2 className="font-display text-lg font-extrabold uppercase">Chuyển {matchCourtName(data.state, match)}</h2>
+      <p className="mt-2 text-xs text-mute-600">Giữ nguyên cặp đấu, trạng thái, giờ bắt đầu và mọi điểm đã lưu.</p>
+      <label className="mt-4 block text-xs">Sân trống<select value={courtId} onChange={(event) => setCourtId(event.target.value)} className="mt-1 min-h-tap w-full border border-line px-3"><option value="">Chọn sân</option>{candidates.map((court) => <option key={court.id} value={court.id}>{courtLabelAt(court, match.round).name}</option>)}</select></label>
+      <label className="mt-3 block text-xs">Hoặc tạo sân mới<input value={newName} maxLength={40} onChange={(event) => { setNewName(event.target.value); if (event.target.value) setCourtId(""); }} placeholder="Tên sân mới" className="mt-1 min-h-tap w-full border border-line px-3" /></label>
+      <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={closeSource} onChange={(event) => setCloseSource(event.target.checked)} className="size-5 accent-accent" />Đóng sân nguồn sau khi chuyển</label>
+      <div className="mt-4 grid grid-cols-2 gap-2"><Button onClick={onClose}>Huỷ</Button><Button tone="primary" disabled={!courtId && !newName.trim()} onClick={submit}>Xem trước</Button></div>
+    </Dialog>
   );
 }
 

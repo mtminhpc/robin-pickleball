@@ -20,11 +20,19 @@
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import type { Command } from "@/lib/domain/commands";
-import type { Player, PlayerStatus } from "@/lib/domain/types";
+import {
+  isEligibleAt,
+  plannedSpansOf,
+  spanContains,
+  type PlannedSpan,
+  type Player,
+} from "@/lib/domain/types";
 import { PLAYER_STATUS_SHORT } from "@/lib/domain/labels";
 import { firstUnplayedRound } from "@/lib/domain/rounds";
 import { useEvent } from "@/hooks/useEventState";
 import { useMutationQueue } from "@/hooks/useMutationQueue";
+import { useStructureChange, type StructurePreviewResponse } from "@/hooks/useStructureChange";
+import type { StructureIntent } from "@/lib/domain/structure";
 import { Avatar } from "@/components/Avatar";
 import { AvatarPicker } from "@/components/AvatarPicker";
 import { PhotoPicker } from "@/components/PhotoPicker";
@@ -38,40 +46,69 @@ import {
   SectionHead,
   inputClass,
 } from "@/components/ui";
+import { StructurePreviewDialog } from "@/components/StructurePreviewDialog";
 
-/** Thứ tự hiển thị: ai cần chú ý nhất lên trước. */
-const ORDER: PlayerStatus[] = [
-  "pendingApproval",
-  "active",
-  "confirmed",
-  "invited",
-  "paused",
-  "left",
-  "declined",
-  "rejected",
-];
+const GROUP_ORDER = ["waiting", "current", "upcoming", "outside", "left"] as const;
+const GROUP_LABEL: Record<(typeof GROUP_ORDER)[number], string> = {
+  waiting: "Chờ duyệt",
+  current: "Đang trong ca",
+  upcoming: "Sắp tới",
+  outside: "Ngoài ca / Nghỉ tạm",
+  left: "Đã về",
+};
 
 export default function PlayersPage() {
   const { code } = useParams<{ code: string }>();
   const { data } = useEvent();
   const queue = useMutationQueue();
+  const structure = useStructureChange(code);
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<Player | null>(null);
   const [removing, setRemoving] = useState<Player | null>(null);
   const [declaring, setDeclaring] = useState<Player | null>(null);
+  const [structureDialog, setStructureDialog] = useState<{ title: string; preview: StructurePreviewResponse | null } | null>(null);
 
   const groups = useMemo(() => {
     const players = data?.state.players ?? [];
-    return ORDER.map((status) => ({
-      status,
-      players: players.filter((p) => p.status === status),
-    })).filter((g) => g.players.length > 0);
+    const round = data ? firstUnplayedRound(data.state) : 1;
+    const groupOf = (player: Player): (typeof GROUP_ORDER)[number] => {
+      if (player.status === "pendingApproval" || player.status === "invited") return "waiting";
+      if (player.status === "left" || player.status === "declined" || player.status === "rejected") return "left";
+      if (player.status === "paused") return "outside";
+      if (player.status === "active" && isEligibleAt(player, round)) return "current";
+      if (plannedSpansOf(player).some((span) => span.from > round)) return "upcoming";
+      if (player.status === "confirmed") return "upcoming";
+      return "outside";
+    };
+    return GROUP_ORDER.map((group) => ({
+      group,
+      players: players.filter((player) => groupOf(player) === group),
+    })).filter((item) => item.players.length > 0);
   }, [data]);
 
   if (!data) return null;
   const { state } = data;
   const isAdmin = data.capabilities.canManagePlayers;
   const waiting = state.players.filter((p) => p.status === "pendingApproval");
+  const nextRound = firstUnplayedRound(state);
+  const previewIntent = async (title: string, intent: StructureIntent) => {
+    setStructureDialog({ title, preview: null });
+    try {
+      const preview = await structure.preview(intent);
+      setStructureDialog({ title, preview });
+    } catch {
+      setStructureDialog(null);
+    }
+  };
+  const confirmStructure = async (token: string) => {
+    try {
+      await structure.confirm(token);
+      setStructureDialog(null);
+      setDeclaring(null);
+    } catch {
+      // Giữ diff hiện tại để người dùng hiểu vì sao phải xem trước lại.
+    }
+  };
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] lg:items-start lg:gap-12">
@@ -150,9 +187,9 @@ export default function PlayersPage() {
           </div>
         ) : (
           groups.map((group) => (
-            <section key={group.status}>
+            <section key={group.group}>
               <SectionHead aside={String(group.players.length)}>
-                {PLAYER_STATUS_SHORT[group.status]}
+                {GROUP_LABEL[group.group]}
               </SectionHead>
               {group.players.map((p) => (
                 <PlayerRow
@@ -165,10 +202,13 @@ export default function PlayersPage() {
                   // nên người đăng nhập rồi mở buổi trên điện thoại mới bị mất
                   // nhãn "bạn" — đúng tình huống tài khoản sinh ra để chữa.
                   isMe={p.id === data.myPlayerId}
+                  nextRound={nextRound}
+                  canEditPlan={data.capabilities.canManagePlayerPlans || p.id === data.myPlayerId}
                   onCommand={queue.send}
                   onEdit={() => setEditing(p)}
                   onRemove={() => setRemoving(p)}
                   onDeclare={() => setDeclaring(p)}
+                  onPreview={previewIntent}
                 />
               ))}
             </section>
@@ -214,11 +254,20 @@ export default function PlayersPage() {
         <AvailabilityDialog
           key={declaring.id}
           player={declaring}
-          nextRound={firstUnplayedRound(state)}
+          nextRound={nextRound}
           onClose={() => setDeclaring(null)}
-          onCommand={queue.send}
+          onPreview={previewIntent}
         />
       )}
+      <StructurePreviewDialog
+        open={structureDialog !== null}
+        title={structureDialog?.title ?? "Xem trước lịch"}
+        preview={structureDialog?.preview ?? null}
+        busy={structure.busy}
+        onClose={() => setStructureDialog(null)}
+        onConfirm={confirmStructure}
+      />
+      {structure.error && <p className="fixed bottom-20 left-4 right-4 z-50 bg-accent p-3 text-xs font-bold text-white lg:left-auto lg:w-96">{structure.error}</p>}
     </div>
   );
 }
@@ -228,22 +277,34 @@ function PlayerRow({
   player,
   isAdmin,
   isMe,
+  nextRound,
+  canEditPlan,
   onCommand,
   onEdit,
   onRemove,
   onDeclare,
+  onPreview,
 }: {
   code: string;
   player: Player;
   isAdmin: boolean;
   isMe: boolean;
+  nextRound: number;
+  canEditPlan: boolean;
   onCommand: (command: Command) => void;
   onEdit: () => void;
   onRemove: () => void;
   onDeclare: () => void;
+  onPreview: (title: string, intent: StructureIntent) => Promise<void>;
 }) {
   const dimmed = player.status === "left" || player.status === "declined";
   const active = player.status === "active";
+  const planned = plannedSpansOf(player);
+  const confirmable = planned.find(
+    (span) =>
+      spanContains(span, nextRound) &&
+      !player.presence.some((presence) => presence.plannedSpanId === span.id),
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2.5">
@@ -260,13 +321,26 @@ function PlayerRow({
         }`}
       >
         {player.name}
-        {player.available && (
+        {planned.length > 0 && (
           <span className="ml-2 whitespace-nowrap text-[11px] font-normal text-mute-600">
-            {describeSpan(player.available)}
+            {planned.map(describeSpan).join(" · ")}
           </span>
         )}
       </span>
       {isMe && <Marker tone="accent">bạn</Marker>}
+      {confirmable && (isAdmin || isMe) && (
+        <Button
+          className="min-h-10 px-3"
+          onClick={() => void onPreview("Xác nhận ca và xếp lại lịch", {
+            type: "confirm-player-span",
+            playerId: player.id,
+            spanId: confirmable.id,
+            requestedFromRound: nextRound,
+          })}
+        >
+          {player.presence.length > 0 ? "Quay lại ca" : "Đã đến ca"}
+        </Button>
+      )}
 
       {isAdmin && (
         <div className="flex flex-none gap-1.5">
@@ -321,9 +395,9 @@ function PlayerRow({
       {(isAdmin || isMe) && (
         <div className="flex w-full flex-wrap gap-x-4 gap-y-1 pl-10">
           <MiniAction onClick={onEdit}>Sửa tên, ảnh</MiniAction>
-          {(isAdmin || isMe) && active && (
+          {canEditPlan && (
             <MiniAction onClick={onDeclare}>
-              {player.available ? "Sửa giờ đến/về" : "Khai giờ đến/về"}
+              {planned.length ? "Sửa các ca dự kiến" : "Thêm ca dự kiến"}
             </MiniAction>
           )}
           {isMe && !isAdmin && active && (
@@ -526,23 +600,26 @@ function AvailabilityDialog({
   player,
   nextRound,
   onClose,
-  onCommand,
+  onPreview,
 }: {
   player: Player;
   nextRound: number;
   onClose: () => void;
-  onCommand: (command: Command) => void;
+  onPreview: (title: string, intent: StructureIntent) => Promise<void>;
 }) {
-  const [from, setFrom] = useState(
-    player.available ? String(player.available.from) : "",
-  );
-  const [to, setTo] = useState(
-    player.available?.to != null ? String(player.available.to) : "",
-  );
-
-  const parse = (v: string): number | null => {
-    const n = Number.parseInt(v, 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
+  const spans = plannedSpansOf(player);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [from, setFrom] = useState(nextRound);
+  const [to, setTo] = useState<string>("");
+  const rounds = Array.from({ length: 30 }, (_, index) => nextRound + index);
+  const preview = (availability: PlannedSpan[], title: string) => {
+    onClose();
+    void onPreview(title, {
+      type: "set-player-plan",
+      playerId: player.id,
+      availability,
+      requestedFromRound: nextRound,
+    });
   };
 
   return (
@@ -551,28 +628,45 @@ function AvailabilityDialog({
         {player.name} có mặt những vòng nào?
       </p>
       <p className="mt-3.5 bg-surface p-3 text-sm">
-        Vòng đang tới là <strong>vòng {nextRound}</strong>. Bỏ trống nghĩa là
-        không giới hạn ở đầu đó.
+        Vòng đang tới là <strong>vòng {nextRound}</strong>. Mỗi ca cần bấm
+        <em> Đã đến/Quay lại</em> trước khi được xếp.
       </p>
 
-      <div className="mt-3.5 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
+        {spans.length === 0 && <span className="text-xs text-mute-600">Chưa đặt ca — mặc định chơi liên tục như dữ liệu cũ.</span>}
+        {spans.map((span) => (
+          <span key={span.id} className="inline-flex items-center border border-line bg-paper px-2 py-1 text-xs">
+            {describeSpan(span)}
+            <button
+              type="button"
+              disabled={span.from < nextRound}
+              onClick={() => { setEditingId(span.id); setFrom(span.from); setTo(span.to === null ? "" : String(span.to)); }}
+              className="ml-2 underline disabled:text-mute-400"
+            >Sửa</button>
+            <button
+              type="button"
+              disabled={span.from < nextRound}
+              onClick={() => preview(spans.filter((item) => item.id !== span.id), "Xoá ca và xếp lại lịch")}
+              className="ml-2 font-bold text-accent-700 disabled:text-mute-400"
+            >×</button>
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-3.5 grid grid-cols-2 gap-2">
         <Field label="Từ vòng">
-          <input
-            inputMode="numeric"
+          <select
             value={from}
-            placeholder="1"
-            onChange={(e) => setFrom(e.target.value)}
+            onChange={(e) => setFrom(Number(e.target.value))}
             className={inputClass}
-          />
+          >{rounds.map((round) => <option key={round} value={round}>Vòng {round}</option>)}</select>
         </Field>
-        <Field label="Đến hết vòng">
-          <input
-            inputMode="numeric"
+        <Field label="Đến vòng">
+          <select
             value={to}
-            placeholder="tới cuối buổi"
             onChange={(e) => setTo(e.target.value)}
             className={inputClass}
-          />
+          ><option value="">Đến cuối</option>{rounds.filter((round) => round >= from).map((round) => <option key={round} value={round}>Vòng {round}</option>)}</select>
         </Field>
       </div>
 
@@ -583,20 +677,12 @@ function AvailabilityDialog({
       </p>
 
       <div className="mt-4.5 flex gap-2.5">
-        {player.available && (
+        {spans.length > 0 && (
           <Button
             className="min-h-[3.25rem] flex-1"
-            onClick={() => {
-              onCommand({
-                type: "DeclareAvailability",
-                playerId: player.id,
-                fromRound: null,
-                toRound: null,
-              });
-              onClose();
-            }}
+            onClick={() => preview([], "Xoá mọi ca và xếp lại lịch")}
           >
-            Xoá lời khai
+            Xoá mọi ca
           </Button>
         )}
         <Button className="min-h-[3.25rem] flex-1" onClick={onClose}>
@@ -605,18 +691,22 @@ function AvailabilityDialog({
         <Button
           tone="primary"
           className="min-h-[3.25rem] flex-1"
-          disabled={from.trim() === "" && to.trim() === ""}
+          disabled={from < nextRound}
           onClick={() => {
-            onCommand({
-              type: "DeclareAvailability",
-              playerId: player.id,
-              fromRound: parse(from),
-              toRound: parse(to),
-            });
-            onClose();
+            const value: PlannedSpan = {
+              id: editingId ?? crypto.randomUUID(),
+              from,
+              to: to === "" ? null : Number(to),
+            };
+            preview(
+              editingId
+                ? spans.map((span) => span.id === editingId ? value : span)
+                : [...spans, value],
+              editingId ? "Sửa ca và xếp lại lịch" : "Thêm ca và xếp lại lịch",
+            );
           }}
         >
-          Lưu
+          {editingId ? "Xem trước sửa" : "Xem trước thêm"}
         </Button>
       </div>
     </Dialog>

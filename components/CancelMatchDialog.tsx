@@ -14,7 +14,7 @@
 
 import { useEffect, useState } from "react";
 import type { Command } from "@/lib/domain/commands";
-import type { EventState, Match, PlayerId } from "@/lib/domain/types";
+import { matchCourtName, type EventState, type Match, type PlayerId } from "@/lib/domain/types";
 import { Button, Dialog, inputClass } from "@/components/ui";
 
 const REASONS = ["Hết giờ sân", "Mất sân", "Trời mưa", "Thiếu người"] as const;
@@ -73,7 +73,7 @@ export function CancelMatchDialog({
     >
       <div className="space-y-4">
         <p className="rounded-xl bg-paper p-3 text-sm">
-          Vòng {match.round}, sân {match.court}
+          Vòng {match.round}, {matchCourtName(state, match)}
           <br />
           <span className="text-mute-700">
             {nameOf(match.teamA[0])} & {nameOf(match.teamA[1])} vs{" "}

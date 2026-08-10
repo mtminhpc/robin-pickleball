@@ -21,6 +21,7 @@ import { Button, Card, Dialog, Empty, Field, inputClass } from "@/components/ui"
 import { SponsorManager } from "@/components/SponsorManager";
 import { estimateEvent, formatEstimatedDuration } from "@/lib/domain/estimate";
 import type { EventConfig } from "@/lib/domain/types";
+import { CourtManager } from "@/components/CourtManager";
 
 export default function AdminPage() {
   const { code } = useParams<{ code: string }>();
@@ -78,6 +79,8 @@ export default function AdminPage() {
       {capabilities.canChangePasswords && <PasswordSection code={code} />}
 
       {capabilities.canManagePresentation && <SponsorManager code={code} />}
+
+      {capabilities.canManageStructure && <CourtManager code={code} />}
 
       {state.status === "finished" && capabilities.canCopyEvent && <CopyEventSection code={code} />}
 
@@ -174,7 +177,6 @@ function EventConfigSection({ config }: { config: EventConfig }) {
       <Field label="Tên sự kiện"><input value={name} maxLength={80} onChange={(event) => { const value = event.target.value; setName(value); if (value.trim().length >= 2) debounce({ name: value.trim() }); }} className={inputClass} /></Field>
       <Field label="Địa chỉ sân"><input value={venueAddress} maxLength={200} onChange={(event) => { const value = event.target.value; setVenueAddress(value); debounce({ venueAddress: value.trim() }); }} className={inputClass} /></Field>
       <div className="grid grid-cols-2 gap-3">
-        {numberField("courts", "Số sân", 1, 8)}
         {numberField("expectedPlayers", "Số người dự kiến", 4, 200)}
         {numberField("targetGamesPerPlayer", "Trận/người", 1, 50)}
         {numberField("estimatedMatchMinutes", "Phút/trận", 5, 180)}

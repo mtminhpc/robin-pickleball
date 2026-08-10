@@ -7,11 +7,11 @@ export const APP_VERSION = `v${packageJson.version}`;
  * Tên hiệu của bản phát hành.
  *
  * Con số nói thứ tự, cái tên nói *bản này làm gì*. Khi báo lỗi qua điện thoại thì
- * "bản Ánh kim" dễ nói và dễ nhớ hơn "không chấm bảy chấm không".
+ * "bản Linh động" dễ nói và dễ nhớ hơn "không chấm tám chấm không".
  *
  * Đổi tên mỗi khi đổi số nhỏ (minor); bản vá thì giữ nguyên tên của bản gốc.
  */
-export const APP_CODENAME = "Ánh kim";
+export const APP_CODENAME = "Linh động";
 
 /**
  * Nhãn đủ ngắn để nhìn trên điện thoại nhưng vẫn chỉ đúng bản build nào đang chạy.

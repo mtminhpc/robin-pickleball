@@ -269,12 +269,12 @@ describe("vòng đời sự kiện", () => {
     expect(sim.state.players.find((p) => p.id === id)!.available).toBeUndefined();
   });
 
-  it("nghỉ tạm cũng xoá lời khai — cùng một hàm, cùng một lý do", () => {
+  it("nghỉ tạm giữ kế hoạch để quay lại đúng ca", () => {
     const sim = started(12);
     const id = sim.state.players[0]!.id;
     sim.send({ type: "DeclareAvailability", playerId: id, fromRound: null, toRound: 8 });
     sim.send({ type: "PausePlayer", playerId: id });
-    expect(sim.state.players.find((p) => p.id === id)!.available).toBeUndefined();
+    expect(sim.state.players.find((p) => p.id === id)!.available).toEqual({ from: 1, to: 8 });
   });
 
   it("quay lại sau khi về vẫn được xếp trận", () => {

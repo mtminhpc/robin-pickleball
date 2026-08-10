@@ -20,14 +20,26 @@ import type {
   Player,
   PlayerId,
   PlayerStatus,
+  EventCourt,
 } from "./types";
 import {
   DEFAULT_CONFIG,
+  activeCourtsAt,
   closePresence,
+  courtLabelAt,
+  courtNameKey,
   emptyPresentation,
   isAvailableAt,
+  isEligibleAt,
   isFrozen,
+  legacyCourts,
+  normalizeCourtName,
+  normalizePlannedSpans,
+  normalizeRoundSpans,
   openPresence,
+  plannedSpansOf,
+  spanContains,
+  spansOverlap,
   withEventDefaults,
 } from "./types";
 
@@ -38,6 +50,8 @@ export function emptyState(code: string): EventState {
     status: "draft",
     config: { ...DEFAULT_CONFIG, scoring: { ...DEFAULT_CONFIG.scoring } },
     presentation: emptyPresentation(),
+    courts: legacyCourts(DEFAULT_CONFIG.courts),
+    scheduleChange: null,
     players: [],
     matches: [],
     lastRound: 0,
@@ -190,14 +204,22 @@ function makePlayer(
     userId: seed.userId,
     deviceId: seed.deviceId,
     presence: [],
+    availability: [],
     catchUpCredit: 0,
     addedAt: at,
   };
 }
 
 /** Chuyển một người sang `active` và mở khoảng có mặt kể từ vòng còn xếp được. */
-function activate(state: EventState, player: Player): void {
-  if (player.status === "active") return;
+function activate(state: EventState, player: Player, plannedSpanId?: string): void {
+  const openSpan = player.presence.find((span) => span.to === null);
+  if (
+    player.status === "active" &&
+    openSpan &&
+    (!plannedSpanId || openSpan.plannedSpanId === plannedSpanId)
+  ) {
+    return;
+  }
   const wasNew = player.presence.length === 0;
   if (wasNew && state.status === "running") {
     player.catchUpCredit = computeCatchUpCredit(state);
@@ -207,7 +229,11 @@ function activate(state: EventState, player: Player): void {
   // chỉ có thể được xếp vào vòng thuật toán còn sửa được. Tính họ là có mặt từ
   // sớm hơn sẽ sinh ra một khoản thiệt thòi ảo cho những vòng họ vốn không thể
   // chen vào.
-  openPresence(player, firstOpenRound(state));
+  const open = firstOpenRound(state);
+  const planned = plannedSpanId
+    ? plannedSpansOf(player).find((span) => span.id === plannedSpanId)
+    : plannedSpansOf(player).find((span) => spanContains(span, open));
+  openPresence(player, Math.max(open, planned?.from ?? open), planned?.id);
 }
 
 /** Đưa một người ra khỏi lịch và đóng khoảng có mặt. */
@@ -234,12 +260,14 @@ function deactivate(
   // vào giữa chừng nhận khoảng bắt đầu muộn hơn mốc đóng.
   closePresence(player, Math.max(open - 1, lastRoundPlayed(state, player.id)));
 
-  // Lời khai có mặt là một DỰ ĐỊNH, và dự định đó vừa bị thực tế vượt qua. Giữ
-  // lại thì nó thành cái bẫy: ai khai "đánh tới vòng 8", về ở vòng 4 rồi quay
-  // lại ở vòng 9 sẽ mang theo một lời khai nói rằng mình đã đi mất — và thuật
-  // toán, vốn coi lời khai là ràng buộc cứng, sẽ không xếp cho họ trận nào nữa.
-  // Người dùng thì chỉ thấy mình bấm "quay lại" xong ngồi không tới hết buổi.
-  delete player.available;
+  // Nghỉ tạm giữ nguyên kế hoạch. "Đã về" mới xoá/truncate các ca tương lai.
+  if (status === "left") {
+    // Presence đã là sổ lịch sử thực tế. Giữ lại các ca dự kiến đã qua làm cho lần
+    // `ResumePlayer` tương thích bị hiểu nhầm là vẫn còn một kế hoạch nhưng không có
+    // ca nào bao phủ vòng hiện tại, nên người vừa quay lại không bao giờ được xếp.
+    player.availability = [];
+    delete player.available;
+  }
 
   player.status = status;
   dropFutureMatches(state, player.id, open);
@@ -282,15 +310,31 @@ function dropFutureMatches(
 }
 
 function newMatch(
-  seed: { id: string; round: number; court: number; courtWave?: number },
+  state: EventState,
+  seed: {
+    id: string;
+    round: number;
+    court: number;
+    courtId?: string;
+    courtLabelId?: string;
+    courtWave?: number;
+  },
   teamA: [PlayerId, PlayerId],
   teamB: [PlayerId, PlayerId],
   at: number,
 ): Match {
+  const court =
+    state.courts.find((item) => item.id === seed.courtId) ??
+    state.courts.find((item) => item.order === seed.court) ??
+    state.courts[0];
+  const label = court ? courtLabelAt(court, seed.round) : undefined;
   return {
     id: seed.id,
     round: seed.round,
-    court: seed.court,
+    courtId: seed.courtId ?? court?.id ?? `court-${seed.court}`,
+    courtLabelId:
+      seed.courtLabelId ?? label?.id ?? `court-${seed.court}-label-1`,
+    court: seed.court || court?.order || 1,
     courtWave: seed.courtWave ?? 1,
     teamA,
     teamB,
@@ -343,6 +387,21 @@ function applyInPlace(
       state.code = c.code;
       state.clubId = c.clubId;
       state.config = { ...DEFAULT_CONFIG, ...c.config };
+      if (c.courts?.length) {
+        const normalized: EventCourt[] = [];
+        for (const [index, input] of c.courts.entries()) {
+          const court = normalizeCourtInput(input, index + 1);
+          if (!court.ok) return court;
+          normalized.push(court.value);
+        }
+        const invalid = validateCourtCatalog(normalized);
+        if (invalid) return err(invalid);
+        state.courts = normalized
+          .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+          .map((court, index) => ({ ...court, order: index + 1 }));
+      } else {
+        state.courts = legacyCourts(state.config.courts);
+      }
       state.createdAt = at;
       return ok(null);
     }
@@ -360,7 +419,8 @@ function applyInPlace(
       for (const p of state.players) {
         if (p.status === "confirmed") {
           p.status = "active";
-          openPresence(p, 1);
+          const span = plannedSpansOf(p).find((item) => spanContains(item, 1));
+          if (plannedSpansOf(p).length === 0 || span) openPresence(p, 1, span?.id);
         }
       }
       const playing = state.players.filter((p) => p.status === "active");
@@ -694,6 +754,7 @@ function applyInPlace(
       // Cả hai rỗng là xoá lời khai, quay về mặc định có mặt suốt buổi.
       if (c.fromRound === null && c.toRound === null) {
         delete p.available;
+        p.availability = [];
         return ok(null);
       }
 
@@ -715,11 +776,149 @@ function applyInPlace(
       }
 
       p.available = { from, to };
+      p.availability = [{ id: "legacy-availability", from, to }];
+      for (const presence of p.presence) {
+        if (!presence.plannedSpanId && spansOverlap(p.availability[0], presence)) {
+          presence.plannedSpanId = p.availability[0].id;
+        }
+      }
+      return ok(null);
+    }
+
+    case "SetPlayerPlan": {
+      const p = findPlayer(state, c.playerId);
+      if (!p) return err("Không tìm thấy người chơi.");
+      const open = firstOpenRound(state);
+      if (!Number.isInteger(c.effectiveRound) || c.effectiveRound < open) {
+        return err(`Kế hoạch chỉ được thay đổi từ vòng ${open} trở đi.`);
+      }
+      if (c.availability.length > 20) return err("Mỗi người tối đa 20 khoảng.");
+      const normalized = normalizePlannedSpans(c.availability);
+      if (normalized.length > 20) return err("Mỗi người tối đa 20 khoảng.");
+      p.availability = normalized;
+      delete p.available;
+
+      const ids = new Set(normalized.map((span) => span.id));
+      // Chỉ bỏ xác nhận của ca đã bị xoá ở phần tương lai; lịch sử presence giữ nguyên.
+      for (const presence of p.presence) {
+        if (
+          presence.plannedSpanId &&
+          !ids.has(presence.plannedSpanId) &&
+          presence.from >= c.effectiveRound
+        ) {
+          delete presence.plannedSpanId;
+        }
+      }
+      return ok(null);
+    }
+
+    case "ConfirmPlayerSpan": {
+      const p = findPlayer(state, c.playerId);
+      if (!p) return err("Không tìm thấy người chơi.");
+      if (p.status !== "active" && p.status !== "paused" && p.status !== "left") {
+        return err("Người này chưa được duyệt vào buổi đánh.");
+      }
+      const span = plannedSpansOf(p).find((item) => item.id === c.spanId);
+      if (!span) return err("Không tìm thấy ca dự kiến.");
+      const open = firstOpenRound(state);
+      if (span.to !== null && span.to < open) return err("Ca này đã kết thúc.");
+      activate(state, p, span.id);
+      return ok(null);
+    }
+
+    // ---- cấu trúc sân ----------------------------------------------------
+    case "AddCourt": {
+      if (state.courts.some((court) => court.id === c.court.id)) {
+        return err("Mã sân đã tồn tại.");
+      }
+      const court = normalizeCourtInput(c.court, state.courts.length + 1);
+      if (!court.ok) return court;
+      state.courts.push(court.value);
+      const invalid = validateCourtCatalog(state.courts);
+      if (invalid) return err(invalid);
+      state.courts = state.courts
+        .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+        .map((item, index) => ({ ...item, order: index + 1 }));
+      return ok(null);
+    }
+
+    case "RenameCourt": {
+      const court = state.courts.find((item) => item.id === c.courtId);
+      if (!court) return err("Không tìm thấy sân.");
+      const name = normalizeCourtName(c.name);
+      if (name.length < 1 || name.length > 40) return err("Tên sân phải từ 1 đến 40 ký tự.");
+      if (!Number.isInteger(c.effectiveRound) || c.effectiveRound < 1) {
+        return err("Vòng đổi tên không hợp lệ.");
+      }
+      if (court.labels.some((label) => label.id === c.labelId)) {
+        return err("Mã phiên bản tên sân đã tồn tại.");
+      }
+      court.labels = [
+        ...court.labels.filter((label) => label.effectiveFromRound !== c.effectiveRound),
+        { id: c.labelId, name, effectiveFromRound: c.effectiveRound },
+      ].sort((a, b) => a.effectiveFromRound - b.effectiveFromRound);
+      const invalid = validateCourtCatalog(state.courts);
+      if (invalid) return err(invalid);
+      return ok(null);
+    }
+
+    case "ReorderCourts": {
+      if (
+        c.courtIds.length !== state.courts.length ||
+        new Set(c.courtIds).size !== state.courts.length ||
+        c.courtIds.some((id) => !state.courts.some((court) => court.id === id))
+      ) return err("Danh sách thứ tự sân không hợp lệ.");
+      const order = new Map(c.courtIds.map((id, index) => [id, index + 1]));
+      state.courts = state.courts
+        .map((court) => ({ ...court, order: order.get(court.id) ?? court.order }))
+        .sort((a, b) => a.order - b.order);
+      // Số sân legacy trên trận chưa bắt đầu đi theo thứ tự mới; lịch sử giữ nguyên.
+      for (const match of state.matches) {
+        if (match.status === "scheduled") {
+          match.court = state.courts.find((court) => court.id === match.courtId)?.order ?? match.court;
+        }
+      }
+      return ok(null);
+    }
+
+    case "SetCourtAvailability": {
+      const court = state.courts.find((item) => item.id === c.courtId);
+      if (!court) return err("Không tìm thấy sân.");
+      if (c.availability.length > 20) return err("Mỗi sân tối đa 20 khoảng.");
+      const open = firstOpenRound(state);
+      if (
+        !Number.isInteger(c.effectiveRound) ||
+        c.effectiveRound < open ||
+        c.effectiveRound > 100_000
+      ) return err(`Khoảng sân chỉ được đổi từ vòng ${open} trở đi.`);
+      const normalized = normalizeRoundSpans(c.availability);
+      for (let round = 1; round < c.effectiveRound; round++) {
+        const before = court.availability.some((span) => spanContains(span, round));
+        const after = normalized.some((span) => spanContains(span, round));
+        if (before !== after) return err("Không được sửa ca sân trong các vòng đã khoá.");
+      }
+      court.availability = normalized;
+      const invalid = validateCourtCatalog(state.courts);
+      if (invalid) return err(invalid);
+      return ok(null);
+    }
+
+    case "ArchiveCourt": {
+      const court = state.courts.find((item) => item.id === c.courtId);
+      if (!court) return err("Không tìm thấy sân.");
+      court.archived = c.archived;
+      const invalid = validateCourtCatalog(state.courts);
+      if (invalid) return err(invalid);
       return ok(null);
     }
 
     // ---- lịch thi đấu ----------------------------------------------------
     case "SetSchedule": {
+      if (
+        c.requiresCommandIds?.some((commandId) => !state.appliedCommandIds.includes(commandId))
+      ) {
+        return err("Thay đổi cấu trúc đi kèm đã không được áp dụng.");
+      }
       const known = new Set(state.players.map((p) => p.id));
       for (const seed of c.matches) {
         for (const id of [...seed.teamA, ...seed.teamB]) {
@@ -734,12 +933,21 @@ function applyInPlace(
         (m) => m.round < c.fromRound || isFrozen(m),
       );
       const added = c.matches.map((seed) =>
-        newMatch(seed, seed.teamA, seed.teamB, at),
+        newMatch(state, seed, seed.teamA, seed.teamB, at),
       );
       state.matches = [...kept, ...added].sort(
         (a, b) => a.round - b.round || a.court - b.court,
       );
       state.lastRound = state.matches.reduce((n, m) => Math.max(n, m.round), 0);
+      if (c.changeKind) {
+        state.scheduleChange = {
+          revision: state.seq + 1,
+          effectiveRound: c.fromRound,
+          changedAt: at,
+          actorLabel: actor.label,
+          kind: c.changeKind,
+        };
+      }
       return ok(null);
     }
 
@@ -778,6 +986,10 @@ function applyInPlace(
 
       const fromRound = m.round;
       const fromCourt = m.court;
+      const fromCourtId = m.courtId;
+      const fromCourtLabelId = m.courtLabelId;
+      const targetCourt = activeCourtsAt(state, c.toRound).find((court) => court.order === c.toCourt);
+      if (!targetCourt) return err("Sân đích không hoạt động ở vòng này.");
       for (const [candidate, nextRound] of [
         [m, c.toRound],
         ...(other ? ([[other, fromRound]] as const) : []),
@@ -794,10 +1006,14 @@ function applyInPlace(
       }
       m.round = c.toRound;
       m.court = c.toCourt;
+      m.courtId = targetCourt.id;
+      m.courtLabelId = courtLabelAt(targetCourt, c.toRound).id;
       m.pinned = true;
       if (other) {
         other.round = fromRound;
         other.court = fromCourt;
+        other.courtId = fromCourtId;
+        other.courtLabelId = fromCourtLabelId;
         // Ghim cả trận bị đẩy sang: chủ sự kiện vừa cố ý xếp hai trận này cạnh
         // nhau, để bộ xếp lịch trả nó về chỗ cũ thì công đổi chỗ thành vô nghĩa.
         other.pinned = true;
@@ -812,7 +1028,8 @@ function applyInPlace(
       if (!m) return err("Không tìm thấy trận.");
       if (m.status !== "scheduled") return err("Chỉ đưa lên được trận chưa đánh.");
       if (c.toRound < 1) return err("Không có vòng nào trước vòng 1.");
-      if (c.toCourt < 1 || c.toCourt > state.config.courts) {
+      const targetCourt = activeCourtsAt(state, c.toRound).find((court) => court.order === c.toCourt);
+      if (!targetCourt) {
         return err("Sân đích không hợp lệ.");
       }
       if (m.round <= c.toRound) return err("Chỉ đưa được một trận tương lai lên sớm hơn.");
@@ -856,6 +1073,8 @@ function applyInPlace(
         .map((other) => other.courtWave ?? 1);
       m.round = c.toRound;
       m.court = c.toCourt;
+      m.courtId = targetCourt.id;
+      m.courtLabelId = courtLabelAt(targetCourt, c.toRound).id;
       m.courtWave = Math.max(0, ...occupiedWaves) + 1;
       m.pinned = true;
       if (c.startNow) {
@@ -875,6 +1094,51 @@ function applyInPlace(
           (a.courtWave ?? 1) - (b.courtWave ?? 1) ||
           a.court - b.court,
       );
+      return ok(null);
+    }
+
+    case "TransferMatch": {
+      const match = findMatch(state, c.matchId);
+      if (!match) return err("Không tìm thấy trận.");
+      if (match.status !== "scheduled" && match.status !== "playing") {
+        return err("Chỉ chuyển được trận chờ hoặc đang chơi.");
+      }
+      let target = state.courts.find((court) => court.id === c.toCourtId);
+      if (!target && c.newCourt) {
+        const normalized = normalizeCourtInput(c.newCourt, state.courts.length + 1);
+        if (!normalized.ok) return normalized;
+        state.courts.push(normalized.value);
+        const invalid = validateCourtCatalog(state.courts);
+        if (invalid) return err(invalid);
+        state.courts = state.courts
+          .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+          .map((item, index) => ({ ...item, order: index + 1 }));
+        target = state.courts.find((court) => court.id === c.toCourtId);
+      }
+      if (!target || target.archived) return err("Sân đích không hoạt động.");
+      const label = courtLabelAt(target, match.round);
+      if (label.id !== c.toCourtLabelId) return err("Tên sân đích đã thay đổi.");
+      if (!activeCourtsAt(state, match.round).some((court) => court.id === target.id)) {
+        return err("Sân đích không mở ở vòng của trận này.");
+      }
+      const busy = state.matches.some(
+        (other) =>
+          other.id !== match.id &&
+          other.courtId === target.id &&
+          (other.status === "playing" ||
+            (other.round === match.round && other.status === "scheduled")),
+      );
+      if (busy) return err(`${label.name} đang bận.`);
+
+      const sourceId = match.courtId;
+      match.courtId = target.id;
+      match.courtLabelId = label.id;
+      match.court = target.order;
+      if (match.status === "scheduled") match.pinned = true;
+      if (c.closeSourceAfter && sourceId !== target.id) {
+        const source = state.courts.find((court) => court.id === sourceId);
+        if (source) source.availability = removeSpanFrom(source.availability, c.effectiveRound);
+      }
       return ok(null);
     }
 
@@ -987,7 +1251,7 @@ function applyInPlace(
         (other) =>
           other.id !== m.id &&
           other.status === "playing" &&
-          (other.court === m.court ||
+          ((other.courtId && m.courtId ? other.courtId === m.courtId : other.court === m.court) ||
             [...other.teamA, ...other.teamB].some((id) => participants.has(id))),
       );
       if (clash) return err("Sân hoặc người chơi đang bận ở một trận khác.");
@@ -1065,6 +1329,91 @@ function applyInPlace(
   }
 
   return exhaustive(c);
+}
+
+function normalizeCourtInput(court: EventCourt, fallbackOrder: number): Result<EventCourt> {
+  const id = String(court.id || "").trim();
+  if (!id || id.length > 80) return err("Mã sân không hợp lệ.");
+  if (!Array.isArray(court.labels) || court.labels.length === 0) {
+    return err("Sân phải có ít nhất một tên.");
+  }
+  if (court.labels.length > 20) return err("Mỗi sân tối đa 20 lần đổi tên.");
+  const labelIds = new Set<string>();
+  const labels = court.labels
+    .map((label) => ({
+      id: String(label.id || "").trim(),
+      name: normalizeCourtName(label.name),
+      effectiveFromRound: Math.trunc(label.effectiveFromRound),
+    }))
+    .sort((a, b) => a.effectiveFromRound - b.effectiveFromRound);
+  for (const label of labels) {
+    if (!label.id || labelIds.has(label.id)) return err("Mã phiên bản tên sân bị trùng.");
+    labelIds.add(label.id);
+    if (label.name.length < 1 || label.name.length > 40) {
+      return err("Tên sân phải từ 1 đến 40 ký tự.");
+    }
+    if (!Number.isInteger(label.effectiveFromRound) || label.effectiveFromRound < 1) {
+      return err("Vòng đổi tên sân không hợp lệ.");
+    }
+  }
+  const availability = normalizeRoundSpans(court.availability ?? []);
+  if ((court.availability?.length ?? 0) > 20 || availability.length > 20) {
+    return err("Mỗi sân tối đa 20 khoảng.");
+  }
+  return ok({
+    id,
+    order:
+      Number.isInteger(court.order) && court.order > 0 ? court.order : fallbackOrder,
+    labels,
+    availability,
+    archived: Boolean(court.archived),
+  });
+}
+
+/** Kiểm tên trùng theo version và trần 8 sân tại mọi điểm thay đổi. */
+function validateCourtCatalog(courts: EventCourt[]): string | null {
+  const ids = new Set<string>();
+  for (const court of courts) {
+    if (ids.has(court.id)) return "Mã sân bị trùng.";
+    ids.add(court.id);
+  }
+
+  const boundaries = new Set<number>([1]);
+  for (const court of courts) {
+    if (court.archived) continue;
+    for (const span of court.availability) {
+      boundaries.add(span.from);
+      if (span.to !== null && span.to < Number.MAX_SAFE_INTEGER) boundaries.add(span.to + 1);
+    }
+    for (const label of court.labels) boundaries.add(label.effectiveFromRound);
+  }
+
+  for (const round of [...boundaries].sort((a, b) => a - b)) {
+    const active = courts.filter(
+      (court) =>
+        !court.archived && court.availability.some((span) => spanContains(span, round)),
+    );
+    if (active.length > 8) return "Tối đa 8 sân được hoạt động đồng thời.";
+    const names = new Map<string, string>();
+    for (const court of active) {
+      const name = courtLabelAt(court, round).name;
+      const key = courtNameKey(name);
+      const duplicate = names.get(key);
+      if (duplicate) return `Tên sân “${name}” bị trùng trong khoảng hoạt động.`;
+      names.set(key, court.id);
+    }
+  }
+  return null;
+}
+
+function removeSpanFrom(spans: EventCourt["availability"], fromRound: number) {
+  return normalizeRoundSpans(
+    spans.flatMap((span) => {
+      if (span.to !== null && span.to < fromRound) return [span];
+      if (span.from >= fromRound) return [];
+      return [{ from: span.from, to: fromRound - 1 }];
+    }),
+  );
 }
 
 function validateConfigPatch(patch: Partial<EventState["config"]>): string | null {

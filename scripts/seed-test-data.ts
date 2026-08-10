@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import type { CommandEnvelope } from "../lib/domain/commands";
 import { fold } from "../lib/domain/reduce";
-import { DEFAULT_CONFIG } from "../lib/domain/types";
+import { DEFAULT_CONFIG, type EventCourt } from "../lib/domain/types";
 import { hashPassword } from "../lib/auth/passwords";
 import { planSchedule } from "../lib/scheduler/plan";
 import { ClubRepo } from "../lib/sheets/clubs";
@@ -26,6 +26,7 @@ export const TEST_DATA_PATH = resolve(
 export const TEST_EVENT_CODE = "TEST11";
 export const TEST_V5_EVENT_CODE = "TESTV5";
 export const TEST_V6_EVENT_CODE = "TESTV6";
+export const TEST_V8_EVENT_CODE = "TESTV8";
 export const TEST_PLAYER_PASSWORD = "test1234";
 export const TEST_ADMIN_PASSWORD = "admin1234";
 
@@ -352,11 +353,144 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
     v6 = await events.load(TEST_V6_EVENT_CODE);
   }
 
+  // TESTV8 là sân chạy thật cho luồng cấu trúc động: tên sân ổn định, ca sân theo
+  // vòng và nhiều ca dự kiến của người chơi. Seed chỉ tạo khi mã chưa tồn tại.
+  let v8 = await events.load(TEST_V8_EVENT_CODE);
+  if (!v8) {
+    const record = await events.create({
+      code: TEST_V8_EVENT_CODE,
+      clubId: club.id,
+      name: "SÂN TEST V8 · LINH ĐỘNG",
+      status: "draft",
+      ownerUserId: "test-owner",
+      playerPassHash: await hashPassword(TEST_PLAYER_PASSWORD),
+      adminPassHash: await hashPassword(TEST_ADMIN_PASSWORD),
+    }, now + 500);
+    const actor = {
+      kind: "admin",
+      label: "Chủ sự kiện · TEST Linh động",
+      ref: "test-owner",
+    } as const;
+    const members = loadedClub.members
+      .filter((member) => member.status === "active")
+      .slice(0, 10);
+    const courts: EventCourt[] = [
+      {
+        id: "testv8-court-7",
+        order: 1,
+        labels: [{ id: "testv8-court-7-label-1", name: "Sân số 7", effectiveFromRound: 1 }],
+        availability: [{ from: 1, to: null }],
+        archived: false,
+      },
+      {
+        id: "testv8-court-9",
+        order: 2,
+        labels: [{ id: "testv8-court-9-label-1", name: "Sân số 9", effectiveFromRound: 1 }],
+        availability: [{ from: 1, to: 3 }, { from: 6, to: null }],
+        archived: false,
+      },
+      {
+        id: "testv8-court-roof",
+        order: 3,
+        labels: [{ id: "testv8-court-roof-label-1", name: "Sân Mái Kính", effectiveFromRound: 1 }],
+        availability: [{ from: 3, to: 7 }],
+        archived: false,
+      },
+    ];
+    const commands: CommandEnvelope[] = [{
+      id: "testv8-create",
+      at: now + 500,
+      actor,
+      command: {
+        type: "CreateEvent",
+        code: TEST_V8_EVENT_CODE,
+        clubId: club.id,
+        config: {
+          ...DEFAULT_CONFIG,
+          name: "SÂN TEST V8 · LINH ĐỘNG",
+          courts: 2,
+          expectedPlayers: 10,
+          targetGamesPerPlayer: 7,
+        },
+        courts,
+      },
+    }, ...members.map((member, index) => ({
+      id: `testv8-player-${index + 1}`,
+      at: now + 510 + index,
+      actor,
+      command: {
+        type: "AddPlayer" as const,
+        player: {
+          id: `testv8-p${index + 1}`,
+          name: member.displayName,
+          avatarId: member.avatarId,
+          deviceId: `testv8-device-${index + 1}`,
+          ...(index < 2 ? { userId: `testv8-user-${index + 1}` } : {}),
+        },
+        asActive: true,
+      },
+    })), {
+      id: "testv8-plan-p1",
+      at: now + 530,
+      actor,
+      command: {
+        type: "SetPlayerPlan",
+        playerId: "testv8-p1",
+        availability: [
+          { id: "testv8-p1-morning", from: 1, to: 3 },
+          { id: "testv8-p1-evening", from: 6, to: null },
+        ],
+        effectiveRound: 1,
+      },
+    }, {
+      id: "testv8-plan-p2",
+      at: now + 532,
+      actor,
+      command: {
+        type: "SetPlayerPlan",
+        playerId: "testv8-p2",
+        availability: [{ id: "testv8-p2-late", from: 3, to: null }],
+        effectiveRound: 1,
+      },
+    }, {
+      id: "testv8-start",
+      at: now + 540,
+      actor,
+      command: { type: "StartEvent" },
+    }, {
+      id: "testv8-confirm-p1",
+      at: now + 541,
+      actor,
+      command: { type: "ConfirmPlayerSpan", playerId: "testv8-p1", spanId: "testv8-p1-morning" },
+    }];
+    const interim = fold(TEST_V8_EVENT_CODE, commands);
+    if (interim.skipped.length > 0) {
+      throw new Error(`Không dựng được sự kiện TESTV8: ${interim.skipped[0]!.error}`);
+    }
+    const schedule = planSchedule(interim.state, { mode: "extend", seed: 8080 });
+    if (schedule.blocked) throw new Error(schedule.blocked);
+    commands.push({
+      id: "testv8-schedule",
+      at: now + 542,
+      actor,
+      command: { type: "SetSchedule", fromRound: schedule.fromRound, matches: schedule.matches },
+    });
+    const committed = await events.commitMany(TEST_V8_EVENT_CODE, commands, {
+      record,
+      state: fold(TEST_V8_EVENT_CODE, []).state,
+      repaired: false,
+      skipped: [],
+    });
+    if (!committed.ok) throw new Error(committed.error);
+    v8 = await events.load(TEST_V8_EVENT_CODE);
+  }
+
   console.log(`Đã giữ dữ liệu TEST tại: ${path}`);
   console.log(`CLB: ${club.name} · mã mời ${club.inviteCode}`);
   console.log(`Sân/sự kiện: ${event?.state.config.name ?? TEST_EVENT_CODE} · mã ${TEST_EVENT_CODE}`);
   console.log(`Trưng bày v0.5: ${v5?.state.config.name ?? TEST_V5_EVENT_CODE} · mã ${TEST_V5_EVENT_CODE}`);
   console.log(`Điều hành v0.6: ${v6?.state.config.name ?? TEST_V6_EVENT_CODE} · mã ${TEST_V6_EVENT_CODE}`);
+  console.log(`Linh động v0.8: ${v8?.state.config.name ?? TEST_V8_EVENT_CODE} · mã ${TEST_V8_EVENT_CODE}`);
   console.log(`Người chơi: ${loadedClub.members.filter((m) => m.status === "active").length}`);
   console.log(`Mật khẩu người chơi: ${TEST_PLAYER_PASSWORD}`);
   console.log(`Mật khẩu quản trị: ${TEST_ADMIN_PASSWORD}`);

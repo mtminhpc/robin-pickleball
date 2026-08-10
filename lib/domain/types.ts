@@ -7,6 +7,7 @@
 
 export type PlayerId = string;
 export type MatchId = string;
+export type CourtId = string;
 
 /** Ai gây ra một lệnh — dùng cho nhật ký và cho luật tự-sửa-trong-2-phút. */
 export type ActorKind = "admin" | "player" | "system";
@@ -129,10 +130,21 @@ export type PlayerStatus =
 /** Chỉ những trạng thái này mới được đưa vào lịch thi đấu. */
 export const SCHEDULABLE: readonly PlayerStatus[] = ["active"];
 
-/** Một khoảng vòng liên tục mà người chơi có mặt. `to === null` là vẫn đang chơi. */
-export interface PresenceSpan {
+/** Khoảng vòng inclusive; `to === null` nghĩa là đến cuối sự kiện. */
+export interface RoundSpan {
   from: number;
   to: number | null;
+}
+
+/** Khoảng có ID ổn định để một lần xác nhận hiện diện không mất liên kết khi gộp. */
+export interface PlannedSpan extends RoundSpan {
+  id: string;
+}
+
+/** Một khoảng vòng mà người chơi thực sự có mặt. */
+export interface PresenceSpan extends RoundSpan {
+  /** ID ca dự kiến đã được xác nhận; bỏ trống với dữ liệu legacy. */
+  plannedSpanId?: string;
 }
 
 export interface Player {
@@ -170,7 +182,9 @@ export interface Player {
    * đã báo trước là không có mặt. Xếp rồi để cả sân đứng chờ một người đã nói
    * trước là mình chưa tới thì tệ hơn nhiều so với việc cho họ nghỉ thêm.
    */
-  available?: PresenceSpan;
+  availability?: PlannedSpan[];
+  /** @deprecated Trường v0.2–v0.7, chỉ giữ để replay/client cũ gửi được. */
+  available?: RoundSpan;
   addedAt: number;
 }
 
@@ -181,10 +195,22 @@ export interface Player {
  * người chơi.
  */
 export function isAvailableAt(p: Player, round: number): boolean {
-  const w = p.available;
-  if (!w) return true;
-  if (round < w.from) return false;
-  return w.to === null || round <= w.to;
+  const spans = plannedSpansOf(p);
+  if (spans.length === 0) return true;
+  return spans.some((span) => spanContains(span, round));
+}
+
+/** Ca dự kiến đã được xác nhận hiện diện thật ở vòng này hay chưa. */
+export function isEligibleAt(p: Player, round: number): boolean {
+  const spans = plannedSpansOf(p);
+  if (spans.length === 0) return wasPresentAt(p, round);
+  const planned = spans.find((span) => spanContains(span, round));
+  if (!planned) return false;
+  return p.presence.some(
+    (span) =>
+      span.plannedSpanId === planned.id &&
+      spanContains(span, round),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +253,11 @@ export interface MatchEdit {
 export interface Match {
   id: MatchId;
   round: number;
+  /** ID sân ổn định từ v0.8; dữ liệu cũ được dựng từ trường `court`. */
+  courtId?: CourtId;
+  /** Version nhãn được chốt lúc trận được tạo/chuyển sân. */
+  courtLabelId?: string;
+  /** @deprecated Số sân v0.1–v0.7, vẫn được ghi để client/log cũ hoạt động. */
   court: number;
   /** Lượt dùng sân trong cùng một vòng logic; dữ liệu trước v0.6 mặc định là 1. */
   courtWave: number;
@@ -250,6 +281,32 @@ export interface Match {
 // ---------------------------------------------------------------------------
 
 export type EventStatus = "draft" | "running" | "finished";
+
+// ---------------------------------------------------------------------------
+// Cấu trúc sân và lịch
+// ---------------------------------------------------------------------------
+
+export interface CourtLabelVersion {
+  id: string;
+  name: string;
+  effectiveFromRound: number;
+}
+
+export interface EventCourt {
+  id: CourtId;
+  order: number;
+  labels: CourtLabelVersion[];
+  availability: RoundSpan[];
+  archived: boolean;
+}
+
+export interface ScheduleChange {
+  revision: number;
+  effectiveRound: number;
+  changedAt: number;
+  actorLabel: string;
+  kind: string;
+}
 
 // ---------------------------------------------------------------------------
 // Trình bày sự kiện: nhà tài trợ và giải thưởng
@@ -307,6 +364,10 @@ export interface EventState {
   status: EventStatus;
   config: EventConfig;
   presentation: EventPresentation;
+  /** Danh mục sân ổn định; `config.courts` chỉ còn là ước tính/legacy. */
+  courts: EventCourt[];
+  /** Lần gần nhất phần lịch chưa bắt đầu được thay đổi có chủ ý. */
+  scheduleChange: ScheduleChange | null;
   players: Player[];
   matches: Match[];
   /** Vòng cao nhất đã được sinh; 0 nghĩa là chưa sinh vòng nào. */
@@ -338,6 +399,15 @@ export interface EventState {
  * Hàm trả bản mới để các tầng đọc có thể gọi an toàn trên dữ liệu đang đệm.
  */
 export function withEventDefaults(state: EventState): EventState {
+  const configuredCourts = Number.isInteger(state.config?.courts)
+    ? Math.max(1, Math.min(8, state.config.courts))
+    : DEFAULT_CONFIG.courts;
+  const courts = normalizeCourts(
+    Array.isArray(state.courts) && state.courts.length > 0
+      ? state.courts
+      : legacyCourts(configuredCourts),
+  );
+  const courtByOrder = new Map(courts.map((court) => [court.order, court] as const));
   return {
     ...state,
     config: {
@@ -357,18 +427,208 @@ export function withEventDefaults(state: EventState): EventState {
         ? state.presentation.awards
         : [],
     },
+    courts,
+    scheduleChange: state.scheduleChange ?? null,
+    players: Array.isArray(state.players)
+      ? state.players.map((player) => withPlayerDefaults(player))
+      : [],
     matches: Array.isArray(state.matches)
-      ? state.matches.map((match) => ({
-          ...match,
-          courtWave:
-            Number.isInteger(match.courtWave) && match.courtWave > 0
-              ? match.courtWave
-              : 1,
-          startedAt:
-            typeof match.startedAt === "number" ? match.startedAt : null,
+      ? state.matches.map((match) => {
+          const court =
+            courts.find((item) => item.id === match.courtId) ??
+            courtByOrder.get(match.court) ??
+            courts[0];
+          const label = court ? courtLabelAt(court, match.round) : undefined;
+          return {
+            ...match,
+            courtId: match.courtId || court?.id || `court-${match.court || 1}`,
+            courtLabelId:
+              match.courtLabelId || label?.id || `court-${match.court || 1}-label-1`,
+            court:
+              Number.isInteger(match.court) && match.court > 0
+                ? match.court
+                : court?.order ?? 1,
+            courtWave:
+              Number.isInteger(match.courtWave) && match.courtWave > 0
+                ? match.courtWave
+                : 1,
+            startedAt:
+              typeof match.startedAt === "number" ? match.startedAt : null,
+          };
+        })
+      : [],
+  };
+}
+
+/** Sân mặc định xác định cho snapshot/log trước v0.8, không ghi migration. */
+export function legacyCourts(count: number): EventCourt[] {
+  const safe = Math.max(1, Math.min(8, Math.trunc(count) || 1));
+  return Array.from({ length: safe }, (_, index) => {
+    const order = index + 1;
+    return {
+      id: `court-${order}`,
+      order,
+      labels: [{ id: `court-${order}-label-1`, name: `Sân ${order}`, effectiveFromRound: 1 }],
+      availability: [{ from: 1, to: null }],
+      archived: false,
+    };
+  });
+}
+
+/** Trim + Unicode NFC; phép so tên dùng `courtNameKey`. */
+export function normalizeCourtName(name: string): string {
+  return name.normalize("NFC").trim().replace(/\s+/g, " ");
+}
+
+export function courtNameKey(name: string): string {
+  return normalizeCourtName(name).toLocaleLowerCase("vi");
+}
+
+export function spanContains(span: RoundSpan, round: number): boolean {
+  return round >= span.from && (span.to === null || round <= span.to);
+}
+
+export function spansOverlap(a: RoundSpan, b: RoundSpan): boolean {
+  const aTo = a.to ?? Number.POSITIVE_INFINITY;
+  const bTo = b.to ?? Number.POSITIVE_INFINITY;
+  return a.from <= bTo && b.from <= aTo;
+}
+
+/**
+ * Chuẩn hoá/gộp khoảng. Khoảng cũ đứng trước nên ID của nó được giữ khi có thể.
+ */
+export function normalizePlannedSpans(spans: PlannedSpan[]): PlannedSpan[] {
+  const sorted = spans
+    .filter((span) => Number.isInteger(span.from) && span.from >= 1)
+    .map((span) => ({
+      id: String(span.id || "").trim(),
+      from: span.from,
+      to:
+        span.to === null
+          ? null
+          : Number.isInteger(span.to) && span.to >= span.from
+            ? span.to
+            : span.from,
+    }))
+    .filter((span) => span.id.length > 0)
+    .sort((a, b) => a.from - b.from || (a.to ?? Infinity) - (b.to ?? Infinity));
+
+  const out: PlannedSpan[] = [];
+  for (const span of sorted) {
+    const last = out[out.length - 1];
+    if (!last) {
+      out.push({ ...span });
+      continue;
+    }
+    const lastTo = last.to ?? Infinity;
+    if (span.from <= lastTo + 1) {
+      if (last.to === null || span.to === null) last.to = null;
+      else last.to = Math.max(last.to, span.to);
+      continue;
+    }
+    out.push({ ...span });
+  }
+  return out.slice(0, 20);
+}
+
+export function normalizeRoundSpans(spans: RoundSpan[]): RoundSpan[] {
+  return normalizePlannedSpans(
+    spans.map((span, index) => ({ ...span, id: `span-${index + 1}` })),
+  ).map(({ from, to }) => ({ from, to }));
+}
+
+export function plannedSpansOf(player: Player): PlannedSpan[] {
+  if (Array.isArray(player.availability) && player.availability.length > 0) {
+    return normalizePlannedSpans(player.availability);
+  }
+  return player.available
+    ? [{ id: "legacy-availability", from: player.available.from, to: player.available.to }]
+    : [];
+}
+
+function withPlayerDefaults(player: Player): Player {
+  const availability = plannedSpansOf(player);
+  const onlySpan = availability.length === 1 ? availability[0] : undefined;
+  return {
+    ...player,
+    availability,
+    presence: Array.isArray(player.presence)
+      ? player.presence.map((span) => ({
+          ...span,
+          plannedSpanId:
+            span.plannedSpanId ??
+            (onlySpan && spansOverlap(span, onlySpan) ? onlySpan.id : undefined),
         }))
       : [],
   };
+}
+
+export function courtLabelAt(court: EventCourt, round: number): CourtLabelVersion {
+  const labels = [...court.labels].sort(
+    (a, b) => a.effectiveFromRound - b.effectiveFromRound || a.id.localeCompare(b.id),
+  );
+  let selected = labels[0];
+  for (const label of labels) {
+    if (label.effectiveFromRound <= round) selected = label;
+    else break;
+  }
+  return selected;
+}
+
+export function activeCourtsAt(state: Pick<EventState, "courts">, round: number): EventCourt[] {
+  return state.courts
+    .filter(
+      (court) =>
+        !court.archived && court.availability.some((span) => spanContains(span, round)),
+    )
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+}
+
+/** Tên sân đã chốt trên trận; đổi tên sau này không làm lịch sử đổi theo. */
+export function matchCourtName(
+  state: Pick<EventState, "courts">,
+  match: Pick<Match, "court" | "courtId" | "courtLabelId" | "round">,
+): string {
+  const court =
+    state.courts.find((item) => item.id === match.courtId) ??
+    state.courts.find((item) => item.order === match.court);
+  if (!court) return `Sân ${match.court}`;
+  return (
+    court.labels.find((label) => label.id === match.courtLabelId)?.name ??
+    courtLabelAt(court, match.round).name
+  );
+}
+
+function normalizeCourts(courts: EventCourt[]): EventCourt[] {
+  return courts
+    .map((court, index) => {
+      const fallbackOrder = index + 1;
+      const id = String(court.id || `court-${fallbackOrder}`);
+      const labels = Array.isArray(court.labels) && court.labels.length > 0
+        ? court.labels
+            .map((label, labelIndex) => ({
+              id: String(label.id || `${id}-label-${labelIndex + 1}`),
+              name: normalizeCourtName(label.name || `Sân ${fallbackOrder}`),
+              effectiveFromRound:
+                Number.isInteger(label.effectiveFromRound) && label.effectiveFromRound >= 1
+                  ? label.effectiveFromRound
+                  : 1,
+            }))
+            .sort((a, b) => a.effectiveFromRound - b.effectiveFromRound)
+        : [{ id: `${id}-label-1`, name: `Sân ${fallbackOrder}`, effectiveFromRound: 1 }];
+      return {
+        id,
+        order:
+          Number.isInteger(court.order) && court.order > 0 ? court.order : fallbackOrder,
+        labels,
+        availability: normalizeRoundSpans(
+          Array.isArray(court.availability) ? court.availability : [{ from: 1, to: null }],
+        ),
+        archived: Boolean(court.archived),
+      };
+    })
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .map((court, index) => ({ ...court, order: index + 1 }));
 }
 
 // ---------------------------------------------------------------------------
@@ -403,10 +663,11 @@ export function wasPresentAt(p: Player, round: number): boolean {
 }
 
 /** Mở một khoảng có mặt mới, bỏ qua nếu đang mở sẵn. */
-export function openPresence(p: Player, round: number): void {
+export function openPresence(p: Player, round: number, plannedSpanId?: string): void {
   const last = p.presence[p.presence.length - 1];
-  if (last && last.to === null) return;
-  p.presence.push({ from: round, to: null });
+  if (last && last.to === null && last.plannedSpanId === plannedSpanId) return;
+  if (last && last.to === null) closePresence(p, round - 1);
+  p.presence.push({ from: round, to: null, plannedSpanId });
 }
 
 /** Đóng khoảng có mặt đang mở tại vòng `round` (vòng cuối còn được xếp lịch). */

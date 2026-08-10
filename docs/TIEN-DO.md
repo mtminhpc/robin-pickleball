@@ -1,11 +1,15 @@
 # Tiến độ dự án
 
-Cập nhật: 10/08/2026 · nhánh `claude/v0.7.0-anh-kim` ·
+Cập nhật: 10/08/2026 · nhánh làm việc `codex/v0.8.0-linh-dong` ·
 **đích Production: https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
 chạy thế nào, và việc gì còn dang dở. Hướng dẫn nối Google Sheet thật nằm riêng ở
 [SETUP.md](SETUP.md).
+
+> Thiết kế đã chốt cho hai đợt tiếp theo nằm tại
+> [THIET-KE-V08-V09.md](THIET-KE-V08-V09.md). v0.8 và v0.9 phải được triển khai,
+> kiểm định và phát hành độc lập; không bỏ qua cổng smoke v0.8 để đưa thẳng v0.9.
 
 ---
 
@@ -14,6 +18,21 @@ chạy thế nào, và việc gì còn dang dở. Hướng dẫn nối Google Sh
 Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
+
+**Mã làm việc hiện tại: `v0.8.0 — Linh động`.** Đã hoàn tất mô hình sân ổn định và
+ca hoạt động theo vòng, nhiều ca người chơi có xác nhận, preview/confirm HMAC 5 phút,
+xếp lại phần lịch chưa bắt đầu, chuyển trận giữ nguyên định danh/tỷ số, giao diện quản
+lý sân/người/lịch, banner lịch đổi và seed idempotent `TESTV8`. Lớp tương thích tự dựng
+`Sân 1…N` và tham chiếu sân ổn định khi đọc log/snapshot cũ; không ghi migration vào Sheet.
+
+Cổng cục bộ v0.8 ngày 10/08/2026: **595/595 test**, `npm run scenarios` **152 lượt/0
+vấn đề**, `npm run build` và `npm run typecheck` sạch. Benchmark 40 người/8 sân nằm
+trong nhóm v0.8 và chạy dưới ngân sách planner 4 giây trên máy kiểm định. Chưa push
+Preview, chưa deploy Production và chưa chạy smoke trình duyệt thật; vì vậy Production
+vẫn là v0.7.0. Không bắt đầu phát hành v0.9 trước khi v0.8 qua smoke Production.
+
+Việc smoke còn nợ của v0.6/v0.7 (xoá–khôi phục sự kiện, xoá/đổi thứ tự tài trợ) vẫn
+nguyên trạng và phải được làm cùng vòng smoke v0.8 bằng tài khoản Google thật.
 
 **Phiên bản hiện tại: `v0.7.0 — Ánh kim`**, dựng lại phần nhìn của nhà tài trợ và
 Bảng vàng cho khớp bộ bàn giao Claude Design v3.

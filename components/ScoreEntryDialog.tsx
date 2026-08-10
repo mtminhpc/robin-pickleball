@@ -18,7 +18,7 @@
 import { useEffect, useState } from "react";
 import type { Command } from "@/lib/domain/commands";
 import { canEditResult, checkScore } from "@/lib/domain/rules";
-import type { EventState, Match, PlayerId } from "@/lib/domain/types";
+import { matchCourtName, type EventState, type Match, type PlayerId } from "@/lib/domain/types";
 import { Button, Dialog } from "@/components/ui";
 import { useEvent } from "@/hooks/useEventState";
 
@@ -124,7 +124,7 @@ export function ScoreEntryDialog({
       ) : (
         <div>
           <p className="eyebrow font-normal text-mute-600">
-            {isEdit ? "Sửa tỷ số" : "Nhập tỷ số"} · Sân {match.court}
+            {isEdit ? "Sửa tỷ số" : "Nhập tỷ số"} · {matchCourtName(state, match)}
           </p>
 
           <ScoreStepper label={teamA} value={scoreA} onChange={setScoreA} />

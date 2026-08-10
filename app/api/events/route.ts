@@ -16,7 +16,13 @@ import {
 } from "@/lib/auth/session";
 import type { CommandEnvelope } from "@/lib/domain/commands";
 import { emptyState } from "@/lib/domain/reduce";
-import { DEFAULT_CONFIG, type EventConfig } from "@/lib/domain/types";
+import {
+  DEFAULT_CONFIG,
+  courtNameKey,
+  legacyCourts,
+  normalizeCourtName,
+  type EventConfig,
+} from "@/lib/domain/types";
 import { excludeDeletedEvents, getAppEventLimitRepo, getEventCreationReservationRepo, getEventStaffRepo, getRepo, invalidateEvent, withAccountLock } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
 import {
@@ -36,6 +42,7 @@ interface CreateBody {
   /** Tạo từ một câu lạc bộ: cả danh bạ được thêm sẵn vào buổi này. */
   clubId?: string;
   courts?: number;
+  courtNames?: string[];
   pointsTo?: number;
   winBy2?: boolean;
   scheduledAt?: number | null;
@@ -75,7 +82,7 @@ export async function GET(request: NextRequest) {
         scheduledAt: state.config.scheduledAt,
         createdAt: state.createdAt,
         updatedAt: record.updatedAt,
-        courts: state.config.courts,
+        courts: state.courts.filter((court) => !court.archived).length,
         players: state.players.length,
         sponsorLogoShape: state.presentation.sponsorLogoShape,
         // Hạng đi kèm để thẻ sự kiện vẽ đúng khung ánh kim mà không phải gọi
@@ -111,6 +118,22 @@ export async function POST(request: NextRequest) {
 
   const courts = Math.round(body.courts ?? DEFAULT_CONFIG.courts);
   if (courts < 1 || courts > 8) return fail(400, "Số sân phải từ 1 đến 8.");
+  if (body.courtNames !== undefined && !Array.isArray(body.courtNames)) {
+    return fail(400, "Danh sách tên sân không hợp lệ.");
+  }
+  const courtNames = Array.from({ length: courts }, (_, index) =>
+    normalizeCourtName(body.courtNames?.[index] || `Sân ${index + 1}`),
+  );
+  if (courtNames.some((courtName) => courtName.length < 1 || courtName.length > 40)) {
+    return fail(400, "Tên sân phải từ 1 đến 40 ký tự.");
+  }
+  if (new Set(courtNames.map(courtNameKey)).size !== courtNames.length) {
+    return fail(400, "Tên sân không được trùng nhau.");
+  }
+  const initialCourts = legacyCourts(courts).map((court, index) => ({
+    ...court,
+    labels: [{ ...court.labels[0]!, name: courtNames[index]! }],
+  }));
 
   const pointsTo = Math.round(body.pointsTo ?? DEFAULT_CONFIG.scoring.pointsTo);
   if (pointsTo < 5 || pointsTo > 50) return fail(400, "Mốc điểm phải từ 5 đến 50.");
@@ -235,7 +258,7 @@ export async function POST(request: NextRequest) {
       id: `create-${code}`,
       at: now,
       actor,
-      command: { type: "CreateEvent", code, clubId, config },
+      command: { type: "CreateEvent", code, clubId, config, courts: initialCourts },
     },
     // Cả danh bạ vào ở trạng thái "đã mời", KHÔNG phải "đang chơi". Hôm nay ai đi
     // ai không thì phải hỏi, không được đoán — đoán sai là xếp lịch cho người

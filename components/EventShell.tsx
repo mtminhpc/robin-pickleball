@@ -16,13 +16,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccount } from "@/hooks/useAccount";
 import { EventProvider, useEvent, type EventSnapshot } from "@/hooks/useEventState";
 import { MutationQueueProvider, useMutationQueue } from "@/hooks/useMutationQueue";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { rememberEvent } from "@/lib/identity/device";
 import { SponsorStrip } from "@/components/SponsorStrip";
+import { activeCourtsAt } from "@/lib/domain/types";
 
 export function EventShell({
   code,
@@ -70,6 +71,7 @@ function ShellInner({ code, children }: { code: string; children: ReactNode }) {
         <SideBar code={code} />
         <div className="flex min-w-0 flex-1 flex-col">
           <SaveStatusBanner />
+          <ScheduleChangeBanner code={code} />
           <Band code={code} />
           <SponsorStrip code={code} />
           {/* Thanh dưới nằm TRONG dòng chảy chứ không `fixed`, nên không cần
@@ -231,11 +233,15 @@ function Band({ code }: { code: string }) {
 
   const { state, role } = data;
   const round = currentRound(state.matches);
+  const structureRound = Math.max(1, round || state.lastRound + 1);
+  const activeCourtCount = activeCourtsAt(state, structureRound).length;
   const title =
     state.status === "draft"
       ? "CHƯA BẮT ĐẦU"
       : state.status === "running"
-        ? `VÒNG ${round}`
+        ? activeCourtCount === 0
+          ? "TẠM DỪNG — CHƯA CÓ SÂN"
+          : `VÒNG ${round || structureRound}`
         : state.endedEarly
           ? "KẾT THÚC SỚM"
           : "ĐÃ XONG";
@@ -257,7 +263,7 @@ function Band({ code }: { code: string }) {
           </p>
           <p className="mt-2 font-display text-display lg:text-[2.875rem]">{title}</p>
           <p className="mt-2 text-[11px] text-mute-400">
-            {state.config.courts} sân
+            {activeCourtCount} sân đang mở
             {` · ${data.roleLabel.toLowerCase()}`}
           </p>
         </div>
@@ -269,6 +275,31 @@ function Band({ code }: { code: string }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function ScheduleChangeBanner({ code }: { code: string }) {
+  const { data } = useEvent();
+  const revision = data?.state.scheduleChange?.revision ?? 0;
+  const [seen, setSeen] = useState(0);
+
+  useEffect(() => {
+    const value = Number(localStorage.getItem(`rp_schedule_seen_${code}`) ?? 0);
+    setSeen(Number.isFinite(value) ? value : 0);
+  }, [code, revision]);
+
+  if (!data?.state.scheduleChange || revision <= seen) return null;
+  const dismiss = () => {
+    localStorage.setItem(`rp_schedule_seen_${code}`, String(revision));
+    setSeen(revision);
+  };
+  return (
+    <div className="flex items-center justify-between gap-3 border-b-2 border-ink bg-accent px-4 py-2 text-xs font-bold text-white lg:px-10">
+      <span>Lịch đã cập nhật từ vòng {data.state.scheduleChange.effectiveRound}.</span>
+      <button type="button" onClick={dismiss} className="min-h-8 border border-white px-3 font-display text-[9px] font-extrabold uppercase">
+        Đã xem
+      </button>
+    </div>
   );
 }
 
