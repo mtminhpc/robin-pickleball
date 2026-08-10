@@ -31,16 +31,17 @@ function sponsor(tier: SponsorTier, index: number): Command {
 }
 
 describe("nhà tài trợ v0.5", () => {
-  it.each(["diamond", "gold", "silver", "partner"] as SponsorTier[])("hạng %s nhận đúng 2 logo và chặn logo thứ 3", (tier) => {
+  // v0.6.1 bỏ trần 2 logo mỗi hạng chuẩn. Bài này giữ lại ở đây để trần cũ không
+  // lặng lẽ quay về; phần thứ tự và sắp xếp sâu hơn nằm ở `tests/v061.test.ts`.
+  it.each(["diamond", "gold", "silver", "partner"] as SponsorTier[])("hạng %s nhận số logo không giới hạn", (tier) => {
     let state = emptyState("V5");
-    for (let index = 1; index <= 2; index++) {
+    for (let index = 1; index <= 7; index++) {
       const result = send(state, sponsor(tier, index));
       expect(result.ok).toBe(true);
       if (result.ok) state = result.value;
     }
-    const third = send(state, sponsor(tier, 3));
-    expect(third.ok).toBe(false);
-    if (!third.ok) expect(third.error).toMatch(/tối đa 2/);
+    expect(state.presentation.sponsors).toHaveLength(7);
+    expect(state.presentation.sponsors.every((item) => item.tier === tier)).toBe(true);
   });
 
   it("hạng tự đặt không giới hạn và luôn đứng sau các hạng chuẩn", () => {

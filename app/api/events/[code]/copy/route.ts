@@ -7,6 +7,7 @@ import { DEFAULT_EVENT_LIMIT, isAppAdminEmail } from "@/lib/domain/app-admin";
 import type { CommandEnvelope } from "@/lib/domain/commands";
 import { emptyState } from "@/lib/domain/reduce";
 import {
+  excludeDeletedEvents,
   getAppEventLimitRepo,
   getEventAssetRepo,
   getEventCopyRepo,
@@ -64,7 +65,7 @@ export async function POST(
       await copies.fail({ ownerUserId: userId, sourceCode: code, idempotencyKey: key, token: priorClaim.token, code: priorClaim.code, at: Date.now() });
     }
 
-    const owned = await repo.listByOwner(userId);
+    const owned = await excludeDeletedEvents(await repo.listByOwner(userId));
     // Nếu lần trước dừng sau khi đã tạo dòng event, đó vẫn là cùng một bản sao
     // đang được hoàn tất, không phải một sự kiện mới thứ hai để tính quota.
     const retryCode = priorClaim?.status === "failed" ? priorClaim.code : "";

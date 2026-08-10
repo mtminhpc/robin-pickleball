@@ -4,6 +4,7 @@ import { currentUser } from "@/lib/api/user";
 import { MAX_DEVICE_EVENTS, mergeRecentEvents } from "@/lib/domain/account";
 import { deviceIdFromRequest } from "@/lib/identity/device-token";
 import {
+  excludeDeletedEvents,
   getAccountRepo,
   getRepo,
   invalidateAccount,
@@ -74,7 +75,9 @@ export async function POST(request: NextRequest) {
     user.devices.flatMap((device) => device.recentEvents),
     localCodes,
   );
-  const loaded = await getRepo().listByCodes(orderedCodes);
+  // Mã của buổi đã xóa vẫn nằm trong lịch sử thiết bị và không bị gỡ khỏi đó —
+  // chỉ đơn giản là không dựng thành lối tắt được nữa.
+  const loaded = await excludeDeletedEvents(await getRepo().listByCodes(orderedCodes));
   const byCode = new Map(loaded.map((item) => [item.record.code.toUpperCase(), item]));
   const localTimes = new Map(localEvents.map((event) => [event.code, event.lastOpenedAt]));
 

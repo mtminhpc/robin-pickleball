@@ -4,7 +4,7 @@
 (xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Phiên bản v0.6.0 · Trạng thái: điều hành nhiều tài khoản, media và đồng bộ nhanh.** Ứng dụng
+> **Phiên bản v0.6.1 · Trạng thái: tài trợ không giới hạn và xóa sự kiện an toàn.** Ứng dụng
 > chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
 > bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
 > tuần và tháng, đăng nhập Google, sự kiện đã tạo, nhà tài trợ và Bảng vàng.
@@ -52,6 +52,13 @@ npm run sim -- --players 12 --courts 2 --rounds 16 --join 5 --leave 9
 > tệp khoá thứ hai: hai tệp khoá cho cùng một dự án thì sớm muộn cũng lệch nhau,
 > và khi đó máy này cài ra một bộ thư viện còn máy kia ra bộ khác.
 
+> **Lưu ý nâng lên v0.6.1:** không còn trần 2 logo ở bất kỳ hạng tài trợ nào — thứ tự
+> hạng và cách sắp xếp trong hạng giữ nguyên. Chủ sự kiện xóa được buổi của mình khi
+> buổi đang ở trạng thái sắp diễn ra hoặc đã kết thúc; **buổi đang đánh thì không ai
+> xóa được**, kể cả App admin. Xóa là **xóa mềm**: chỉ ghi cờ vào tab append-only
+> `event_deletions`, còn nhật ký, tỷ số, ảnh và dòng sự kiện đều giữ nguyên, nên xóa
+> nhầm vẫn khôi phục lại đúng dữ liệu cũ. Chỉ App admin khôi phục được.
+>
 > **Lưu ý nâng lên v0.6.0:** mỗi sự kiện có một Chủ và tối đa năm Phó; mật khẩu cũ
 > trở thành quyền điều hành giới hạn sau khi sự kiện có Chủ tài khoản. Chuyển tab dùng
 > snapshot IndexedDB đã lược dữ liệu nhạy cảm + ETag, nhưng điểm số/điểm danh/dời trận

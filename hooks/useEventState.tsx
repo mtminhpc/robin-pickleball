@@ -25,6 +25,7 @@ import {
 } from "react";
 import type { EventCapabilities, Role } from "@/lib/domain/commands";
 import type { EventState } from "@/lib/domain/types";
+import { eventSnapshotStorageKey } from "@/lib/identity/event-local-cache";
 import { useAccount } from "@/hooks/useAccount";
 
 export interface EventSnapshot {
@@ -117,7 +118,7 @@ export function EventProvider({
     ? (initialIdentity || "anonymous")
     : (account.data.user?.userId ?? "anonymous");
   const key = useMemo(() => eventQueryKey(code, userId), [code, userId]);
-  const storageKey = `rp_event_snapshot_v6_${code}_${userId}`;
+  const storageKey = eventSnapshotStorageKey(code, userId);
   const [externalSyncAt, setExternalSyncAt] = useState<number | null>(null);
   const initialRef = useRef(initial);
   const initialIdentityRef = useRef(initialIdentity || "anonymous");

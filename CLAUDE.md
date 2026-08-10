@@ -11,6 +11,37 @@ Không coi một `git push` là đã phát hành: nhánh tính năng chỉ tạo
 còn Production đi từ `main` và phải được kiểm lại qua alias công khai. Không sửa
 hay commit hai ZIP handoff của người dùng.
 
+## Trạng thái cuối phiên 10/08/2026 — v0.6.1
+
+- Nhánh `codex/v0.6.1-unlimited-sponsors-event-delete`, dựng tiếp phần Codex làm dở
+  (phiên đó hết quota). **Mới commit tại máy**: chưa push, chưa tag, chưa fast-forward
+  `main`, chưa deploy — người dùng chọn dừng ở đó. Production vẫn là `v0.6.0 · 4e41af4`.
+- Bỏ trần 2 logo ở mọi hạng tài trợ. Thứ tự Kim cương → Vàng → Bạc → Đồng hành → tự
+  đặt và thứ tự trong hạng không đổi; `SponsorStrip` vốn đã hiện `Tất cả (n)`.
+- Xóa sự kiện là **xóa mềm** qua tab append-only `event_deletions`; dòng mới nhất của
+  một mã quyết định ẩn/hiện. Không dòng `events`, snapshot, log tỷ số hay ảnh nào bị
+  chạm — vì thế khôi phục trả lại đúng dữ liệu cũ.
+- `canDeleteEvent` kiểm **trạng thái trước quyền**: buổi `running` không ai xóa được,
+  kể cả App admin. Chủ theo Google xóa buổi `draft`/`finished` của mình; App admin xóa
+  được của bất kỳ ai kể cả buổi legacy chưa có chủ; Phó/điều hành bằng mật khẩu không.
+  Chỉ App admin khôi phục.
+- Route mới: `DELETE /api/events/[code]`, `POST /api/events/[code]/restore`,
+  `GET /api/app-admin/events/[code]`. Cả ba **không** dùng `resolveContext` (nó trả
+  `410` nên gọi lặp sẽ hỏng) mà đọc `EventRepo` thô. Gọi lặp idempotent hai chiều.
+- Chỗ dễ bỏ sót nhất: mọi lời gọi thẳng `listByOwner`/`listByCodes` phải bọc
+  `excludeDeletedEvents`, nếu không buổi đã xóa hồi sinh đúng ở màn hình đó. Hiện đã
+  bọc `/api/events` (danh sách + hai lần đếm quota), `/copy`, `/events/recent`,
+  `/api/me`; `claimEventOwnership` nhận thêm `deletedCodes`.
+- Hình dạng khoá IndexedDB gom về `lib/identity/event-local-cache.ts`; `useEventState`
+  và `useMutationQueue` nay import từ đó thay vì tự ghép chuỗi.
+- Cổng: 575/575 test (`tests/v061.test.ts` thêm 15 bài), 152 lượt công bằng/0 vấn đề,
+  build và typecheck sạch. Smoke `npm run dev:test`: `TESTV5` bị xóa → `state`/`mutate`
+  trả `410`, trang trả `404`, `TESTV6` không ảnh hưởng; khôi phục xong `TESTV5` đủ
+  6 người/9 logo/3 giải. `.data/test-sandbox.json` nay có tab `event_deletions` với
+  đúng một cặp delete+restore của lần smoke đó.
+- Trên OneDrive, chạy `next build` rồi `next dev` liên tiếp sẽ lỗi `EINVAL readlink`
+  trên `.next`. Xóa `.next` rồi chạy lại là xong; đó không phải lỗi mã.
+
 ## Trạng thái cuối phiên Codex 09/08/2026 — v0.6.0
 
 - Nhánh phát hành: `codex/v0.6.0-media-cache-copy`, dựng từ tag `v0.5.1`.

@@ -23,6 +23,7 @@ import { EventStaffRepo, type EventStaffMember } from "./event-staff";
 import { EventAuthRepo } from "./event-auth";
 import { EventCopyRepo } from "./event-copies";
 import { AccountAssetRepo, type AccountAsset } from "./account-assets";
+import { EventDeletionRepo } from "./event-deletions";
 
 /** Bao lâu thì chấp nhận dữ liệu cũ. Ghi thì xoá đệm ngay nên không ai phải chờ. */
 const TTL_SECONDS = 5;
@@ -43,6 +44,42 @@ export function getRepo(): EventRepo {
   return new EventRepo(getSheetsClient());
 }
 
+/** Một tag chung vì xóa mềm là cờ rất nhỏ, nhưng ảnh hưởng tới mọi danh sách sự kiện. */
+export const EVENT_DELETIONS_TAG = "event-deletions";
+
+export function getEventDeletionRepo(): EventDeletionRepo {
+  return new EventDeletionRepo(getSheetsClient());
+}
+
+/**
+ * Mã đã xóa được nhớ riêng khỏi snapshot sự kiện. Nếu chỉ ẩn ở giao diện, máy khác
+ * hoặc một đường API cũ sẽ vẫn mở được log/tỷ số; đây là chốt chung cho mọi đường đọc.
+ */
+export async function readDeletedEventCodes(): Promise<ReadonlySet<string>> {
+  const load = unstable_cache(
+    async () => getEventDeletionRepo().deletedCodes(),
+    ["event-deletions"],
+    { tags: [EVENT_DELETIONS_TAG], revalidate: TTL_SECONDS },
+  );
+  return new Set(await load());
+}
+
+export async function isEventDeleted(code: string): Promise<boolean> {
+  return (await readDeletedEventCodes()).has(code.toUpperCase());
+}
+
+/** Lọc sau khi đọc từ index events để danh sách/quota không hồi sinh buổi đã xóa. */
+export async function excludeDeletedEvents<T extends { record: Pick<EventRecord, "code"> }>(
+  events: readonly T[],
+): Promise<T[]> {
+  const deleted = await readDeletedEventCodes();
+  return events.filter((event) => !deleted.has(event.record.code.toUpperCase()));
+}
+
+export function invalidateEventDeletions(): void {
+  revalidateTag(EVENT_DELETIONS_TAG);
+}
+
 /**
  * Đọc trạng thái sự kiện qua bộ nhớ đệm.
  *
@@ -50,6 +87,7 @@ export function getRepo(): EventRepo {
  * hai mươi điện thoại cùng hỏi chỉ tốn một lần đọc Google Sheet.
  */
 export async function readEvent(code: string): Promise<CachedEvent | null> {
+  if (await isEventDeleted(code)) return null;
   const load = unstable_cache(
     async (eventCode: string) => {
       const loaded = await getRepo().load(eventCode);
@@ -254,7 +292,7 @@ export async function readClubEvents(
     ["club-events"],
     { tags: [clubEventsTag(clubId)], revalidate: CLUB_TTL_SECONDS },
   );
-  return load(clubId);
+  return excludeDeletedEvents(await load(clubId));
 }
 
 /** Gọi khi câu lạc bộ có thêm buổi mới, để nó hiện ra ngay chứ không đợi một phút. */

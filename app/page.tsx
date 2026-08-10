@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   loadRecentClubs,
   loadRecentEvents,
@@ -21,9 +21,11 @@ import {
   type RecentEvent,
   loadProfile,
 } from "@/lib/identity/device";
+import { clearLocalEventCache } from "@/lib/identity/event-local-cache";
 import { Button, Field, inputClass } from "@/components/ui";
 import { Avatar } from "@/components/Avatar";
-import { signInHref, useAccount } from "@/hooks/useAccount";
+import { DeleteEventDialog } from "@/components/DeleteEventDialog";
+import { ACCOUNT_KEY, signInHref, useAccount } from "@/hooks/useAccount";
 import { scheduledAtFromInputs } from "@/lib/scheduled-at";
 import { estimateEvent, formatEstimatedDuration } from "@/lib/domain/estimate";
 
@@ -499,9 +501,42 @@ function eventTime(event: OwnedEvent): number {
 function OwnedEventCard({ event }: { event: OwnedEvent }) {
   const first = event.sponsors[0];
   const router = useRouter();
+  const client = useQueryClient();
+  const account = useAccount();
+  const userId = account.data?.user?.userId ?? "";
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState("");
   const copyKey = useRef<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  // Buổi đang đánh không xóa được — máy chủ cũng chặn, nhưng hiện nút rồi báo lỗi
+  // sau khi người ta đã gõ xong mã là kiểu giao diện hứa hão.
+  const canDelete = event.relation === "owner" && event.status !== "running";
+
+  const remove = async () => {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const response = await fetch(`/api/events/${event.code}`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirmation: event.code }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Không xóa được sự kiện.");
+      await clearLocalEventCache(event.code, userId);
+      setConfirmingDelete(false);
+      void client.invalidateQueries({ queryKey: ["owned-events", userId] });
+      void client.invalidateQueries({ queryKey: ACCOUNT_KEY });
+      router.refresh();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Không xóa được sự kiện.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const copy = async () => {
     setCopying(true);
     setCopyError("");
@@ -546,18 +581,47 @@ function OwnedEventCard({ event }: { event: OwnedEvent }) {
         <span className="text-[9px] uppercase text-mute-600">{event.status === "draft" ? "Sắp diễn ra" : event.status === "running" ? "Đang đánh" : "Đã xong"}</span>
       </div>
     </Link>
-    {event.status === "finished" && event.relation === "owner" && (
+    {(canDelete || (event.status === "finished" && event.relation === "owner")) && (
       <div className="border-t border-line px-3 py-2 text-right">
-        <button
-          type="button"
-          disabled={copying}
-          onClick={copy}
-          className="font-display text-[9px] font-extrabold uppercase text-[#087a55] disabled:opacity-50"
-        >
-          {copying ? "Đang sao chép…" : "Sao chép sự kiện"}
-        </button>
+        <div className="flex items-center justify-end gap-4">
+          {canDelete && (
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => {
+                setDeleteError("");
+                setConfirmingDelete(true);
+              }}
+              className="font-display text-[9px] font-extrabold uppercase text-accent-700 disabled:opacity-50"
+            >
+              Xóa sự kiện
+            </button>
+          )}
+          {event.status === "finished" && event.relation === "owner" && (
+            <button
+              type="button"
+              disabled={copying}
+              onClick={copy}
+              className="font-display text-[9px] font-extrabold uppercase text-[#087a55] disabled:opacity-50"
+            >
+              {copying ? "Đang sao chép…" : "Sao chép sự kiện"}
+            </button>
+          )}
+        </div>
         {copyError && <p className="mt-1 text-[10px] text-accent-700">{copyError}</p>}
+        {deleteError && !confirmingDelete && <p className="mt-1 text-[10px] text-accent-700">{deleteError}</p>}
       </div>
+    )}
+    {canDelete && (
+      <DeleteEventDialog
+        code={event.code}
+        name={event.name}
+        open={confirmingDelete}
+        busy={deleting}
+        error={deleteError}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={remove}
+      />
     )}
     </div>
   );

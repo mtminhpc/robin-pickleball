@@ -24,6 +24,8 @@ export const TABS = {
   eventAuth: "event_auth",
   accountAssets: "account_assets",
   eventCopies: "event_copies",
+  /** Nhật ký xóa mềm. Không xóa dòng events/log để còn khôi phục được nguyên vẹn. */
+  eventDeletions: "event_deletions",
 } as const;
 
 /** Tab nhật ký của một sự kiện: nguồn sự thật, chỉ ghi thêm không sửa. */
@@ -168,6 +170,13 @@ export const HEADERS = {
     "new_code",
     "created_at",
     "status",
+  ],
+  [TABS.eventDeletions]: [
+    "event_code",
+    "action",
+    "actor_user_id",
+    "actor_kind",
+    "created_at",
   ],
 } as const;
 

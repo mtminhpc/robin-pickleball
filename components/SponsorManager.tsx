@@ -56,7 +56,7 @@ export function SponsorManager({ code }: { code: string }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">Nhà tài trợ</h2>
-          <p className="mt-1 text-xs text-mute-600">Kim cương, Vàng, Bạc và Đồng hành tối đa 2 logo mỗi hạng. Hạng tự đặt không giới hạn.</p>
+          <p className="mt-1 text-xs text-mute-600">Không giới hạn số logo ở mọi hạng. Thứ tự vẫn là Kim cương, Vàng, Bạc, Đồng hành rồi hạng tự đặt.</p>
         </div>
         <Button className="shrink-0" onClick={() => setEditing("new")}>Thêm</Button>
       </div>

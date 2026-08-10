@@ -17,7 +17,7 @@ import {
 import type { CommandEnvelope } from "@/lib/domain/commands";
 import { emptyState } from "@/lib/domain/reduce";
 import { DEFAULT_CONFIG, type EventConfig } from "@/lib/domain/types";
-import { getAppEventLimitRepo, getEventCreationReservationRepo, getEventStaffRepo, getRepo, invalidateEvent, withAccountLock } from "@/lib/sheets/cache";
+import { excludeDeletedEvents, getAppEventLimitRepo, getEventCreationReservationRepo, getEventStaffRepo, getRepo, invalidateEvent, withAccountLock } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
 import {
   activeMembers,
@@ -51,13 +51,15 @@ export async function GET(request: NextRequest) {
   const user = await currentUser(request);
   if (!user || !user.account.email) return fail(401, "Hãy đăng nhập Google để xem các trận đã tạo.");
   const repo = getRepo();
-  const events = await repo.listByOwner(user.account.userId);
+  // `listByOwner`/`listByCodes` đọc thẳng tab events, không qua `readEvent`, nên
+  // buổi đã xóa mềm sẽ hiện lại nếu không lọc ở đây.
+  const events = await excludeDeletedEvents(await repo.listByOwner(user.account.userId));
   const assignedCodes = await getEventStaffRepo().eventCodesFor({
     userId: user.account.userId,
     email: user.account.email,
   });
   const ownedCodes = new Set(events.map((item) => item.record.code));
-  const assigned = (await repo.listByCodes(assignedCodes)).filter(
+  const assigned = (await excludeDeletedEvents(await repo.listByCodes(assignedCodes))).filter(
     (item) => !ownedCodes.has(item.record.code),
   );
   const quota = await quotaFor(user.account.email, events.filter((item) => item.state.status !== "finished").length);
@@ -178,7 +180,9 @@ export async function POST(request: NextRequest) {
 
   return withAccountLock(userId, async () => {
     const repo = getRepo();
-    const owned = await repo.listByOwner(userId);
+    // Xóa một buổi phải trả lại lượt ngay. Đếm trên danh sách chưa lọc thì người
+    // vừa xóa vẫn kẹt ở 3/3 và không hiểu vì sao.
+    const owned = await excludeDeletedEvents(await repo.listByOwner(userId));
     const activeCount = owned.filter((item) => item.state.status !== "finished").length;
     const quota = await quotaFor(user.account.email, activeCount);
     if (quota.limit !== null && activeCount >= quota.limit) {
@@ -195,7 +199,7 @@ export async function POST(request: NextRequest) {
 
     // Sau khi lấy vé, đọc lại: một instance khác chỉ có thể nhả vé sau khi đã
     // tạo xong sự kiện, nên bước này bắt được cả khe thời gian giữa hai request.
-    const refreshedCount = (await repo.listByOwner(userId)).filter((item) => item.state.status !== "finished").length;
+    const refreshedCount = (await excludeDeletedEvents(await repo.listByOwner(userId))).filter((item) => item.state.status !== "finished").length;
     if (quota.limit !== null && refreshedCount >= quota.limit) {
       if (reservation) await reservations.finish(reservation, "released", Date.now());
       return fail(409, `Bạn đang có ${refreshedCount}/${quota.limit} sự kiện chưa kết thúc.`);

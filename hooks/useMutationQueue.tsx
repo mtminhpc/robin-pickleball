@@ -32,6 +32,7 @@ import {
 } from "react";
 import type { Command } from "@/lib/domain/commands";
 import type { EventState } from "@/lib/domain/types";
+import { eventQueueStorageKey } from "@/lib/identity/event-local-cache";
 
 export type SaveStatus = "idle" | "processing" | "saving" | "saved" | "error" | "conflict";
 
@@ -78,9 +79,7 @@ export function useMutationQueue(): MutationQueue {
 /** Khoảng chờ giữa các lần gửi lại. Lần cuối lặp lại mãi. */
 const BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 20_000];
 
-function storageKey(code: string): string {
-  return `rp_queue_${code}`;
-}
+const storageKey = eventQueueStorageKey;
 
 /**
  * Khoá gộp: hai lệnh cùng khoá thì lệnh sau thay thế lệnh trước trong hàng đợi.

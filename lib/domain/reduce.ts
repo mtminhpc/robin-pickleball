@@ -425,10 +425,10 @@ function applyInPlace(
       if (existingIndex >= 0) next[existingIndex] = value;
       else next.push(value);
 
-      if (value.tier !== "custom") {
-        const count = next.filter((item) => item.tier === value.tier).length;
-        if (count > 2) return err("Mỗi hạng tài trợ chuẩn chỉ được tối đa 2 logo.");
-      }
+      // Từ v0.6.1 không còn trần số logo ở bất kỳ hạng nào. Trần cũ là quy ước tự
+      // đặt chứ không phải giới hạn kỹ thuật, và nó chặn đúng những buổi có nhiều
+      // nhà tài trợ cùng hạng — thứ mà dải tài trợ vốn đã hiển thị được qua
+      // `Tất cả (n)`. Ràng buộc còn lại chỉ là kích thước ảnh và ô Google Sheet.
       state.presentation.sponsors = sortSponsors(next);
       return ok(null);
     }

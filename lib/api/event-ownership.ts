@@ -23,6 +23,8 @@ export async function claimEventOwnership(input: {
   repo: EventRepo;
   reservations: EventCreationReservationRepo;
   claims: EventOwnerClaimRepo;
+  /** Mã đã xóa mềm, để chúng không tiếp tục chiếm hạn mức của người nhận lại buổi cũ. */
+  deletedCodes?: ReadonlySet<string>;
 }): Promise<ClaimOwnershipResult> {
   const current = await input.repo.load(input.code);
   if (!current) return { ok: false, reason: "not-found" };
@@ -37,7 +39,7 @@ export async function claimEventOwnership(input: {
   let reservationFinished = false;
   try {
     if (current.state.status !== "finished" && input.limit !== null) {
-      const used = await activeOwnedCount(input.repo, input.userId);
+      const used = await activeOwnedCount(input.repo, input.userId, input.deletedCodes);
       if (used >= input.limit) {
         return { ok: false, reason: "quota-full", used, limit: input.limit };
       }
@@ -49,7 +51,11 @@ export async function claimEventOwnership(input: {
       );
       if (!reservation) return { ok: false, reason: "reservation-lost" };
 
-      const refreshedUsed = await activeOwnedCount(input.repo, input.userId);
+      const refreshedUsed = await activeOwnedCount(
+        input.repo,
+        input.userId,
+        input.deletedCodes,
+      );
       if (refreshedUsed >= input.limit) {
         return {
           ok: false,
@@ -82,8 +88,14 @@ export async function claimEventOwnership(input: {
   }
 }
 
-async function activeOwnedCount(repo: EventRepo, userId: string): Promise<number> {
+async function activeOwnedCount(
+  repo: EventRepo,
+  userId: string,
+  deletedCodes?: ReadonlySet<string>,
+): Promise<number> {
   return (await repo.listByOwner(userId)).filter(
-    (item) => item.state.status !== "finished",
+    (item) =>
+      item.state.status !== "finished" &&
+      !deletedCodes?.has(item.record.code.toUpperCase()),
   ).length;
 }

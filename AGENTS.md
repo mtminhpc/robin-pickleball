@@ -6,12 +6,22 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 
 ## Trạng thái đã chốt
 
-- Phiên bản mã hiện tại: `v0.6.0`, nhánh phát hành
-  `codex/v0.6.0-media-cache-copy`. Tag/Production phải cùng trỏ bản đã qua cổng
-  kiểm định; xem huy hiệu dưới phải giao diện để biết commit đang chạy.
+- Phiên bản mã hiện tại: `v0.6.1`, nhánh phát hành
+  `codex/v0.6.1-unlimited-sponsors-event-delete`. Tag/Production phải cùng trỏ bản
+  đã qua cổng kiểm định; xem huy hiệu dưới phải giao diện để biết commit đang chạy.
 - Production: https://robin-pickleball.vercel.app
-- Mốc Production trước đợt này là `v0.5.1 · a54125f`; sau khi đẩy `main` phải kiểm
+- **`v0.6.1` mới chỉ commit tại máy** theo yêu cầu người dùng: chưa push, chưa tag,
+  chưa fast-forward `main`, chưa deploy. Production vẫn đang chạy `v0.6.0 · 4e41af4`.
+- Mốc Production trước đợt v0.6.0 là `v0.5.1 · a54125f`; sau khi đẩy `main` phải kiểm
   alias và huy hiệu lại, không coi push nhánh tính năng là đã phát hành.
+- Bản `v0.6.1` bỏ trần 2 logo ở mọi hạng tài trợ và thêm **xóa mềm sự kiện**. Xóa chỉ
+  ghi cờ vào tab append-only `event_deletions`; **không** xóa dòng `events`, snapshot,
+  nhật ký tỷ số hay ảnh. Chủ xóa được buổi `draft`/`finished` của chính mình, App admin
+  xóa được cả hai trạng thái đó của bất kỳ ai, và **không ai xóa được buổi `running`**.
+  Chỉ App admin khôi phục. Mọi đường đọc lọc mã đã xóa: `readEvent` trả `null`,
+  `resolveContext` trả `410`, và `excludeDeletedEvents` bọc các chỗ gọi thẳng
+  `listByOwner`/`listByCodes` (danh sách, quota, gần đây, `/api/me`, nhận lại buổi cũ).
+  Thêm một đường đọc thô mới thì phải bọc nó, nếu không buổi đã xóa sẽ hồi sinh.
 - Bản `v0.6.0` có 1 Chủ + tối đa 5 Phó + mật khẩu điều hành giới hạn; phân quyền
   tập trung bằng capability. `event_staff`/`event_auth` là append-only. Chủ/Phó sửa
   điểm đã chốt phải có lý do; sau khi kết thúc chỉ Chủ được sửa.
@@ -47,13 +57,21 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
 - Cổng v0.6.0: 560/560 test, 152 lượt công bằng/0 vấn đề, typecheck/build sạch;
   Chrome điện thoại và Edge desktop tải TESTV6 đúng, ETag 304, public state không
   phát `userId`/`deviceId` và kho TEST không đổi SHA.
+- Cổng v0.6.1: 575/575 test, 152 lượt công bằng/0 vấn đề, typecheck/build sạch. Smoke
+  cục bộ trên `npm run dev:test`: `TESTV5` bị đặt cờ xóa thì `/api/events/TESTV5/state`
+  và `/mutate` trả `410`, `/e/TESTV5` và các trang con trả `404`, `TESTV6` không đổi;
+  sau khi khôi phục, `TESTV5` trở lại đủ 6 người/9 logo/3 giải. Các route mới trả
+  `401`/`403` khi chưa đăng nhập. Tab `event_deletions` trong `.data/test-sandbox.json`
+  còn lại đúng một cặp delete+restore của lần smoke đó — đó là nhật ký, không phải rác.
 - Nhánh mặc định có các commit tài liệu bàn giao sau commit/tag production. Chênh
   lệch tài liệu đó với `main` là có chủ ý, không phải mã runtime còn làm dở.
 - `EventState.presentation` chỉ giữ metadata/`assetId`; byte logo/cúp nằm trong
   tab `event_assets`; avatar mới nằm trong `account_assets`. Quota nằm ở
   `app_event_limits`; vé chống tạo đồng thời nằm ở `app_event_reservations`.
-- App admin chỉ quản quota: `mtminhpc@gmail.com`, `prolathevt02@gmail.com`.
-  Tuyệt đối không dùng cờ app admin để cấp quyền vào sự kiện người khác.
+- App admin chỉ quản quota **và** xóa/khôi phục sự kiện: `mtminhpc@gmail.com`,
+  `prolathevt02@gmail.com`. Ngoài hai việc đó, tuyệt đối không dùng cờ app admin để
+  cấp quyền vào sự kiện người khác. Ô tra mã ở `/me` cố ý chỉ trả mã, tên, trạng thái,
+  ngày, số người và cờ đã-xóa — không email chủ, không mật khẩu, không tỷ số.
 
 ## Bất biến bảo mật danh tính từ v0.4.1
 

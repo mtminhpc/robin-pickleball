@@ -12,6 +12,8 @@ import {
   getRepo,
   invalidateAccount,
   invalidateEvent,
+  isEventDeleted,
+  readDeletedEventCodes,
   withAccountLock,
   withEventLock,
 } from "@/lib/sheets/cache";
@@ -42,6 +44,11 @@ export async function POST(
       : "";
   if (!password || password.length > 200) {
     return fail(400, "Mật khẩu điều hành cũ không hợp lệ.");
+  }
+
+  // Trước cả việc đọc mật khẩu: một buổi đã xóa không được nhận lại bằng đường này.
+  if (await isEventDeleted(code)) {
+    return fail(410, "Sự kiện này đã bị xóa. Liên hệ App admin nếu cần khôi phục.");
   }
 
   const initial = await getRepo().load(code);
@@ -83,6 +90,7 @@ export async function POST(
         repo: getRepo(),
         reservations: getEventCreationReservationRepo(),
         claims: getEventOwnerClaimRepo(),
+        deletedCodes: await readDeletedEventCodes(),
       });
       if (!result.ok) {
         if (result.reason === "not-found") return fail(404, "Không tìm thấy sự kiện.");

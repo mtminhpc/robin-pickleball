@@ -20,6 +20,7 @@ import { deviceIdFromRequest } from "../identity/device-token";
 import {
   getEventStaffRepo,
   invalidateEventStaff,
+  isEventDeleted,
   readAccount,
   readEvent,
   readEventAuthVersion,
@@ -94,6 +95,9 @@ export async function resolveContext(
   request: NextRequest,
   code: string,
 ): Promise<RequestContext | NextResponse> {
+  if (await isEventDeleted(code)) {
+    return fail(410, "Sự kiện này đã bị xóa. Liên hệ App admin nếu cần khôi phục.");
+  }
   const event = await readEvent(code);
   if (!event) {
     return fail(404, `Không tìm thấy sự kiện có mã ${code}. Kiểm tra lại mã hoặc đường dẫn.`);

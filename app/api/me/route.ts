@@ -18,7 +18,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { rollupEvents } from "@/lib/domain/rollup";
 import { deviceIdFromRequest } from "@/lib/identity/device-token";
-import { getAccountRepo, getClubRepo, getRepo } from "@/lib/sheets/cache";
+import { excludeDeletedEvents, getAccountRepo, getClubRepo, getRepo } from "@/lib/sheets/cache";
 import { readJson } from "@/lib/api/context";
 import { currentUser } from "@/lib/api/user";
 
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
   // làm mã người chơi, nên không có bước này thì chúng không khớp được.
   const myMemberIds = await memberIdsOf(myClubs, myDeviceIds, userId);
 
-  const loaded = await repo.listByCodes(codes);
+  const loaded = await excludeDeletedEvents(await repo.listByCodes(codes));
 
   const events = [];
   const totals = emptyTotals();

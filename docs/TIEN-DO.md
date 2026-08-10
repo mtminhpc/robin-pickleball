@@ -1,6 +1,6 @@
 # Tiến độ dự án
 
-Cập nhật: 09/08/2026 · nhánh `codex/v0.6.0-media-cache-copy` ·
+Cập nhật: 10/08/2026 · nhánh `codex/v0.6.1-unlimited-sponsors-event-delete` ·
 **đích Production: https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
@@ -15,8 +15,10 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.6.0 — điều hành nhiều tài khoản, media và đồng bộ nhanh`.**
-Mã tính năng đã hoàn tất; cổng phát hành phải được ghi lại ở mục v0.6.0 dưới đây.
+**Phiên bản hiện tại: `v0.6.1 — tài trợ không giới hạn và xóa sự kiện an toàn`.**
+Mã tính năng đã hoàn tất và đã qua cổng, nhưng **mới chỉ commit tại máy**: chưa push,
+chưa tag, chưa fast-forward `main`, chưa deploy. Production vẫn đang chạy
+`v0.6.0 · 4e41af4`. Đây là lựa chọn có chủ ý của người dùng, không phải việc bỏ dở.
 
 | | |
 |---|---|
@@ -27,10 +29,58 @@ Mã tính năng đã hoàn tất; cổng phát hành phải được ghi lại �
 | GitHub default branch | Hiện vẫn là `claude/pickleball-round-robin-app-fq8sja`; không nhầm nó với Production Branch |
 | Biến môi trường | 7 biến trên Vercel (Production), xem bảng dưới |
 
-Các cổng trên mã phát hành đã xanh: `npm test` 560/560; `npm run scenarios`
-152 lượt/0 vấn đề; `npm run typecheck` và `npm run build` sạch. Smoke test bằng
-Chrome 390×844 và Edge 1440×1000; API TESTV6 trả 200, ETag trả 304, public state
-không có `userId`/`deviceId`, SHA kho TEST giữ nguyên.
+Các cổng trên mã phát hành đã xanh: `npm test` 575/575; `npm run scenarios`
+152 lượt/0 vấn đề; `npm run typecheck` và `npm run build` sạch.
+
+### Ghi chú khoá phiên 10/08/2026 — v0.6.1
+
+Phiên Codex trước hết quota giữa chừng. Phần Codex để lại (schema `event_deletions`,
+`EventDeletionRepo`, chính sách `canDeleteEvent`, các helper lọc trong `cache.ts` và
+chốt `410` trong `resolveContext`) biên dịch sạch và 560/560 test vẫn xanh — nó đúng,
+chỉ chưa được nối vào các đường đọc/ghi và chưa có giao diện. Phiên này nối nốt.
+
+- **Tài trợ không giới hạn.** Bỏ khối đếm theo hạng trong `UpsertSponsor`. Thứ tự
+  Kim cương → Vàng → Bạc → Đồng hành → tự đặt và thứ tự trong hạng giữ nguyên;
+  `SponsorStrip` vốn đã xử lý số lượng bất kỳ qua `Tất cả (n)` nên không phải sửa.
+  Ràng buộc còn lại chỉ là kích thước ảnh và giới hạn ô Google Sheet.
+- **Xóa mềm.** Tab append-only `event_deletions`; dòng mới nhất của một mã quyết định
+  buổi đó đang ẩn hay hiện. Không dòng `events`, snapshot, log tỷ số hay asset nào bị
+  chạm tới — đó là lý do khôi phục trả lại đúng dữ liệu cũ chứ không phải bản dựng lại.
+- **Ai được làm gì.** `canDeleteEvent` kiểm **trạng thái trước quyền**, nên không App
+  admin nào lách được quy trình kết thúc của một buổi đang đánh. Chủ theo Google xóa
+  được buổi `draft`/`finished` của chính mình; App admin xóa được cả hai trạng thái đó
+  của bất kỳ ai, kể cả buổi legacy `owner_user_id` rỗng; Phó và người điều hành bằng
+  mật khẩu **không** xóa được. Chỉ App admin khôi phục — nếu Chủ tự khôi phục được thì
+  một buổi xóa đi để nhường quota có thể quay lại vượt hạn mức mà không ai duyệt.
+- **Hai lớp tách khỏi HTTP.** `lib/domain/event-deletion.ts` là chính sách thuần,
+  `lib/api/event-deletion.ts` là use-case I/O — cùng khuôn với `event-ownership.ts`,
+  vì không bài test nào trong dự án chạm route handler.
+- **Route mới.** `DELETE /api/events/[code]` (cố ý **không** dùng `resolveContext`, vì
+  hàm đó trả `410` nên gọi lặp sẽ hỏng), `POST /api/events/[code]/restore` (App admin),
+  `GET /api/app-admin/events/[code]` (tra tối thiểu, đọc repo thô để thấy cả buổi đã xóa).
+  Gọi lặp là idempotent ở cả hai chiều.
+- **Lọc ở mọi đường đọc thô.** `excludeDeletedEvents` bọc `listByOwner`/`listByCodes`
+  tại `/api/events` (danh sách + hai lần đếm quota), `/copy`, `/events/recent`,
+  `/api/me`; `claimEventOwnership` nhận thêm `deletedCodes`. Thiếu một chỗ là buổi đã
+  xóa hồi sinh ở đúng chỗ đó — đây là phần dễ bỏ sót nhất khi thêm màn hình mới.
+- **Giao diện.** Nút *Xóa sự kiện* trên thẻ sự kiện của Chủ (ẩn khi `running`), hộp
+  xác nhận bắt gõ lại mã dùng **chung hàm** `isDeleteConfirmationValid` với máy chủ,
+  và bảng App admin ở `/me`. Sau khi xóa, client dọn đúng ba khoá cục bộ của một mã:
+  `rp_recent_events`, `rp_queue_<mã>`, `rp_event_snapshot_v6_<mã>_<userId|anonymous>`.
+  Hình dạng khoá được gom về `lib/identity/event-local-cache.ts` để hai bản chép tay
+  không lệch nhau — trước đó chúng nằm rải trong `useEventState` và `useMutationQueue`.
+- **Kiểm thử.** `tests/v061.test.ts` (15 bài) phủ tài trợ nhiều logo/thứ tự/phát lại,
+  ma trận `canDeleteEvent`, xác nhận mã, repo idempotent hai chiều, hai use-case, và
+  quota trả lượt sau khi xóa. Mã trạng thái HTTP không kiểm được bằng vitest nên được
+  smoke thủ công, ghi ở dưới.
+- **Smoke cục bộ** (`npm run dev:test`, không đụng Google Sheet): đặt cờ xóa cho
+  `TESTV5` thì `/api/events/TESTV5/state` và `/mutate` trả `410`, `/e/TESTV5` cùng
+  trang con trả `404`, `TESTV6` không ảnh hưởng; khôi phục xong `TESTV5` trở lại
+  `finished` với 6 người, 9 logo, 3 giải. Route mới trả `401`/`403` khi chưa đăng nhập.
+  `/api/events/[code]/qr` vẫn trả 200 cho mọi mã — nó dựng QR từ chuỗi URL và không
+  đọc kho, nên trả 200 cả với mã chưa từng tồn tại; đó không phải rò rỉ.
+- Kho `.data/test-sandbox.json` nay có thêm tab `event_deletions` với đúng một cặp
+  delete+restore của lần smoke trên. `TESTV5` đang sống bình thường.
 
 ### Ghi chú khoá phiên Codex 09/08/2026 — v0.6.0
 
