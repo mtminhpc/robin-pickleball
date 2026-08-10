@@ -42,12 +42,13 @@ Các cổng trên mã phát hành đã xanh: `npm test` 579/579; `npm run scenar
 Phần này quan trọng hơn mọi mục khác trong tệp: **đừng đọc "579/579 xanh" thành "mọi
 thứ đã được người thật dùng thử".**
 
-- **Luồng ghi của màn Quản lý nhà tài trợ (v0.7.0) chưa ai bấm qua.** Bố cục và số đo
-  đã soi thật trên `TESTV5` — nhưng phải tạm bỏ chốt `ownerByAccount` mới thấy được
-  màn hình, vì cùng lý do `test-owner` nói ở gạch đầu dòng dưới. Nghĩa là *thêm logo*,
-  *sửa*, *xoá*, *đổi thứ tự* và *đổi hình dạng* chưa chạy hết một vòng qua giao diện.
-  Việc cần làm: đăng nhập Google trên Production, mở một buổi của mình, thêm một logo
-  ở mỗi hạng, đổi qua cả ba hình dạng, rồi xoá logo vừa thêm.
+- **Quản lý nhà tài trợ (v0.7.0): đã chạy cục bộ, chưa chạy trên Production.** Chủ dự
+  án đã tự bấm thật trên `npm run dev:test` với tài khoản Google của mình — buổi
+  `UPC3YR` trong kho thử ghi lại ba lần thêm/sửa logo và ba lần đổi hình dạng, tất cả
+  đều lưu được. Hai việc **chưa** ai chạy qua: **xoá** một logo và **đổi thứ tự** trong
+  cùng hạng. Việc cần làm: lặp lại vòng đó trên Production, thêm cả nút Xoá và ↑↓.
+  (Trên `TESTV5` thì không đăng nhập được để hiện màn này, vì lý do `test-owner` nói ở
+  gạch đầu dòng dưới; số đo bố cục lấy bằng cách tạm bỏ chốt `ownerByAccount`.)
 - **Luồng bấm nút xóa sự kiện chưa ai chạy qua, kể cả trên Production.** Lý do: kho
   thử `.data/test-sandbox.json` gắn buổi vào `test-owner` — một `userId` giả không ứng
   với tài khoản Google nào — nên không đăng nhập được để hiện nút. Phiên trước cũng
@@ -109,9 +110,15 @@ mọi điểm**, và người dùng nói thẳng là xấu. Đối chiếu lại
 - Kiểm cục bộ trên `TESTV5` (9 logo, 3 giải) bằng công cụ trình duyệt: đo được nền
   `#f3f2f2`, kẻ 2px ink, cỡ khung 46/46/43/43/40×5, viền 3px/2px + vạch tóc 1px, nhãn
   ánh kim có `background-clip:text`, dải cuộn 607px trong khung 375px, hộp thoại
-  *Tất cả* đủ 9 logo. Để xem dải B và C phải tạm đổi `sponsorLogoShape` trên **bản sao**
-  kho thử rồi khôi phục — SHA `.data/test-sandbox.json` sau phiên vẫn là
-  `07f6e822ce32a3f944720a5cab4daf29f040a28453593d01c829f0a437663781`, đúng như trước.
+  *Tất cả* đủ 9 logo. Để xem dải B và C phải tạm đổi `sponsorLogoShape` rồi khôi phục
+  lại đúng bản gốc.
+- **Kho thử nay có thêm buổi thật `UPC3YR · Vũng Tàu 002`** do chủ dự án tự tạo trên
+  `npm run dev:test` giữa phiên này, đăng nhập bằng `mtminhpc@gmail.com`. Log của nó
+  ghi ba lệnh `UpsertSponsor` (Maico hạng Đồng hành rồi sửa thành Kim cương, Mầm Coffee
+  hạng Vàng) và ba lệnh `SetSponsorLogoShape` (tròn → vuông → tròn). Đây là **dữ liệu
+  thật của người dùng, đừng xoá**. Vì thế SHA-256 của `.data/test-sandbox.json` đổi từ
+  `07f6e822…` sang `912704f5 0ce38861 7cedd0d4 d6178a26 1ab1405c cf5a194d 9781f7f6 7f40eb69`.
+  Đừng đọc con số đổi này thành "kho thử bị hỏng".
 - Không đụng miền nghiệp vụ, lệnh, quyền hay lược đồ dữ liệu. Đây thuần tầng trình bày
   cộng ba trường đọc thêm ở `/api/events`.
 

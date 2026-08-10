@@ -11,12 +11,13 @@ Không coi một `git push` là đã phát hành: nhánh tính năng chỉ tạo
 còn Production đi từ `main` và phải được kiểm lại qua alias công khai. Không sửa
 hay commit hai ZIP handoff của người dùng.
 
-> **Việc còn nợ, làm trước khi nhận việc mới:** hai luồng bấm nút **chưa ai chạy qua**,
-> kể cả trên Production — *Xóa sự kiện* (v0.6.1) và phần ghi của *Quản lý nhà tài trợ*
-> (v0.7.0). Cùng một lý do: kho thử gắn buổi vào `userId` giả `test-owner` nên không
-> đăng nhập được để hiện nút. Tầng hàm, đường đọc HTTP và bố cục thì đã kiểm thật.
-> Chi tiết và các bước cần làm nằm ở mục **Chưa kiểm — việc đầu tiên của phiên sau**
-> trong `docs/TIEN-DO.md`. Đừng đọc "579/579 xanh" thành "đã có người dùng thử".
+> **Việc còn nợ, làm trước khi nhận việc mới:** luồng bấm nút *Xóa sự kiện* (v0.6.1)
+> **chưa ai chạy qua**, kể cả trên Production — kho thử gắn buổi vào `userId` giả
+> `test-owner` nên không đăng nhập được để hiện nút. *Quản lý nhà tài trợ* (v0.7.0) thì
+> chủ dự án đã bấm thật trên máy (buổi `UPC3YR` trong kho thử), nhưng còn thiếu nút
+> **Xoá** và **đổi thứ tự**, và chưa lặp lại trên Production. Chi tiết và các bước cần
+> làm nằm ở mục **Chưa kiểm — việc đầu tiên của phiên sau** trong `docs/TIEN-DO.md`.
+> Đừng đọc "581/581 xanh" thành "đã có người dùng thử".
 
 ## Trạng thái cuối phiên 10/08/2026 — v0.7.0 «Ánh kim»
 

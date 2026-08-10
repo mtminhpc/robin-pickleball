@@ -4,11 +4,11 @@
 trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp này chỉ giữ những
 điều dễ làm hỏng dự án nếu một phiên mới không biết.
 
-> **Việc còn nợ:** hai luồng bấm nút chưa ai chạy qua trên giao diện, kể cả
-> Production — *Xóa sự kiện* (v0.6.1) và phần ghi của *Quản lý nhà tài trợ* (v0.7.0).
-> Tầng hàm, đường đọc HTTP và bố cục đã kiểm thật; phần bấm nút thì chưa, vì kho thử
-> gắn buổi vào `userId` giả `test-owner`. Xem mục **Chưa kiểm — việc đầu tiên của
-> phiên sau** trong `docs/TIEN-DO.md`.
+> **Việc còn nợ:** luồng bấm nút *Xóa sự kiện* (v0.6.1) chưa ai chạy qua trên giao
+> diện, kể cả Production; tầng hàm và đường đọc HTTP thì đã kiểm thật. Kho thử gắn
+> buổi vào `userId` giả `test-owner` nên không đăng nhập được để hiện nút. *Quản lý
+> nhà tài trợ* (v0.7.0) đã bấm thật trên máy chủ dự án nhưng còn thiếu nút Xoá và đổi
+> thứ tự. Xem mục **Chưa kiểm — việc đầu tiên của phiên sau** trong `docs/TIEN-DO.md`.
 
 ## Trạng thái đã chốt
 
@@ -72,9 +72,13 @@ trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp n
   đội điều hành/media/dời trận; mật khẩu người chơi `test1234`, điều hành
   `admin1234`. Chạy lại không reset dữ liệu và
   không đụng Google Sheet.
-- Trên máy này CLB TEST có mã mời `H9DFHG`, 11 người TEST; SHA-256 sau khi thêm
-  `TESTV6` là `6DD0194AE0FC81784CEA39301D8DD372B7AFD9FDCE738243088CCB5D5A20754D`. Bốn probe
-  cũ của phiên đánh giá bảo mật đã nằm trong log; probe v0.4.1 bị 403 và không ghi thêm.
+- Trên máy này CLB TEST có mã mời `H9DFHG`, 11 người TEST. Bốn probe cũ của phiên đánh
+  giá bảo mật đã nằm trong log; probe v0.4.1 bị 403 và không ghi thêm.
+- **SHA-256 của kho thử không còn là hằng số để đối chiếu.** Mốc cũ
+  `6DD0194A…` (sau khi thêm `TESTV6`) chỉ đúng tới hết v0.6.2; từ v0.7.0 kho có thêm
+  buổi thật `UPC3YR` do chủ dự án tạo khi thử tay, và bất kỳ lần thử tay nào nữa cũng
+  sẽ đổi SHA. Muốn biết kho có nguyên vẹn không thì kiểm **các mã `TEST11`/`TESTV5`/
+  `TESTV6` còn đủ dữ liệu hay không**, đừng so chuỗi băm.
 - Cổng v0.6.0: 560/560 test, 152 lượt công bằng/0 vấn đề, typecheck/build sạch;
   Chrome điện thoại và Edge desktop tải TESTV6 đúng, ETag 304, public state không
   phát `userId`/`deviceId` và kho TEST không đổi SHA.
