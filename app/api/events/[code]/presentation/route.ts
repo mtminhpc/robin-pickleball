@@ -27,17 +27,16 @@ export async function POST(
 
   const ctx = await resolveContext(request, code);
   if (isResponse(ctx)) return ctx;
-  // Biết mật khẩu quản trị không đồng nghĩa là chủ sở hữu thương mại của sự kiện.
-  if (!ctx.ownerByAccount || !ctx.userId) {
-    return fail(403, "Chỉ tài khoản đã tạo sự kiện mới quản lý nhà tài trợ và giải thưởng.");
+  // Mật khẩu điều hành không cấp quyền trình bày; Chủ vận hành trong ledger thì có,
+  // kể cả khi họ mới chỉ nhận ô người chơi bằng thiết bị và chưa liên kết Google.
+  if (!ctx.capabilities.canManagePresentation || ctx.role !== "owner") {
+    return fail(403, "Chỉ Chủ sự kiện được quản lý nhà tài trợ và giải thưởng.");
   }
 
   return withEventLock(code, async () => {
     const repo = getRepo();
     const loaded = await repo.load(code);
     if (!loaded) return fail(404, "Không tìm thấy sự kiện.");
-    if (loaded.record.ownerUserId !== ctx.userId) return fail(403, "Bạn không phải chủ sự kiện.");
-
     const body = parsed.body;
     const assets = getEventAssetRepo();
     const now = Date.now();
@@ -64,7 +63,7 @@ export async function POST(
         assetId = randomUUID();
         addedAssetId = assetId;
         oldAssetId = old?.assetId ?? null;
-        await assets.put({ eventCode: code, assetId, kind: "sponsor", ...image, metadata: body.editMetadata, createdBy: ctx.userId, createdAt: now, updatedAt: now });
+        await assets.put({ eventCode: code, assetId, kind: "sponsor", ...image, metadata: body.editMetadata, createdBy: ctx.actor.ref ?? ctx.deviceId, createdAt: now, updatedAt: now });
       }
       if (!assetId) return fail(400, "Hãy chọn ảnh logo.");
       command = {
@@ -93,7 +92,7 @@ export async function POST(
         trophyAssetId = randomUUID();
         addedAssetId = trophyAssetId;
         oldAssetId = old?.trophyAssetId ?? null;
-        await assets.put({ eventCode: code, assetId: trophyAssetId, kind: "trophy", ...image, metadata: body.editMetadata, createdBy: ctx.userId, createdAt: now, updatedAt: now });
+        await assets.put({ eventCode: code, assetId: trophyAssetId, kind: "trophy", ...image, metadata: body.editMetadata, createdBy: ctx.actor.ref ?? ctx.deviceId, createdAt: now, updatedAt: now });
       } else if (body.removeImage) {
         oldAssetId = old?.trophyAssetId ?? null;
       }

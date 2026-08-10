@@ -75,6 +75,18 @@ export async function POST(
 
   const denied = checkPermission(command, ctx);
   if (denied) return fail(403, denied);
+  if (command.type === "RemovePlayer") {
+    const protectedByRole =
+      (ctx.roleState.owner?.kind === "player" && ctx.roleState.owner.playerId === command.playerId) ||
+      ctx.roleState.managers.some(
+        (manager) => manager.subject.kind === "player" && manager.subject.playerId === command.playerId,
+      ) ||
+      (ctx.roleState.pendingTransfer?.target.kind === "player" &&
+        ctx.roleState.pendingTransfer.target.playerId === command.playerId);
+    if (protectedByRole) {
+      return fail(409, "Hãy thu hồi quyền hoặc huỷ chuyển Chủ trước khi xoá người chơi này.");
+    }
+  }
 
   const stamped = stampIdentity(command, ctx);
 

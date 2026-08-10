@@ -22,6 +22,7 @@ import { SponsorManager } from "@/components/SponsorManager";
 import { estimateEvent, formatEstimatedDuration } from "@/lib/domain/estimate";
 import type { EventConfig } from "@/lib/domain/types";
 import { CourtManager } from "@/components/CourtManager";
+import { RoleManager } from "@/components/RoleManager";
 
 export default function AdminPage() {
   const { code } = useParams<{ code: string }>();
@@ -74,7 +75,7 @@ export default function AdminPage() {
 
       <OwnershipSection code={code} eventName={state.config.name} />
 
-      {capabilities.canManageStaff && <EventStaffSection code={code} />}
+      {capabilities.canViewIdentityFlags && <RoleManager code={code} />}
 
       {capabilities.canChangePasswords && <PasswordSection code={code} />}
 

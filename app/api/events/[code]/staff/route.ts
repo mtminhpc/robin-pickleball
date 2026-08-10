@@ -1,14 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { currentUser } from "@/lib/api/user";
-import { fail, readJson } from "@/lib/api/context";
+import { fail, isResponse, readJson, resolveContext } from "@/lib/api/context";
+import { appendRoleAction, freshRoleState, roleAction } from "@/lib/api/event-roles";
 import { normalizeEmail } from "@/lib/domain/account";
+import { subjectsReferToSameIdentity, type EventManagerRole, type RoleSubject } from "@/lib/domain/event-roles";
 import { checkRateLimit } from "@/lib/auth/ratelimit";
-import type { EventStaffMember } from "@/lib/sheets/event-staff";
 import {
   getAccountRepo,
   getEventStaffRepo,
   invalidateEventStaff,
-  readEvent,
   withEventLock,
 } from "@/lib/sheets/cache";
 
@@ -34,10 +34,10 @@ export async function GET(
     );
   }
   invalidateEventStaff(code);
-  members = await getEventStaffRepo().list(code);
+  const roles = await freshRoleState(owner);
   return NextResponse.json({
     max: MAX_STAFF,
-    members: members.map(publicStaff),
+    members: roles.managers.map(publicStaff),
   });
 }
 
@@ -49,7 +49,7 @@ export async function POST(
   const owner = await requireOwner(request, code);
   if (owner instanceof NextResponse) return owner;
 
-  const limit = checkRateLimit(`staff:${owner.account.userId}:${code}`);
+  const limit = checkRateLimit(`staff:${owner.actor.ref ?? owner.deviceId}:${code}`);
   if (!limit.allowed) {
     return fail(429, `Thao tác quá nhanh. Thử lại sau ${limit.retryAfterSeconds} giây.`);
   }
@@ -57,63 +57,52 @@ export async function POST(
   if (!parsed.ok) return parsed.response;
   const email = normalizeEmail(typeof parsed.body.email === "string" ? parsed.body.email : "");
   if (!/^\S+@\S+\.\S+$/.test(email)) return fail(400, "Email phó sự kiện không hợp lệ.");
-  if (email === normalizeEmail(owner.account.email)) {
+  if (owner.accountEmail && email === normalizeEmail(owner.accountEmail)) {
     return fail(400, "Chủ sự kiện không cần được thêm làm Phó sự kiện.");
   }
 
-  return withEventLock(`staff:${code}`, async () => {
-    const repo = getEventStaffRepo();
-    const members = await repo.list(code);
-    if (members.some((member) => member.email === email)) {
+  const account = await getAccountRepo().byEmail(email);
+  const subject: RoleSubject = account
+    ? { kind: "account", userId: account.userId, email, label: account.displayName || email }
+    : { kind: "pending-email", email, label: email };
+
+  return withEventLock(`roles:${code}`, async () => {
+    const before = await freshRoleState(owner);
+    if (before.managers.some((member) =>
+      subjectsReferToSameIdentity(owner.event.state, member.subject, subject)
+    )) {
       return fail(409, "Email này đã có trong đội điều hành.");
     }
-    if (members.length >= MAX_STAFF) {
+    if (before.managers.length >= MAX_STAFF) {
       return fail(409, `Mỗi sự kiện chỉ có tối đa ${MAX_STAFF} Phó sự kiện, kể cả lời mời đang chờ.`);
     }
-    const account = await getAccountRepo().byEmail(email);
-    const member = await repo.invite({
-      eventCode: code,
-      email,
-      userId: account?.userId,
-      displayName: account?.displayName,
-      grantedBy: owner.account.userId,
-      at: Date.now(),
-    });
-    // Append của Sheets có thứ tự toàn cục giữa các Vercel instance. Đọc lại sau
-    // append để chỉ năm email đầu tiên thắng, kể cả hai request cùng thấy còn một chỗ.
-    const after = await repo.list(code);
-    const allowed: EventStaffMember[] = [];
-    const seenEmails = new Set<string>();
-    for (const candidate of after) {
-      if (seenEmails.has(candidate.email)) continue;
-      seenEmails.add(candidate.email);
-      if (allowed.length < MAX_STAFF) allowed.push(candidate);
-    }
-    if (!allowed.some((candidate) => candidate.staffId === member.staffId)) {
-      await repo.revoke(code, member.staffId, Date.now());
-      invalidateEventStaff(code);
+    const roleId = randomUUID();
+    const after = await appendRoleAction(
+      owner,
+      roleAction(owner, "grant-manager", { roleId, subject }),
+    );
+    const member = after.managers.find((candidate) => candidate.roleId === roleId);
+    if (!member) {
       return fail(409, "Một lời mời đồng thời vừa dùng vị trí Phó sự kiện cuối cùng hoặc email này đã được mời.");
     }
-    invalidateEventStaff(code);
     return NextResponse.json({ member: publicStaff(member) }, { status: 201 });
   });
 }
 
 async function requireOwner(request: NextRequest, code: string) {
-  const [user, event] = await Promise.all([currentUser(request), readEvent(code)]);
-  if (!user) return fail(401, "Hãy đăng nhập Google bằng tài khoản Chủ sự kiện.");
-  if (!event) return fail(404, `Không tìm thấy sự kiện có mã ${code}.`);
-  if (!event.record.ownerUserId || event.record.ownerUserId !== user.account.userId) {
+  const context = await resolveContext(request, code);
+  if (isResponse(context)) return context;
+  if (!context.capabilities.canManageRoles || context.role !== "owner") {
     return fail(403, "Chỉ Chủ sự kiện được quản lý đội điều hành.");
   }
-  return user;
+  return context;
 }
 
-function publicStaff(member: EventStaffMember) {
+function publicStaff(member: EventManagerRole) {
   return {
-    staffId: member.staffId,
-    email: member.email,
-    displayName: member.displayName,
+    staffId: member.roleId,
+    email: member.subject.kind === "player" ? "" : member.subject.email ?? "",
+    displayName: member.subject.label,
     status: member.status,
     createdAt: member.createdAt,
   };

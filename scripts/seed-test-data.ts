@@ -19,6 +19,9 @@ import { LocalFileSheetsClient } from "../lib/sheets/local";
 import { EventRepo } from "../lib/sheets/repo";
 import { EventAssetRepo } from "../lib/sheets/event-assets";
 import { EventStaffRepo } from "../lib/sheets/event-staff";
+import { EventRoleRepo } from "../lib/sheets/event-roles";
+import { hashRoleInvitation } from "../lib/auth/role-invitations";
+import type { EventRoleAction } from "../lib/domain/event-roles";
 
 export const TEST_DATA_PATH = resolve(
   process.env.ROBIN_TEST_DATA_PATH ?? ".data/test-sandbox.json",
@@ -27,6 +30,7 @@ export const TEST_EVENT_CODE = "TEST11";
 export const TEST_V5_EVENT_CODE = "TESTV5";
 export const TEST_V6_EVENT_CODE = "TESTV6";
 export const TEST_V8_EVENT_CODE = "TESTV8";
+export const TEST_V9_EVENT_CODE = "TESTV9";
 export const TEST_PLAYER_PASSWORD = "test1234";
 export const TEST_ADMIN_PASSWORD = "admin1234";
 
@@ -52,6 +56,7 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
   const events = new EventRepo(sheets);
   const assets = new EventAssetRepo(sheets);
   const staff = new EventStaffRepo(sheets);
+  const roles = new EventRoleRepo(sheets);
   const now = Date.now();
 
   const mine = await clubs.forDevice(OWNER_DEVICE);
@@ -485,12 +490,105 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
     v8 = await events.load(TEST_V8_EVENT_CODE);
   }
 
+  // TESTV9 có cả Phó Google, Phó device-only và một ô chưa nhận để thử link/QR.
+  let v9 = await events.load(TEST_V9_EVENT_CODE);
+  if (!v9) {
+    const record = await events.create({
+      code: TEST_V9_EVENT_CODE,
+      clubId: club.id,
+      name: "SÂN TEST V9 · TRAO QUYỀN",
+      status: "draft",
+      ownerUserId: "test-owner",
+      playerPassHash: await hashPassword(TEST_PLAYER_PASSWORD),
+      adminPassHash: await hashPassword(TEST_ADMIN_PASSWORD),
+    }, now + 700);
+    const actor = { kind: "admin", label: "Chủ sự kiện · TEST Trao quyền", ref: "test-owner" } as const;
+    const members = loadedClub.members.filter((member) => member.status === "active").slice(0, 8);
+    const commands: CommandEnvelope[] = [{
+      id: "testv9-create", at: now + 700, actor,
+      command: {
+        type: "CreateEvent",
+        code: TEST_V9_EVENT_CODE,
+        clubId: club.id,
+        config: { ...DEFAULT_CONFIG, name: "SÂN TEST V9 · TRAO QUYỀN", courts: 2 },
+      },
+    }, ...members.map((member, index) => ({
+      id: `testv9-player-${index + 1}`,
+      at: now + 710 + index,
+      actor,
+      command: {
+        type: "AddPlayer" as const,
+        player: {
+          id: `testv9-p${index + 1}`,
+          name: member.displayName,
+          avatarId: member.avatarId,
+          ...(index === 0 ? { userId: "test-google-user-1", deviceId: "testv9-device-1" } : {}),
+          ...(index === 1 ? { userId: "g-testv9-guest", deviceId: "testv9-device-2" } : {}),
+        },
+        asActive: true,
+      },
+    })), {
+      id: "testv9-start", at: now + 730, actor, command: { type: "StartEvent" },
+    }];
+    const interim = fold(TEST_V9_EVENT_CODE, commands);
+    if (interim.skipped.length > 0) throw new Error(`Không dựng được TESTV9: ${interim.skipped[0]!.error}`);
+    const schedule = planSchedule(interim.state, { mode: "extend", seed: 9090 });
+    if (schedule.blocked) throw new Error(schedule.blocked);
+    commands.push({
+      id: "testv9-schedule", at: now + 731, actor,
+      command: { type: "SetSchedule", fromRound: schedule.fromRound, matches: schedule.matches },
+    });
+    const committed = await events.commitMany(TEST_V9_EVENT_CODE, commands, {
+      record,
+      state: fold(TEST_V9_EVENT_CODE, []).state,
+      repaired: false,
+      skipped: [],
+    });
+    if (!committed.ok) throw new Error(committed.error);
+    v9 = await events.load(TEST_V9_EVENT_CODE);
+  }
+  if ((await roles.list(TEST_V9_EVENT_CODE)).length === 0) {
+    const roleActions: EventRoleAction[] = [{
+      id: "testv9-role-google",
+      eventCode: TEST_V9_EVENT_CODE,
+      type: "grant-manager",
+      roleId: "testv9-role-google",
+      subject: { kind: "player", playerId: "testv9-p1", label: v9?.state.players[0]?.name ?? "Phó Google" },
+      actorLabel: "Chủ sự kiện · TEST Trao quyền",
+      actorRef: "test-owner",
+      at: now + 740,
+    }, {
+      id: "testv9-role-device",
+      eventCode: TEST_V9_EVENT_CODE,
+      type: "grant-manager",
+      roleId: "testv9-role-device",
+      subject: { kind: "player", playerId: "testv9-p2", label: v9?.state.players[1]?.name ?? "Phó thiết bị" },
+      actorLabel: "Chủ sự kiện · TEST Trao quyền",
+      actorRef: "test-owner",
+      at: now + 741,
+    }, {
+      id: "testv9-role-pending",
+      eventCode: TEST_V9_EVENT_CODE,
+      type: "grant-manager",
+      roleId: "testv9-role-pending",
+      inviteId: "testv9-invite-p3",
+      tokenHash: hashRoleInvitation("testv9-token-p3"),
+      expiresAt: now + 365 * 24 * 60 * 60 * 1000,
+      subject: { kind: "player", playerId: "testv9-p3", label: v9?.state.players[2]?.name ?? "Phó chờ nhận" },
+      actorLabel: "Chủ sự kiện · TEST Trao quyền",
+      actorRef: "test-owner",
+      at: now + 742,
+    }];
+    await roles.appendMany(roleActions);
+  }
+
   console.log(`Đã giữ dữ liệu TEST tại: ${path}`);
   console.log(`CLB: ${club.name} · mã mời ${club.inviteCode}`);
   console.log(`Sân/sự kiện: ${event?.state.config.name ?? TEST_EVENT_CODE} · mã ${TEST_EVENT_CODE}`);
   console.log(`Trưng bày v0.5: ${v5?.state.config.name ?? TEST_V5_EVENT_CODE} · mã ${TEST_V5_EVENT_CODE}`);
   console.log(`Điều hành v0.6: ${v6?.state.config.name ?? TEST_V6_EVENT_CODE} · mã ${TEST_V6_EVENT_CODE}`);
   console.log(`Linh động v0.8: ${v8?.state.config.name ?? TEST_V8_EVENT_CODE} · mã ${TEST_V8_EVENT_CODE}`);
+  console.log(`Trao quyền v0.9: ${v9?.state.config.name ?? TEST_V9_EVENT_CODE} · mã ${TEST_V9_EVENT_CODE}`);
   console.log(`Người chơi: ${loadedClub.members.filter((m) => m.status === "active").length}`);
   console.log(`Mật khẩu người chơi: ${TEST_PLAYER_PASSWORD}`);
   console.log(`Mật khẩu quản trị: ${TEST_ADMIN_PASSWORD}`);

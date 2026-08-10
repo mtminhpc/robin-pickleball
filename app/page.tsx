@@ -416,7 +416,7 @@ interface OwnedEvent {
   code: string;
   name: string;
   venueAddress: string;
-  relation: "owner" | "manager";
+  relation: "owner" | "operational-owner" | "manager";
   status: "draft" | "running" | "finished";
   scheduledAt: number | null;
   createdAt: number;
@@ -457,7 +457,7 @@ function CreatedEvents() {
   }
 
   const events = query.data?.events ?? [];
-  const assigned = events.filter((event) => event.relation === "manager");
+  const assigned = events.filter((event) => event.relation !== "owner");
   const owned = events.filter((event) => event.relation === "owner");
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -579,7 +579,11 @@ function OwnedEventCard({ event }: { event: OwnedEvent }) {
             {new Date(eventTime(event)).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" })} · {event.courts} sân · {event.players} người
           </p>
           {event.venueAddress && <p className="mt-1 truncate text-[9px] text-mute-600">{event.venueAddress}</p>}
-          {event.relation === "manager" && <p className="mt-1 text-[9px] font-bold uppercase text-[#087a55]">Phó sự kiện</p>}
+          {event.relation !== "owner" && (
+            <p className="mt-1 text-[9px] font-bold uppercase text-[#087a55]">
+              {event.relation === "operational-owner" ? "Chủ vận hành" : "Phó sự kiện"}
+            </p>
+          )}
         </div>
         <div className="text-right">
           <span className="block font-mono text-[11px] font-bold text-[#087a55]">{event.code}</span>

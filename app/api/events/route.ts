@@ -23,7 +23,7 @@ import {
   normalizeCourtName,
   type EventConfig,
 } from "@/lib/domain/types";
-import { excludeDeletedEvents, getAppEventLimitRepo, getEventCreationReservationRepo, getEventStaffRepo, getRepo, invalidateEvent, withAccountLock } from "@/lib/sheets/cache";
+import { excludeDeletedEvents, getAppEventLimitRepo, getEventCreationReservationRepo, getEventRoleRepo, getEventStaffRepo, getRepo, invalidateEvent, withAccountLock } from "@/lib/sheets/cache";
 import { fail, readJson } from "@/lib/api/context";
 import {
   activeMembers,
@@ -35,6 +35,7 @@ import { deviceIdFromRequest } from "@/lib/identity/device-token";
 import { getClubRepo, invalidateClubEvents, readClub } from "@/lib/sheets/cache";
 import { currentUser } from "@/lib/api/user";
 import { DEFAULT_EVENT_LIMIT, isAppAdminEmail } from "@/lib/domain/app-admin";
+import { foldEventRoles, roleForIdentity } from "@/lib/domain/event-roles";
 
 interface CreateBody {
   name?: string;
@@ -65,14 +66,41 @@ export async function GET(request: NextRequest) {
     userId: user.account.userId,
     email: user.account.email,
   });
+  const allRoleActions = await getEventRoleRepo().all();
+  const roleCodes = [...new Set(allRoleActions.map((action) => action.eventCode))];
   const ownedCodes = new Set(events.map((item) => item.record.code));
-  const assigned = (await excludeDeletedEvents(await repo.listByCodes(assignedCodes))).filter(
+  const candidateCodes = [...new Set([...assignedCodes, ...roleCodes])];
+  const candidates = (await excludeDeletedEvents(await repo.listByCodes(candidateCodes))).filter(
     (item) => !ownedCodes.has(item.record.code),
+  );
+  const resolvedCandidates = await Promise.all(candidates.map(async (item) => {
+    const legacyStaff = await getEventStaffRepo().list(item.record.code);
+    const roles = foldEventRoles({
+      eventCode: item.record.code,
+      ownerUserId: item.record.ownerUserId,
+      state: item.state,
+      legacyStaff,
+      actions: allRoleActions.filter(
+        (action) => action.eventCode.toUpperCase() === item.record.code.toUpperCase(),
+      ),
+    });
+    const me = item.state.players.find((player) => player.userId === user.account.userId) ?? null;
+    const relation = roleForIdentity(roles, {
+      userId: user.account.userId,
+      email: user.account.email,
+      me,
+    });
+    return relation
+      ? { ...item, relation: relation === "owner" ? "operational-owner" as const : relation }
+      : null;
+  }));
+  const assigned = resolvedCandidates.filter(
+    (item): item is NonNullable<typeof item> => item !== null,
   );
   const quota = await quotaFor(user.account.email, events.filter((item) => item.state.status !== "finished").length);
   return NextResponse.json({
     quota,
-    events: [...events.map((item) => ({ ...item, relation: "owner" as const })), ...assigned.map((item) => ({ ...item, relation: "manager" as const }))]
+    events: [...events.map((item) => ({ ...item, relation: "owner" as const })), ...assigned]
       .map(({ record, state, relation }) => ({
         code: record.code,
         name: state.config.name || record.name,

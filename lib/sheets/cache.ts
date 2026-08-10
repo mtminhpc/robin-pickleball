@@ -20,6 +20,8 @@ import { EventAssetRepo, type EventAsset } from "./event-assets";
 import { EventCreationReservationRepo } from "./event-reservations";
 import { EventOwnerClaimRepo } from "./event-owner-claims";
 import { EventStaffRepo, type EventStaffMember } from "./event-staff";
+import { EventRoleRepo } from "./event-roles";
+import type { EventRoleAction } from "../domain/event-roles";
 import { EventAuthRepo } from "./event-auth";
 import { EventCopyRepo } from "./event-copies";
 import { AccountAssetRepo, type AccountAsset } from "./account-assets";
@@ -212,6 +214,27 @@ export async function readEventStaff(code: string): Promise<EventStaffMember[]> 
 
 export function invalidateEventStaff(code: string): void {
   revalidateTag(eventStaffTag(code));
+}
+
+export function eventRolesTag(code: string): string {
+  return `event-roles:${code}`;
+}
+
+export function getEventRoleRepo(): EventRoleRepo {
+  return new EventRoleRepo(getSheetsClient());
+}
+
+export async function readEventRoleActions(code: string): Promise<EventRoleAction[]> {
+  const read = unstable_cache(
+    async (eventCode: string) => getEventRoleRepo().list(eventCode),
+    ["event-roles"],
+    { tags: [eventRolesTag(code)], revalidate: 30 },
+  );
+  return read(code.toUpperCase());
+}
+
+export function invalidateEventRoles(code: string): void {
+  revalidateTag(eventRolesTag(code));
 }
 
 export function eventAuthTag(code: string): string {

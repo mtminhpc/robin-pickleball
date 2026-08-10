@@ -7,6 +7,7 @@
  */
 
 import type { Actor, EventState, Match } from "../domain/types";
+import { isGuestUser } from "../domain/account";
 
 export interface PublicEventSnapshot {
   state: EventState;
@@ -28,6 +29,13 @@ export function publicEventSnapshot(
       .filter((player) => Boolean(player.deviceId || player.userId))
       .map((player) => player.id),
   };
+}
+
+/** Chỉ ID ô tên có Google thật; account ảnh vãng lai `g-…` không được tính. */
+export function googleLinkedPlayerIds(state: EventState): string[] {
+  return state.players
+    .filter((player) => player.userId && !isGuestUser(player.userId))
+    .map((player) => player.id);
 }
 
 /** Sao chép đúng các nhánh có danh tính; tuyệt đối không sửa ảnh chụp trong cache. */

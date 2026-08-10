@@ -8,7 +8,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { isResponse, resolveContext } from "@/lib/api/context";
-import { publicEventSnapshot } from "@/lib/api/public-state";
+import { googleLinkedPlayerIds, publicEventSnapshot } from "@/lib/api/public-state";
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +18,7 @@ export async function GET(
   const ctx = await resolveContext(request, code.toUpperCase());
   if (isResponse(ctx)) return ctx;
 
-  const etag = `W/\"${ctx.event.state.seq}-${ctx.event.state.processed}-${ctx.role}-${ctx.me?.id ?? "-"}-${ctx.event.record.ownerUserId ? "owned" : "claimable"}-${ctx.event.record.playerPassHash ? "player-pass" : "open"}\"`;
+  const etag = `W/\"${ctx.event.state.seq}-${ctx.event.state.processed}-r${ctx.roleState.revision}-${ctx.role}-${ctx.me?.id ?? "-"}-${ctx.event.record.ownerUserId ? "owned" : "claimable"}-${ctx.event.record.playerPassHash ? "player-pass" : "open"}\"`;
   const headers = {
     ETag: etag,
     Vary: "Cookie",
@@ -34,6 +34,11 @@ export async function GET(
       role: ctx.role,
       capabilities: ctx.capabilities,
       roleLabel: ctx.roleLabel,
+      ...(ctx.capabilities.canViewIdentityFlags
+        ? {
+            googleLinkedPlayerIds: googleLinkedPlayerIds(ctx.event.state),
+          }
+        : {}),
     /**
      * Người chơi nào là người đang xem.
      *

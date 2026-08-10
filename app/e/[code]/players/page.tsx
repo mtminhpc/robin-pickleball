@@ -202,6 +202,7 @@ export default function PlayersPage() {
                   // nên người đăng nhập rồi mở buổi trên điện thoại mới bị mất
                   // nhãn "bạn" — đúng tình huống tài khoản sinh ra để chữa.
                   isMe={p.id === data.myPlayerId}
+                  googleLinked={data.googleLinkedPlayerIds?.includes(p.id) ?? false}
                   nextRound={nextRound}
                   canEditPlan={data.capabilities.canManagePlayerPlans || p.id === data.myPlayerId}
                   onCommand={queue.send}
@@ -277,6 +278,7 @@ function PlayerRow({
   player,
   isAdmin,
   isMe,
+  googleLinked,
   nextRound,
   canEditPlan,
   onCommand,
@@ -289,6 +291,7 @@ function PlayerRow({
   player: Player;
   isAdmin: boolean;
   isMe: boolean;
+  googleLinked: boolean;
   nextRound: number;
   canEditPlan: boolean;
   onCommand: (command: Command) => void;
@@ -328,6 +331,7 @@ function PlayerRow({
         )}
       </span>
       {isMe && <Marker tone="accent">bạn</Marker>}
+      {googleLinked && <Marker tone="ink">Google</Marker>}
       {confirmable && (isAdmin || isMe) && (
         <Button
           className="min-h-10 px-3"

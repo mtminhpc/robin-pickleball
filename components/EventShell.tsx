@@ -67,6 +67,7 @@ function ShellInner({ code, children }: { code: string; children: ReactNode }) {
       baseRevision={data?.state.processed ?? 0}
     >
       <SyncAccount />
+      <RoleInvitationAcceptor code={code} />
       <div className="mx-auto flex min-h-dvh w-full max-w-[78.75rem]">
         <SideBar code={code} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -275,6 +276,57 @@ function Band({ code }: { code: string }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function RoleInvitationAcceptor({ code }: { code: string }) {
+  const { refresh } = useEvent();
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState(false);
+  const handled = useRef("");
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const roleInvite = url.searchParams.get("roleInvite");
+    const roleToken = url.searchParams.get("roleToken");
+    const ownerInvite = url.searchParams.get("ownerInvite");
+    const ownerToken = url.searchParams.get("ownerToken");
+    const key = roleInvite && roleToken
+      ? `role:${roleInvite}:${roleToken}`
+      : ownerInvite && ownerToken
+        ? `owner:${ownerInvite}:${ownerToken}`
+        : "";
+    if (!key || handled.current === key) return;
+    handled.current = key;
+    const endpoint = roleInvite
+      ? `/api/events/${code}/role-invitations/${encodeURIComponent(roleInvite)}/accept`
+      : `/api/events/${code}/ownership-transfer/accept`;
+    const token = roleToken ?? ownerToken ?? "";
+    void fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
+    }).then(async (response) => {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Không chấp nhận được lời mời.");
+      setError(false);
+      setMessage(roleInvite ? "Đã kích hoạt quyền Phó sự kiện." : "Đã nhận quyền Chủ vận hành.");
+      for (const name of ["roleInvite", "roleToken", "ownerInvite", "ownerToken"]) {
+        url.searchParams.delete(name);
+      }
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      refresh();
+    }).catch((reason: unknown) => {
+      setError(true);
+      setMessage(reason instanceof Error ? reason.message : "Không chấp nhận được lời mời.");
+    });
+  }, [code, refresh]);
+
+  if (!message) return null;
+  return (
+    <div className={`border-b-2 border-ink px-4 py-3 text-sm font-bold lg:px-10 ${error ? "bg-accent-100 text-accent-700" : "bg-emerald-100 text-emerald-900"}`}>
+      {message}
+    </div>
   );
 }
 

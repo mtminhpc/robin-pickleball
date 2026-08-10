@@ -10,6 +10,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { Actor, EventState, Player } from "../domain/types";
 import {
+  foldEventRoles,
+  roleForIdentity,
+  type EventRoleState,
+} from "../domain/event-roles";
+import {
   capabilitiesForRole,
   roleLabel,
   type EventCapabilities,
@@ -25,6 +30,7 @@ import {
   readEvent,
   readEventAuthVersion,
   readEventStaff,
+  readEventRoleActions,
   type CachedEvent,
 } from "../sheets/cache";
 import type { EventRecord } from "../sheets/repo";
@@ -39,11 +45,15 @@ export interface RequestContext {
   deviceId: string;
   /** Tài khoản đang đăng nhập, `null` với phần lớn người ra sân. */
   userId: string | null;
+  /** Email tài khoản hiện tại, chỉ tồn tại phía máy chủ và không trả thẳng qua /state. */
+  accountEmail: string | null;
   /** Người này là chủ buổi đánh nhờ tài khoản, không phải nhờ gõ mật khẩu. */
   ownerByAccount: boolean;
   /** Người chơi ứng với người gửi yêu cầu, nếu tìm được. */
   me: Player | null;
   actor: Actor;
+  /** Ledger quyền đã fold, gồm cả seed tương thích từ owner_user_id/event_staff. */
+  roleState: EventRoleState;
 }
 
 /**
@@ -68,10 +78,12 @@ export function roleFor(
   record: Pick<EventRecord, "ownerUserId">,
   sessionRole: SessionRole | "viewer" | null,
   userId: string | null,
-  isManager = false,
+  eventRole: boolean | "owner" | "manager" = false,
 ): Role {
+  if (eventRole === "owner") return "owner";
+  if (eventRole === "manager") return "manager";
   if (userId && record.ownerUserId && userId === record.ownerUserId) return "owner";
-  if (userId && isManager) return "manager";
+  if (eventRole === true) return "manager";
   if (sessionRole === "admin") return record.ownerUserId ? "operator" : "admin";
   if (sessionRole === "player") return "player";
   return "viewer";
@@ -83,6 +95,19 @@ export function isOwnerByAccount(
   userId: string | null,
 ): boolean {
   return Boolean(userId && record.ownerUserId && userId === record.ownerUserId);
+}
+
+/** Chủ device-only có toàn quyền bên trong buổi nhưng chưa có quyền cấp tài khoản. */
+export function capabilitiesForResolvedRole(
+  role: Role,
+  ownerByAccount: boolean,
+): EventCapabilities {
+  const capabilities = capabilitiesForRole(role);
+  if (role === "owner" && !ownerByAccount) {
+    capabilities.canCopyEvent = false;
+    capabilities.canChangePasswords = false;
+  }
+  return capabilities;
 }
 
 /**
@@ -113,7 +138,10 @@ export async function resolveContext(
   // nhất trong cả ứng dụng, mỗi điện thoại đang mở app hỏi lại vài giây một lần.
   const userId = currentUserId(request);
   const account = userId ? await readAccount(userId) : null;
-  const staff = account ? await readEventStaff(code) : [];
+  const [staff, roleActions] = await Promise.all([
+    readEventStaff(code),
+    readEventRoleActions(code),
+  ]);
   let membership = account
     ? staff.find(
         (member) =>
@@ -138,20 +166,38 @@ export async function resolveContext(
     rawSession?.role === "admin" && (rawSession.pv ?? 0) !== currentPasswordVersion
       ? null
       : rawSession;
-  const role = roleFor(event.record, session?.role ?? null, userId, Boolean(membership));
   const me = findMyPlayer(event.state, deviceId, userId);
+  const roleState = foldEventRoles({
+    eventCode: code,
+    ownerUserId: event.record.ownerUserId,
+    state: event.state,
+    legacyStaff: membership
+      ? staff.map((member) => member.staffId === membership?.staffId ? membership! : member)
+      : staff,
+    actions: roleActions,
+  });
+  const eventRole = roleForIdentity(roleState, {
+    userId,
+    email: account?.account.email,
+    me,
+  });
+  const role = roleFor(event.record, session?.role ?? null, userId, eventRole ?? false);
+  const ownerByAccount = isOwnerByAccount(event.record, userId);
+  const capabilities = capabilitiesForResolvedRole(role, ownerByAccount);
 
   return {
     code,
     event,
     role,
-    capabilities: capabilitiesForRole(role),
+    capabilities,
     roleLabel: roleLabel(role),
     deviceId,
     userId,
-    ownerByAccount: isOwnerByAccount(event.record, userId),
+    accountEmail: account?.account.email ?? null,
+    ownerByAccount,
     me,
     actor: buildActor(role, deviceId, me, account?.account.displayName, userId),
+    roleState,
   };
 }
 

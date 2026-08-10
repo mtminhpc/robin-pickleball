@@ -1,12 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { currentUser } from "@/lib/api/user";
-import { fail } from "@/lib/api/context";
-import {
-  getEventStaffRepo,
-  invalidateEventStaff,
-  readEvent,
-  withEventLock,
-} from "@/lib/sheets/cache";
+import { fail, isResponse, resolveContext } from "@/lib/api/context";
+import { appendRoleAction, freshRoleState, roleAction } from "@/lib/api/event-roles";
+import { withEventLock } from "@/lib/sheets/cache";
 
 export async function DELETE(
   request: NextRequest,
@@ -14,17 +9,23 @@ export async function DELETE(
 ) {
   const { code: raw, staffId } = await params;
   const code = raw.toUpperCase();
-  const [owner, event] = await Promise.all([currentUser(request), readEvent(code)]);
-  if (!owner) return fail(401, "Hãy đăng nhập Google bằng tài khoản Chủ sự kiện.");
-  if (!event) return fail(404, `Không tìm thấy sự kiện có mã ${code}.`);
-  if (!event.record.ownerUserId || event.record.ownerUserId !== owner.account.userId) {
+  const context = await resolveContext(request, code);
+  if (isResponse(context)) return context;
+  if (!context.capabilities.canManageRoles || context.role !== "owner") {
     return fail(403, "Chỉ Chủ sự kiện được thu hồi quyền Phó sự kiện.");
   }
 
-  return withEventLock(`staff:${code}`, async () => {
-    const removed = await getEventStaffRepo().revoke(code, staffId, Date.now());
-    if (!removed) return fail(404, "Không tìm thấy Phó sự kiện này.");
-    invalidateEventStaff(code);
-    return NextResponse.json({ ok: true });
+  return withEventLock(`roles:${code}`, async () => {
+    const before = await freshRoleState(context);
+    if (!before.managers.some((manager) => manager.roleId === staffId)) {
+      return fail(404, "Không tìm thấy Phó sự kiện này.");
+    }
+    const after = await appendRoleAction(
+      context,
+      roleAction(context, "revoke-manager", { roleId: staffId }),
+    );
+    return after.managers.some((manager) => manager.roleId === staffId)
+      ? fail(409, "Quyền chưa được thu hồi do có thay đổi đồng thời. Hãy thử lại.")
+      : NextResponse.json({ ok: true });
   });
 }

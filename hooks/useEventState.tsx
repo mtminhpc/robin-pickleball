@@ -37,6 +37,8 @@ export interface EventSnapshot {
   actorRef: "self" | "";
   /** Người nào đã có danh tính nhận, nhưng không công khai danh tính đó. */
   claimedPlayerIds: string[];
+  /** Chỉ Chủ/Phó nhận; không chứa email, userId hoặc deviceId. */
+  googleLinkedPlayerIds?: string[];
   /**
    * Người chơi nào là người đang xem, do máy chủ trả lời.
    *
@@ -284,5 +286,6 @@ function publicCacheSnapshot(snapshot: EventSnapshot): EventSnapshot {
     myPlayerId: null,
     myPlayerHasAccount: false,
     ownerByAccount: false,
+    googleLinkedPlayerIds: undefined,
   };
 }

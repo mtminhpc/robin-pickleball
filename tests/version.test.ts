@@ -8,22 +8,22 @@ import {
 
 describe("dấu phiên bản trên giao diện", () => {
   it("lấy đúng phiên bản từ package.json", () => {
-    expect(APP_VERSION).toBe("v0.8.0");
+    expect(APP_VERSION).toBe("v0.9.0");
   });
 
   it("rút commit Vercel còn bảy ký tự", () => {
     expect(buildVersionLabel("9ef76fc5ebadc403bc9765f57f1c4d4972cc9eeb")).toBe(
-      "v0.8.0 · 9ef76fc",
+      "v0.9.0 · 9ef76fc",
     );
   });
 
   it("nói rõ local khi chưa có commit Vercel", () => {
-    expect(buildVersionLabel(undefined)).toBe("v0.8.0 · local");
-    expect(buildVersionLabel("  ")).toBe("v0.8.0 · local");
+    expect(buildVersionLabel(undefined)).toBe("v0.9.0 · local");
+    expect(buildVersionLabel("  ")).toBe("v0.9.0 · local");
   });
 
   it("có tên hiệu cho bản phát hành", () => {
-    expect(APP_CODENAME).toBe("Linh động");
+    expect(APP_CODENAME).toBe("Trao quyền");
   });
 
   /**
@@ -33,7 +33,7 @@ describe("dấu phiên bản trên giao diện", () => {
    */
   it("đặt tên hiệu sau cặp phiên bản · commit, không chen vào giữa", () => {
     const label = buildVersionLabelWithCodename("9ef76fc5ebadc403bc9765f57f1c4d4972cc9eeb");
-    expect(label).toBe("v0.8.0 · 9ef76fc · Linh động");
+    expect(label).toBe("v0.9.0 · 9ef76fc · Trao quyền");
     expect(label.startsWith(buildVersionLabel("9ef76fc5ebadc403bc9765f57f1c4d4972cc9eeb"))).toBe(true);
   });
 });

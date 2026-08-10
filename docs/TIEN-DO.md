@@ -1,6 +1,6 @@
 # Tiến độ dự án
 
-Cập nhật: 10/08/2026 · nhánh làm việc `codex/v0.8.0-linh-dong` ·
+Cập nhật: 10/08/2026 · nhánh làm việc `codex/v0.9.0-trao-quyen` ·
 **đích Production: https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
@@ -19,22 +19,29 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Mã làm việc hiện tại: `v0.8.0 — Linh động`.** Đã hoàn tất mô hình sân ổn định và
-ca hoạt động theo vòng, nhiều ca người chơi có xác nhận, preview/confirm HMAC 5 phút,
-xếp lại phần lịch chưa bắt đầu, chuyển trận giữ nguyên định danh/tỷ số, giao diện quản
-lý sân/người/lịch, banner lịch đổi và seed idempotent `TESTV8`. Lớp tương thích tự dựng
-`Sân 1…N` và tham chiếu sân ổn định khi đọc log/snapshot cũ; không ghi migration vào Sheet.
+**Mã làm việc hiện tại: `v0.9.0 — Trao quyền`.** v0.8 đã được chốt ở commit
+`b891800` trên nhánh `codex/v0.8.0-linh-dong`: sân ổn định/đặt tên theo vòng, nhiều ca
+sân và người, preview/confirm HMAC, xếp lại lịch chưa bắt đầu, chuyển trận giữ nguyên
+định danh/tỷ số, banner lịch đổi và seed idempotent `TESTV8`.
 
-Cổng cục bộ v0.8 ngày 10/08/2026: **595/595 test**, `npm run scenarios` **152 lượt/0
-vấn đề**, `npm run build` và `npm run typecheck` sạch. Benchmark 40 người/8 sân nằm
-trong nhóm v0.8 và chạy dưới ngân sách planner 4 giây trên máy kiểm định. Chưa push
-Preview, chưa deploy Production và chưa chạy smoke trình duyệt thật; vì vậy Production
-vẫn là v0.7.0. Không bắt đầu phát hành v0.9 trước khi v0.8 qua smoke Production.
+Nhánh hiện tại xây tiếp v0.9 bằng ledger append-only `event_roles`; `event_staff` là seed
+tương thích và `/staff` cũ đi qua adapter ledger. Có Phó theo account/ô người chơi/email,
+link/QR một lần cho ô chưa nhận, Chủ device-only, chuyển Chủ vận hành rồi hoàn tất chuyển
+`owner_user_id` sau hai xác nhận + kiểm quota, cờ Google chỉ cho Chủ/Phó, audit phân trang
+đã lược danh tính và seed idempotent `TESTV9`. Chủ vận hành chưa hoàn tất quyền tài khoản
+hiện riêng trong nhóm được phân công, không nhận nhầm nút sao chép/xoá hay quota.
+
+Cổng cục bộ v0.9 ngày 10/08/2026: **609/609 test**, `npm run scenarios` **152 lượt/0
+vấn đề**, `npm run build` và `npm run typecheck` sạch. Cổng v0.8 trước đó là **595/595**,
+152/0, build/typecheck sạch; benchmark 40 người/8 sân dưới ngân sách planner 4 giây.
+Chưa push Preview, chưa deploy Production và chưa chạy smoke trình duyệt thật cho v0.8
+hoặc v0.9; vì vậy Production vẫn là v0.7.0. Tuyệt đối không phát hành v0.9 trước khi v0.8
+qua smoke Production và không còn lỗi chặn.
 
 Việc smoke còn nợ của v0.6/v0.7 (xoá–khôi phục sự kiện, xoá/đổi thứ tự tài trợ) vẫn
 nguyên trạng và phải được làm cùng vòng smoke v0.8 bằng tài khoản Google thật.
 
-**Phiên bản hiện tại: `v0.7.0 — Ánh kim`**, dựng lại phần nhìn của nhà tài trợ và
+**Phiên bản Production hiện tại: `v0.7.0 — Ánh kim`**, dựng lại phần nhìn của nhà tài trợ và
 Bảng vàng cho khớp bộ bàn giao Claude Design v3.
 
 Từ bản này mỗi số nhỏ (minor) mang một **tên hiệu**, hiện luôn trên huy hiệu góc dưới:
@@ -64,6 +71,16 @@ Các cổng trên mã phát hành đã xanh: `npm test` 581/581; `npm run scenar
 
 Phần này quan trọng hơn mọi mục khác trong tệp: **đừng đọc "581/581 xanh" thành "mọi
 thứ đã được người thật dùng thử".**
+
+- **Smoke v0.8 chưa chạy:** thêm sân giữa vòng, đóng sau trận, mở lại ở ca khác, tạm
+  dừng với 0 sân, chuyển sân duy nhất đang chơi mà giữ điểm, nhiều ca người chơi/xác nhận
+  từng ca và banner lịch đổi. Chạy Chrome mobile + Edge desktop trên Preview trước, rồi
+  mới merge/push Production và kiểm badge/alias.
+- **Smoke v0.9 chưa chạy:** cấp Phó bằng Google, device-only và email/link/QR; thu hồi;
+  chuyển Chủ, đổi máy device-only bị chặn, hai phía xác nhận account ownership và ca quota
+  đầy. Chỉ chạy sau khi v0.8 đã qua smoke Production; không merge v0.9 thẳng vào `main`.
+- Seed `TESTV8`/`TESTV9` đã được kiểm idempotent trong kho tạm của test. Chưa chạy seed
+  vào `.data/test-sandbox.json`, nên không sửa/xoá `TEST11`, `TESTV5`, `TESTV6` hay `UPC3YR`.
 
 - **Quản lý nhà tài trợ (v0.7.0): đã chạy cục bộ, chưa chạy trên Production.** Chủ dự
   án đã tự bấm thật trên `npm run dev:test` với tài khoản Google của mình — buổi
