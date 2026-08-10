@@ -4,6 +4,10 @@ import type { Command, MatchSeed } from "./commands";
 import { apply } from "./reduce";
 import { firstOpenRound } from "./rounds";
 import { planSchedule } from "../scheduler/plan";
+import type {
+  RoundRobinForecast,
+  RoundRobinPlanOutcome,
+} from "../scheduler/round-robin";
 
 export type StructureIntent =
   | {
@@ -51,6 +55,20 @@ export type StructureIntent =
         name: string;
         availability: RoundSpan[];
       };
+    }
+  | {
+      type: "start-round-robin";
+      campaignId: string;
+      requestedFromRound?: number;
+    }
+  | {
+      type: "remove-round-robin-player";
+      playerId: string;
+      requestedFromRound?: number;
+    }
+  | {
+      type: "resume-americano";
+      requestedFromRound?: number;
     };
 
 export interface StructureDiff {
@@ -71,6 +89,7 @@ export interface StructurePreviewPlan {
   diff: StructureDiff;
   warnings: string[];
   blocked: string[];
+  roundRobin: RoundRobinForecast | null;
 }
 
 export interface StructurePlanningOptions {
@@ -116,6 +135,20 @@ export function previewStructureChange(
     iterations: planning.iterations,
     timeBudgetMs: planning.timeBudgetMs,
   });
+  const roundRobin = (planned as Partial<RoundRobinPlanOutcome>).forecast ?? null;
+  if (
+    intent.type === "start-round-robin" &&
+    roundRobin &&
+    roundRobin.unresolvedPairs.length > 0 &&
+    hasFutureCourtCapacity(afterIntent, effectiveRound)
+  ) {
+    return blockedPlan(
+      state,
+      effectiveRound,
+      `Không thể phủ ${roundRobin.unresolvedPairs.length} cặp với ca người/sân hiện tại.`,
+      roundRobin,
+    );
+  }
   const noCapacity = planned.blocked !== null;
   const schedule: Extract<Command, { type: "SetSchedule" }> = {
     type: "SetSchedule",
@@ -147,7 +180,16 @@ export function previewStructureChange(
         : []),
     ],
     blocked: [],
+    roundRobin,
   };
+}
+
+function hasFutureCourtCapacity(state: EventState, fromRound: number): boolean {
+  return state.courts.some(
+    (court) =>
+      !court.archived &&
+      court.availability.some((span) => span.to === null || span.to >= fromRound),
+  );
 }
 
 function earliestEffectiveRound(state: EventState, intent: StructureIntent): number {
@@ -247,6 +289,51 @@ function compileIntent(
         ...(newCourt ? { newCourt } : {}),
       }] };
     }
+    case "start-round-robin": {
+      const playerIds = state.players
+        .filter(
+          (player) =>
+            player.status === "active" && isEligibleAt(player, effectiveRound),
+        )
+        .map((player) => player.id);
+      if (playerIds.length < 4) {
+        return { ok: false, error: "Cần ít nhất 4 người đang trong ca để chuyển round robin." };
+      }
+      return {
+        ok: true,
+        commands: [{
+          type: "StartRoundRobinCampaign",
+          campaignId: intent.campaignId,
+          playerIds,
+          effectiveRound,
+        }],
+      };
+    }
+    case "remove-round-robin-player": {
+      const campaign = state.roundRobinCampaign;
+      if (!campaign) return { ok: false, error: "Không có chiến dịch round robin." };
+      return {
+        ok: true,
+        commands: [{
+          type: "RemoveRoundRobinPlayer",
+          campaignId: campaign.id,
+          playerId: intent.playerId,
+          effectiveRound,
+        }],
+      };
+    }
+    case "resume-americano": {
+      const campaign = state.roundRobinCampaign;
+      if (!campaign) return { ok: false, error: "Không có chiến dịch round robin." };
+      return {
+        ok: true,
+        commands: [{
+          type: "ResumeAmericano",
+          campaignId: campaign.id,
+          effectiveRound,
+        }],
+      };
+    }
   }
 }
 
@@ -306,7 +393,12 @@ function diffStates(
   };
 }
 
-function blockedPlan(state: EventState, effectiveRound: number, error: string): StructurePreviewPlan {
+function blockedPlan(
+  state: EventState,
+  effectiveRound: number,
+  error: string,
+  roundRobin: RoundRobinForecast | null = null,
+): StructurePreviewPlan {
   const schedule: Extract<Command, { type: "SetSchedule" }> = {
     type: "SetSchedule",
     fromRound: effectiveRound,
@@ -328,5 +420,6 @@ function blockedPlan(state: EventState, effectiveRound: number, error: string): 
     },
     warnings: [],
     blocked: [error],
+    roundRobin,
   };
 }

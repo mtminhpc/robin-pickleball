@@ -188,6 +188,21 @@ export type Command =
     }
   | { type: "ArchiveCourt"; courtId: string; archived: boolean; effectiveRound: number }
 
+  // ---- thể thức round robin ---------------------------------------------
+  | {
+      type: "StartRoundRobinCampaign";
+      campaignId: string;
+      playerIds: PlayerId[];
+      effectiveRound: number;
+    }
+  | {
+      type: "RemoveRoundRobinPlayer";
+      campaignId: string;
+      playerId: PlayerId;
+      effectiveRound: number;
+    }
+  | { type: "ResumeAmericano"; campaignId: string; effectiveRound: number }
+
   // ---- lịch thi đấu ------------------------------------------------------
   /**
    * Thay toàn bộ các trận từ vòng `fromRound` trở đi bằng `matches`.
@@ -321,6 +336,9 @@ export const ADMIN_ONLY: readonly CommandType[] = [
   "ReorderCourts",
   "SetCourtAvailability",
   "ArchiveCourt",
+  "StartRoundRobinCampaign",
+  "RemoveRoundRobinPlayer",
+  "ResumeAmericano",
   "SetSchedule",
   "ReorderMatch",
   "PromoteMatch",
@@ -512,6 +530,9 @@ const MANAGER_ONLY = new Set<CommandType>([
   "SetCourtAvailability",
   "ArchiveCourt",
   "TransferMatch",
+  "StartRoundRobinCampaign",
+  "RemoveRoundRobinPlayer",
+  "ResumeAmericano",
 ]);
 
 const OPERATOR_COMMANDS = new Set<CommandType>([

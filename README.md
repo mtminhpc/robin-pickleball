@@ -1,10 +1,13 @@
 # Robin Pickleball
 
-Ứng dụng xếp lịch và tính điểm cho buổi đánh pickleball theo thể thức **Americano**
-(xoay đôi), tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
+Ứng dụng xếp lịch và tính điểm cho buổi đánh pickleball theo **Americano linh hoạt**
+hoặc **round robin chuẩn**, tính điểm theo **hiệu số**, thiết kế cho thực tế sân bãi: người đến trễ,
 người về sớm, khách đột xuất, mưa phải bỏ trận, sóng yếu, nhiều người cùng nhập điểm.
 
-> **Phiên bản v0.7.0 «Ánh kim» · Trạng thái: dựng lại phần nhìn nhà tài trợ và Bảng vàng.** Ứng dụng
+> **Mã phát triển v0.10.0 «Tròn vòng» · Production hiện vẫn là v0.7.0 «Ánh kim».** Bản mới cho
+> phép Chủ/Phó chuyển một buổi đang đánh sang round robin chuẩn qua preview, giữ nguyên
+> trận đã bắt đầu và bổ sung các cặp đồng đội còn thiếu. v0.10 chỉ được phát hành sau khi
+> v0.8/v0.9 qua smoke Production. Ứng dụng
 > chạy đầy đủ: tạo buổi đánh, quét QR tự tham gia, nhập điểm và khoá kết quả,
 > bảng xếp hạng, huỷ trận, kết thúc sớm, danh bạ câu lạc bộ, mời nhanh, tổng kết
 > tuần và tháng, đăng nhập Google, sự kiện đã tạo, nhà tài trợ và Bảng vàng.
@@ -31,13 +34,14 @@ npm run dev:test   # tạo nếu thiếu, sau đó mở http://localhost:3000
 ```
 
 Vào sân bằng mã `TEST11` để thử logic 4–11 người, `TESTV5` để xem đủ dải
-tài trợ/Bảng vàng, hoặc `TESTV6` để thử đội điều hành, ảnh nhiều tỷ lệ, ước tính và
-dời từng trận; mật khẩu người chơi `test1234`, điều hành `admin1234`.
+tài trợ/Bảng vàng, `TESTV6` để thử đội điều hành/dời trận, `TESTV8` để thử sân và
+ca động, `TESTV9` để thử trao quyền hoặc `TESTV10` để chuyển round robin giữa lúc
+một trận đang chơi; mật khẩu người chơi `test1234`, điều hành `admin1234`.
 Lệnh này luôn dùng `.data/test-sandbox.json`, kể cả máy đã cấu hình Google Sheet;
 chạy lại không nhân đôi hay reset buổi đang thử và không đụng dữ liệu thật.
 
 ```bash
-npm test                  # 560 bài kiểm thử
+npm test                  # toàn bộ unit/replay/API test
 npm run scenarios         # 152 lượt thực chiến 4–11 người
 npm run sim -- --matrix   # quét 42 cấu hình từ 6 tới 20 người, 1 tới 4 sân
 ```

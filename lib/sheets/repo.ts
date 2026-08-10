@@ -21,6 +21,7 @@
  * 60 request mỗi phút cho cả tài khoản dịch vụ.
  */
 
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 import type { CommandEnvelope } from "../domain/commands";
 import { apply, emptyState, fold } from "../domain/reduce";
 import { withEventDefaults, type EventState } from "../domain/types";
@@ -524,7 +525,7 @@ function eventRow(record: EventRecord, state: EventState): string[] {
   row[COL.seq] = String(record.seq);
   row[COL.updated_at] = String(record.updatedAt);
 
-  const parts = splitState(JSON.stringify(state));
+  const parts = splitState(encodeSnapshot(state));
   parts.forEach((part, i) => {
     row[STATE_COLUMN_START + i] = part;
   });
@@ -583,11 +584,23 @@ function parseLogRow(row: string[]): CommandEnvelope | null {
 function parseSnapshot(json: string): EventState | null {
   if (!json) return null;
   try {
-    const parsed = JSON.parse(json) as EventState;
+    const raw = json.startsWith("z1:")
+      ? inflateRawSync(Buffer.from(json.slice(3), "base64url"), {
+          maxOutputLength: 2_000_000,
+        }).toString("utf8")
+      : json;
+    if (raw.length > 2_000_000) return null;
+    const parsed = JSON.parse(raw) as EventState;
     // Kiểm sơ bộ cho chắc: chuỗi bị cắt cụt vẫn có thể tình cờ hợp lệ JSON.
     if (!Array.isArray(parsed.players) || !Array.isArray(parsed.matches)) return null;
     return withEventDefaults(parsed);
   } catch {
     return null;
   }
+}
+
+/** Snapshot là cache có thể ghi đè; nén để chu kỳ 40 người vẫn nằm trong bốn ô. */
+function encodeSnapshot(state: EventState): string {
+  const raw = JSON.stringify(state);
+  return `z1:${deflateRawSync(raw, { level: 9 }).toString("base64url")}`;
 }

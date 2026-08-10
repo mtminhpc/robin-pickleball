@@ -23,6 +23,7 @@ import { estimateEvent, formatEstimatedDuration } from "@/lib/domain/estimate";
 import type { EventConfig } from "@/lib/domain/types";
 import { CourtManager } from "@/components/CourtManager";
 import { RoleManager } from "@/components/RoleManager";
+import { RoundRobinManager } from "@/components/RoundRobinManager";
 
 export default function AdminPage() {
   const { code } = useParams<{ code: string }>();
@@ -76,6 +77,8 @@ export default function AdminPage() {
       <OwnershipSection code={code} eventName={state.config.name} />
 
       {capabilities.canViewIdentityFlags && <RoleManager code={code} />}
+
+      {capabilities.canManageStructure && <RoundRobinManager />}
 
       {capabilities.canChangePasswords && <PasswordSection code={code} />}
 

@@ -11,7 +11,10 @@ import type { CommandEnvelope } from "../lib/domain/commands";
 import { DEFAULT_CONFIG, type Actor } from "../lib/domain/types";
 import { FakeSheetsClient, parseRange, rowRange } from "../lib/sheets/client";
 import { EventRepo } from "../lib/sheets/repo";
-import { STATE_COLUMN_START, logTab, TABS } from "../lib/sheets/schema";
+import { STATE_COLUMN_START, logTab, splitState, TABS } from "../lib/sheets/schema";
+import { firstOpenRound } from "../lib/domain/rounds";
+import { planRoundRobinSchedule } from "../lib/scheduler/round-robin";
+import { EventSim } from "../lib/testing/harness";
 
 const ADMIN: Actor = { kind: "admin", label: "chủ sân", ref: "admin" };
 
@@ -69,6 +72,69 @@ describe("vòng đời sự kiện trên Sheet", () => {
     expect(loaded!.record.name).toBe("Buổi tối thứ ba");
     expect(loaded!.record.adminPassHash).toBe("hash-admin");
     expect(loaded!.state.players).toEqual([]);
+  });
+
+  it("ghi snapshot nén mới và vẫn đọc được snapshot JSON cũ", async () => {
+    const { sheets, repo, record } = await freshEvent();
+    const rows = sheets.dump(TABS.events);
+    const compressed = rows[record.rowIndex]!.slice(STATE_COLUMN_START).join("");
+    expect(compressed.startsWith("z1:")).toBe(true);
+    expect(rows[record.rowIndex]!.slice(STATE_COLUMN_START).every((cell) => cell.length <= 45_000)).toBe(true);
+
+    const legacy = {
+      ...(await repo.load("ABC123"))!.state,
+      scheduleMode: undefined,
+      roundRobinCampaign: undefined,
+    };
+    await sheets.batch([{
+      kind: "update",
+      range: rowRange(TABS.events, record.rowIndex, 14),
+      values: [[
+        "ABC123", "", "Buổi tối thứ ba", "", "draft", "u1",
+        "hash-player", "hash-admin", "0", "1000",
+        ...splitState(JSON.stringify(legacy)),
+      ]],
+    }]);
+
+    const loadedLegacy = await repo.load("ABC123");
+    expect(loadedLegacy?.repaired).toBe(false);
+    expect(loadedLegacy?.state.scheduleMode).toBe("americano");
+    expect(loadedLegacy?.state.roundRobinCampaign).toBeNull();
+  });
+
+  it("snapshot trọn chu kỳ 40 người nằm gọn trong bốn ô", async () => {
+    const sim = new EventSim({ code: "ABC123", config: { courts: 8, lookaheadRounds: 6 } });
+    sim.addPlayers(Array.from({ length: 40 }, (_, index) => `P${index + 1}`));
+    sim.start();
+    sim.send({
+      type: "StartRoundRobinCampaign",
+      campaignId: "rr-snapshot-40",
+      playerIds: sim.state.players.map((player) => player.id),
+      effectiveRound: firstOpenRound(sim.state),
+    });
+    const full = planRoundRobinSchedule(sim.state, { mode: "rebuild", lookahead: 10_000 });
+    expect(full.forecast?.unresolvedPairs).toEqual([]);
+    sim.send({ type: "SetSchedule", fromRound: full.fromRound, matches: full.matches });
+    for (const match of [...sim.state.matches]) {
+      sim.send({
+        type: "SubmitResult",
+        matchId: match.id,
+        scoreA: 11,
+        scoreB: 7,
+        irregular: false,
+      });
+    }
+    expect(sim.state.roundRobinCampaign?.status).toBe("completed");
+
+    const { sheets, repo, record } = await freshEvent();
+    const loaded = (await repo.load("ABC123"))!;
+    const committed = await repo.commitMany("ABC123", sim.log, loaded, { allOrNothing: true });
+    expect(committed.ok).toBe(true);
+    const cells = sheets.dump(TABS.events)[record.rowIndex]!.slice(STATE_COLUMN_START);
+    expect(cells).toHaveLength(4);
+    expect(cells.every((cell) => cell.length <= 45_000)).toBe(true);
+    expect(cells.join("").length).toBeLessThan(JSON.stringify(sim.state).length);
+    expect((await repo.load("ABC123"))?.state.roundRobinCampaign?.status).toBe("completed");
   });
 
   it("trả về null cho mã không tồn tại", async () => {

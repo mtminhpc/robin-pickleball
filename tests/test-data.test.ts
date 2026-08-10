@@ -11,6 +11,7 @@ import {
   TEST_V6_EVENT_CODE,
   TEST_V8_EVENT_CODE,
   TEST_V9_EVENT_CODE,
+  TEST_V10_EVENT_CODE,
 } from "../scripts/seed-test-data";
 
 const dirs: string[] = [];
@@ -69,5 +70,14 @@ describe("dữ liệu sân TEST bền vững", () => {
     const v9Roles = await new EventRoleRepo(roleRows).list(TEST_V9_EVENT_CODE);
     expect(v9Roles).toHaveLength(3);
     expect(v9Roles.find((item) => item.roleId === "testv9-role-pending")?.tokenHash).toBeTruthy();
+
+    const v10 = await new EventRepo(new LocalFileSheetsClient(path)).load(TEST_V10_EVENT_CODE);
+    expect(v10?.state.status).toBe("running");
+    expect(v10?.state.scheduleMode).toBe("americano");
+    expect(v10?.state.matches.filter((match) => match.status === "submitted")).toHaveLength(4);
+    expect(v10?.state.matches.find((match) => match.id === "testv10-m5")?.status).toBe("playing");
+    expect(v10?.state.matches.filter((match) =>
+      match.teamA.includes("testv10-p1") && match.teamA.includes("testv10-p2")
+    )).toHaveLength(2);
   });
 });

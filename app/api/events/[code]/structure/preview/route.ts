@@ -55,6 +55,7 @@ export async function POST(
         warnings: preview.warnings,
         blocked: preview.blocked,
         token: null,
+        roundRobin: preview.roundRobin,
       },
       { status: 422 },
     );
@@ -87,6 +88,7 @@ export async function POST(
     blocked: [],
     expiresAt: payload.expiresAt,
     token: signStructurePreview(payload),
+    roundRobin: preview.roundRobin,
   });
 }
 
@@ -106,12 +108,18 @@ function intentPermission(
             ? "SetCourtAvailability"
             : intent.type === "archive-court"
               ? "ArchiveCourt"
-              : "TransferMatch";
+              : intent.type === "transfer-match"
+                ? "TransferMatch"
+                : intent.type === "start-round-robin"
+                  ? "StartRoundRobinCampaign"
+                  : intent.type === "remove-round-robin-player"
+                    ? "RemoveRoundRobinPlayer"
+                    : "ResumeAmericano";
   return isAllowedForActor(commandType, ctx.role, ctx.me?.id ?? null, target)
     ? null
     : target
       ? "Bạn chỉ được sửa ca của chính mình; Chủ hoặc Phó mới sửa cho người khác."
-      : "Chỉ Chủ hoặc Phó sự kiện được thay đổi sân và lịch.";
+      : "Chỉ Chủ hoặc Phó sự kiện được thay đổi sân, lịch và thể thức.";
 }
 
 function summarize(state: { courts: unknown[]; players: unknown[]; matches: Array<{ round: number; status: string }> }, fromRound: number) {

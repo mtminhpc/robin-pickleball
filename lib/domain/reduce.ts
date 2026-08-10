@@ -11,6 +11,10 @@ import type { Command, CommandEnvelope, PlayerSeed } from "./commands";
 import { err, ok, type Result } from "./commands";
 import { preconditionStillHolds } from "./precondition";
 import { firstOpenRound, firstUnplayedRound, roundIsPlayed } from "./rounds";
+import {
+  campaignIsComplete,
+  initialRoundRobinMatchIds,
+} from "./round-robin";
 import type {
   EventState,
   EventAward,
@@ -52,6 +56,8 @@ export function emptyState(code: string): EventState {
     presentation: emptyPresentation(),
     courts: legacyCourts(DEFAULT_CONFIG.courts),
     scheduleChange: null,
+    scheduleMode: "americano",
+    roundRobinCampaign: null,
     players: [],
     matches: [],
     lastRound: 0,
@@ -444,6 +450,10 @@ function applyInPlace(
       state.status = "finished";
       state.finishedAt = at;
       state.endedEarly = true;
+      if (state.roundRobinCampaign?.status === "active") {
+        state.roundRobinCampaign.status = "incomplete";
+        state.roundRobinCampaign.updatedAt = at;
+      }
       return ok(null);
     }
 
@@ -912,6 +922,88 @@ function applyInPlace(
       return ok(null);
     }
 
+    // ---- thể thức round robin -------------------------------------------
+    case "StartRoundRobinCampaign": {
+      if (state.status !== "running") {
+        return err("Chỉ chuyển thể thức khi sự kiện đang diễn ra.");
+      }
+      if (state.scheduleMode !== "americano") {
+        return err("Hãy hoàn tất và chuyển lại Americano trước khi mở chiến dịch round robin mới.");
+      }
+      if (!c.campaignId.trim() || c.playerIds.length < 4 || c.playerIds.length > 40) {
+        return err("Nhóm round robin phải có từ 4 đến 40 người.");
+      }
+      if (new Set(c.playerIds).size !== c.playerIds.length) {
+        return err("Nhóm round robin có người bị trùng.");
+      }
+      const open = firstOpenRound(state);
+      if (!Number.isInteger(c.effectiveRound) || c.effectiveRound < open) {
+        return err(`Round robin chỉ được áp dụng từ vòng ${open} trở đi.`);
+      }
+      for (const playerId of c.playerIds) {
+        const player = findPlayer(state, playerId);
+        if (!player || player.status !== "active" || !isEligibleAt(player, c.effectiveRound)) {
+          return err(`${player?.name ?? playerId} không ở trong ca tại vòng ${c.effectiveRound}.`);
+        }
+      }
+      state.scheduleMode = "round-robin";
+      state.roundRobinCampaign = {
+        id: c.campaignId,
+        status: "active",
+        playerIds: [...c.playerIds],
+        effectiveRound: c.effectiveRound,
+        startedAt: at,
+        actorLabel: actor.label,
+        countedMatchIds: initialRoundRobinMatchIds(state),
+        completedAt: null,
+        updatedAt: at,
+      };
+      refreshRoundRobinCampaign(state, at);
+      return ok(null);
+    }
+
+    case "RemoveRoundRobinPlayer": {
+      const campaign = state.roundRobinCampaign;
+      if (
+        state.scheduleMode !== "round-robin" ||
+        !campaign ||
+        campaign.id !== c.campaignId ||
+        campaign.status !== "active"
+      ) {
+        return err("Không có chiến dịch round robin đang chạy.");
+      }
+      if (!campaign.playerIds.includes(c.playerId)) {
+        return err("Người này không thuộc nhóm round robin.");
+      }
+      const open = firstOpenRound(state);
+      if (!Number.isInteger(c.effectiveRound) || c.effectiveRound < open) {
+        return err(`Chỉ được đổi nhóm từ vòng ${open} trở đi.`);
+      }
+      campaign.playerIds = campaign.playerIds.filter((id) => id !== c.playerId);
+      campaign.updatedAt = at;
+      refreshRoundRobinCampaign(state, at);
+      return ok(null);
+    }
+
+    case "ResumeAmericano": {
+      const campaign = state.roundRobinCampaign;
+      if (
+        state.status !== "running" ||
+        state.scheduleMode !== "round-robin" ||
+        !campaign ||
+        campaign.id !== c.campaignId ||
+        campaign.status !== "completed"
+      ) {
+        return err("Chỉ chuyển lại Americano sau khi round robin đã hoàn tất.");
+      }
+      if (!Number.isInteger(c.effectiveRound) || c.effectiveRound < firstOpenRound(state)) {
+        return err("Mốc chuyển lại Americano không hợp lệ.");
+      }
+      state.scheduleMode = "americano";
+      campaign.updatedAt = at;
+      return ok(null);
+    }
+
     // ---- lịch thi đấu ----------------------------------------------------
     case "SetSchedule": {
       if (
@@ -1220,6 +1312,7 @@ function applyInPlace(
         to: c.score ? { scoreA: c.score.scoreA, scoreB: c.score.scoreB } : null,
         note: `Bỏ dở: ${c.reason}`,
       });
+      countRoundRobinMatch(state, m.id, at);
       return ok(null);
     }
 
@@ -1257,6 +1350,7 @@ function applyInPlace(
       if (clash) return err("Sân hoặc người chơi đang bận ở một trận khác.");
       m.status = "playing";
       m.startedAt = at;
+      countRoundRobinMatch(state, m.id, at);
       return ok(null);
     }
 
@@ -1281,6 +1375,7 @@ function applyInPlace(
         submittedBy: actor,
         submittedAt: at,
       };
+      countRoundRobinMatch(state, m.id, at);
       return ok(null);
     }
 
@@ -1437,6 +1532,36 @@ function validateConfigPatch(patch: Partial<EventState["config"]>): string | nul
     }
   }
   return null;
+}
+
+function countRoundRobinMatch(state: EventState, matchId: string, at: number): void {
+  const campaign = state.roundRobinCampaign;
+  if (state.scheduleMode !== "round-robin" || !campaign || campaign.status !== "active") {
+    return;
+  }
+  if (!campaign.countedMatchIds.includes(matchId)) {
+    campaign.countedMatchIds.push(matchId);
+  }
+  campaign.updatedAt = at;
+  refreshRoundRobinCampaign(state, at);
+}
+
+function refreshRoundRobinCampaign(state: EventState, at: number): void {
+  const campaign = state.roundRobinCampaign;
+  if (!campaign || campaign.status !== "active") return;
+  if (campaignIsComplete(state)) {
+    campaign.status = "completed";
+    campaign.completedAt = at;
+    campaign.updatedAt = at;
+    // Rolling lookahead can have several future games already visible. Once the
+    // last missing partnership has actually started, those generated games are
+    // no longer part of the campaign. Pinned games remain an explicit promise
+    // made by a manager and therefore stay untouched.
+    state.matches = state.matches.filter(
+      (match) => match.status !== "scheduled" || Boolean(match.pinned),
+    );
+    state.lastRound = state.matches.reduce((last, match) => Math.max(last, match.round), 0);
+  }
 }
 
 function exhaustive(c: never): Result<null> {

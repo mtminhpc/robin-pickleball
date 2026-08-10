@@ -1,6 +1,6 @@
 # Tiến độ dự án
 
-Cập nhật: 10/08/2026 · nhánh làm việc `codex/v0.9.0-trao-quyen` ·
+Cập nhật: 10/08/2026 · nhánh làm việc `codex/v0.10.0-tron-vong` ·
 **đích Production: https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
@@ -10,6 +10,9 @@ chạy thế nào, và việc gì còn dang dở. Hướng dẫn nối Google Sh
 > Thiết kế đã chốt cho hai đợt tiếp theo nằm tại
 > [THIET-KE-V08-V09.md](THIET-KE-V08-V09.md). v0.8 và v0.9 phải được triển khai,
 > kiểm định và phát hành độc lập; không bỏ qua cổng smoke v0.8 để đưa thẳng v0.9.
+>
+> Thiết kế bản kế tiếp nằm tại [THIET-KE-V010.md](THIET-KE-V010.md): chuyển một
+> buổi đang chạy sang round robin chuẩn mà giữ nguyên mọi trận đã thi đấu.
 
 ---
 
@@ -19,7 +22,9 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Mã làm việc hiện tại: `v0.9.0 — Trao quyền`.** Mã v0.9 đã chốt ở commit `388d42b`;
+**Mã làm việc hiện tại: `v0.10.0 — Tròn vòng`.** v0.10 đang được triển khai trên
+`codex/v0.10.0-tron-vong`, dựa trên mã v0.8/v0.9 đã chốt cục bộ nhưng chưa phát hành.
+Mã v0.9 đã chốt ở commit `388d42b`;
 v0.8 đã chốt ở commit `b891800` trên nhánh `codex/v0.8.0-linh-dong`: sân ổn định/đặt tên theo vòng, nhiều ca
 sân và người, preview/confirm HMAC, xếp lại lịch chưa bắt đầu, chuyển trận giữ nguyên
 định danh/tỷ số, banner lịch đổi và seed idempotent `TESTV8`.
@@ -30,6 +35,19 @@ link/QR một lần cho ô chưa nhận, Chủ device-only, chuyển Chủ vận
 `owner_user_id` sau hai xác nhận + kiểm quota, cờ Google chỉ cho Chủ/Phó, audit phân trang
 đã lược danh tính và seed idempotent `TESTV9`. Chủ vận hành chưa hoàn tất quyền tài khoản
 hiện riêng trong nhóm được phân công, không nhận nhầm nút sao chép/xoá hay quota.
+
+v0.10 bổ sung chiến dịch round robin chuẩn giữa một buổi đang chạy: chốt nhóm theo
+vòng hiệu lực, tính mọi trận đã ra sân vào độ phủ, giữ trận playing/ghim, chỉ thay
+lịch chờ và sinh rolling lookahead. Planner one-factorization phủ cứng mọi cặp đồng
+đội, cân đối đối thủ/nghỉ/suất sau đó; người đến sau không nở ma trận nhưng vẫn được
+chia suất. Có preview HMAC hiện nhóm/cặp thiếu/dự báo, tiến độ ở Quản lý + Lịch,
+snapshot `z1:` nén nhưng vẫn đọc JSON cũ và seed idempotent `TESTV10`.
+
+Cổng cục bộ v0.10 ngày 10/08/2026: **631/631 test**, `npm run scenarios` **152
+lượt/0 vấn đề**, `npm run build` và `npm run typecheck` sạch. Test v0.10 riêng phủ
+4–40 người/0–8 sân, chu kỳ 40 người nằm trong bốn ô snapshot, payload rolling dưới
+giới hạn một ô, người nghỉ/đến sau, playing/pinned/cancelled/abandoned, kết thúc sớm,
+quyền Phó/Điều hành và seed idempotent. Chưa chạy Preview hoặc smoke trình duyệt.
 
 Cổng cục bộ v0.9 ngày 10/08/2026: **609/609 test**, `npm run scenarios` **152 lượt/0
 vấn đề**, `npm run build` và `npm run typecheck` sạch. Cổng v0.8 trước đó là **595/595**,
@@ -79,7 +97,10 @@ thứ đã được người thật dùng thử".**
 - **Smoke v0.9 chưa chạy:** cấp Phó bằng Google, device-only và email/link/QR; thu hồi;
   chuyển Chủ, đổi máy device-only bị chặn, hai phía xác nhận account ownership và ca quota
   đầy. Chỉ chạy sau khi v0.8 đã qua smoke Production; không merge v0.9 thẳng vào `main`.
-- Seed `TESTV8`/`TESTV9` đã được kiểm idempotent trong kho tạm của test. Chưa chạy seed
+- **Smoke v0.10 chưa chạy:** chuyển từ vòng đang có trận playing, xem preview độ phủ,
+  người nghỉ/quay lại/đến sau, hoàn tất rồi chuyển về Americano trên Chrome mobile và
+  Edge desktop. Chỉ chạy sau khi v0.8 và v0.9 đã qua smoke Production.
+- Seed `TESTV8`/`TESTV9`/`TESTV10` đã được kiểm idempotent trong kho tạm của test. Chưa chạy seed
   vào `.data/test-sandbox.json`, nên không sửa/xoá `TEST11`, `TESTV5`, `TESTV6` hay `UPC3YR`.
 
 - **Quản lý nhà tài trợ (v0.7.0): đã chạy cục bộ, chưa chạy trên Production.** Chủ dự

@@ -31,6 +31,7 @@ export const TEST_V5_EVENT_CODE = "TESTV5";
 export const TEST_V6_EVENT_CODE = "TESTV6";
 export const TEST_V8_EVENT_CODE = "TESTV8";
 export const TEST_V9_EVENT_CODE = "TESTV9";
+export const TEST_V10_EVENT_CODE = "TESTV10";
 export const TEST_PLAYER_PASSWORD = "test1234";
 export const TEST_ADMIN_PASSWORD = "admin1234";
 
@@ -582,6 +583,110 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
     await roles.appendMany(roleActions);
   }
 
+  // TESTV10 bắt đầu ở Americano và cố ý có lịch sử lệch: P1/P2 đã làm đồng đội
+  // hai lần, nhiều cặp chưa gặp nhau và một trận vòng 3 đang chơi. Đây là mốc
+  // smoke để chuyển thể thức ngay giữa buổi mà không đụng bất kỳ seed cũ nào.
+  let v10 = await events.load(TEST_V10_EVENT_CODE);
+  if (!v10) {
+    const record = await events.create({
+      code: TEST_V10_EVENT_CODE,
+      clubId: club.id,
+      name: "SÂN TEST V10 · TRÒN VÒNG",
+      status: "draft",
+      ownerUserId: "test-owner",
+      playerPassHash: await hashPassword(TEST_PLAYER_PASSWORD),
+      adminPassHash: await hashPassword(TEST_ADMIN_PASSWORD),
+    }, now + 900);
+    const actor = {
+      kind: "admin",
+      label: "Chủ sự kiện · TEST Tròn vòng",
+      ref: "test-owner",
+    } as const;
+    const members = loadedClub.members.filter((member) => member.status === "active").slice(0, 8);
+    const commands: CommandEnvelope[] = [{
+      id: "testv10-create",
+      at: now + 900,
+      actor,
+      command: {
+        type: "CreateEvent",
+        code: TEST_V10_EVENT_CODE,
+        clubId: club.id,
+        config: {
+          ...DEFAULT_CONFIG,
+          name: "SÂN TEST V10 · TRÒN VÒNG",
+          courts: 2,
+          expectedPlayers: 8,
+          targetGamesPerPlayer: 12,
+          estimatedMatchMinutes: 15,
+          lookaheadRounds: 5,
+        },
+      },
+    }, ...members.map((member, index) => ({
+      id: `testv10-player-${index + 1}`,
+      at: now + 910 + index,
+      actor,
+      command: {
+        type: "AddPlayer" as const,
+        player: {
+          id: `testv10-p${index + 1}`,
+          name: member.displayName,
+          avatarId: member.avatarId,
+          deviceId: `testv10-device-${index + 1}`,
+        },
+        asActive: true,
+      },
+    })), {
+      id: "testv10-start",
+      at: now + 930,
+      actor,
+      command: { type: "StartEvent" },
+    }, {
+      id: "testv10-schedule",
+      at: now + 931,
+      actor,
+      command: {
+        type: "SetSchedule",
+        fromRound: 1,
+        matches: [
+          { id: "testv10-m1", round: 1, court: 1, teamA: ["testv10-p1", "testv10-p2"], teamB: ["testv10-p3", "testv10-p4"] },
+          { id: "testv10-m2", round: 1, court: 2, teamA: ["testv10-p5", "testv10-p6"], teamB: ["testv10-p7", "testv10-p8"] },
+          { id: "testv10-m3", round: 2, court: 1, teamA: ["testv10-p1", "testv10-p2"], teamB: ["testv10-p5", "testv10-p6"] },
+          { id: "testv10-m4", round: 2, court: 2, teamA: ["testv10-p3", "testv10-p7"], teamB: ["testv10-p4", "testv10-p8"] },
+          { id: "testv10-m5", round: 3, court: 1, teamA: ["testv10-p1", "testv10-p3"], teamB: ["testv10-p5", "testv10-p7"] },
+          { id: "testv10-m6", round: 3, court: 2, teamA: ["testv10-p2", "testv10-p4"], teamB: ["testv10-p6", "testv10-p8"] },
+        ],
+      },
+    }, ...["testv10-m1", "testv10-m2", "testv10-m3", "testv10-m4"].map((matchId, index) => ({
+      id: `testv10-result-${index + 1}`,
+      at: now + 932 + index,
+      actor,
+      command: {
+        type: "SubmitResult" as const,
+        matchId,
+        scoreA: 11,
+        scoreB: 6 + index,
+        irregular: false,
+      },
+    })), {
+      id: "testv10-playing",
+      at: now + 940,
+      actor,
+      command: { type: "StartMatch", matchId: "testv10-m5" },
+    }];
+    const interim = fold(TEST_V10_EVENT_CODE, commands);
+    if (interim.skipped.length > 0) {
+      throw new Error(`Không dựng được TESTV10: ${interim.skipped[0]!.error}`);
+    }
+    const committed = await events.commitMany(TEST_V10_EVENT_CODE, commands, {
+      record,
+      state: fold(TEST_V10_EVENT_CODE, []).state,
+      repaired: false,
+      skipped: [],
+    });
+    if (!committed.ok) throw new Error(committed.error);
+    v10 = await events.load(TEST_V10_EVENT_CODE);
+  }
+
   console.log(`Đã giữ dữ liệu TEST tại: ${path}`);
   console.log(`CLB: ${club.name} · mã mời ${club.inviteCode}`);
   console.log(`Sân/sự kiện: ${event?.state.config.name ?? TEST_EVENT_CODE} · mã ${TEST_EVENT_CODE}`);
@@ -589,6 +694,7 @@ export async function seedTestData(path = TEST_DATA_PATH): Promise<void> {
   console.log(`Điều hành v0.6: ${v6?.state.config.name ?? TEST_V6_EVENT_CODE} · mã ${TEST_V6_EVENT_CODE}`);
   console.log(`Linh động v0.8: ${v8?.state.config.name ?? TEST_V8_EVENT_CODE} · mã ${TEST_V8_EVENT_CODE}`);
   console.log(`Trao quyền v0.9: ${v9?.state.config.name ?? TEST_V9_EVENT_CODE} · mã ${TEST_V9_EVENT_CODE}`);
+  console.log(`Tròn vòng v0.10: ${v10?.state.config.name ?? TEST_V10_EVENT_CODE} · mã ${TEST_V10_EVENT_CODE}`);
   console.log(`Người chơi: ${loadedClub.members.filter((m) => m.status === "active").length}`);
   console.log(`Mật khẩu người chơi: ${TEST_PLAYER_PASSWORD}`);
   console.log(`Mật khẩu quản trị: ${TEST_ADMIN_PASSWORD}`);

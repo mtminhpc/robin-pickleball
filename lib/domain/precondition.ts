@@ -168,6 +168,19 @@ function preconditionValue(state: EventState, command: Command): unknown | undef
     case "ArchiveCourt":
       return ["courts", state.courts];
 
+    case "StartRoundRobinCampaign":
+    case "RemoveRoundRobinPlayer":
+    case "ResumeAmericano":
+      return [
+        "round-robin",
+        state.scheduleMode,
+        state.roundRobinCampaign,
+        state.matches
+          .filter((match) => match.status === "scheduled" || match.status === "playing")
+          .map(matchStamp)
+          .sort(byJson),
+      ];
+
     case "StartEvent":
     case "EndEventEarly":
     case "FinishEvent":

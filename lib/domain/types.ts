@@ -308,6 +308,23 @@ export interface ScheduleChange {
   kind: string;
 }
 
+export type ScheduleMode = "americano" | "round-robin";
+
+/** Một chiến dịch phủ đủ cặp đồng đội, được suy hoàn toàn từ nhật ký. */
+export interface RoundRobinCampaign {
+  id: string;
+  status: "active" | "completed" | "incomplete";
+  /** Nhóm mục tiêu hiện tại; người bị loại chỉ rời mục tiêu, không rời sự kiện. */
+  playerIds: PlayerId[];
+  effectiveRound: number;
+  startedAt: number;
+  actorLabel: string;
+  /** Trận đã thật sự ra sân; giữ nguyên độ phủ kể cả tỷ số về sau bị gỡ. */
+  countedMatchIds: MatchId[];
+  completedAt: number | null;
+  updatedAt: number;
+}
+
 // ---------------------------------------------------------------------------
 // Trình bày sự kiện: nhà tài trợ và giải thưởng
 // ---------------------------------------------------------------------------
@@ -368,6 +385,9 @@ export interface EventState {
   courts: EventCourt[];
   /** Lần gần nhất phần lịch chưa bắt đầu được thay đổi có chủ ý. */
   scheduleChange: ScheduleChange | null;
+  /** Americano linh hoạt hoặc chiến dịch hoàn thiện round robin đang có hiệu lực. */
+  scheduleMode: ScheduleMode;
+  roundRobinCampaign: RoundRobinCampaign | null;
   players: Player[];
   matches: Match[];
   /** Vòng cao nhất đã được sinh; 0 nghĩa là chưa sinh vòng nào. */
@@ -429,6 +449,9 @@ export function withEventDefaults(state: EventState): EventState {
     },
     courts,
     scheduleChange: state.scheduleChange ?? null,
+    scheduleMode:
+      state.scheduleMode === "round-robin" ? "round-robin" : "americano",
+    roundRobinCampaign: normalizeRoundRobinCampaign(state.roundRobinCampaign),
     players: Array.isArray(state.players)
       ? state.players.map((player) => withPlayerDefaults(player))
       : [],
@@ -457,6 +480,31 @@ export function withEventDefaults(state: EventState): EventState {
           };
         })
       : [],
+  };
+}
+
+function normalizeRoundRobinCampaign(
+  campaign: RoundRobinCampaign | null | undefined,
+): RoundRobinCampaign | null {
+  if (!campaign || !campaign.id || !Array.isArray(campaign.playerIds)) return null;
+  return {
+    id: String(campaign.id),
+    status:
+      campaign.status === "completed" || campaign.status === "incomplete"
+        ? campaign.status
+        : "active",
+    playerIds: [...new Set(campaign.playerIds.filter(Boolean))],
+    effectiveRound: Math.max(1, Math.trunc(campaign.effectiveRound) || 1),
+    startedAt: Number.isFinite(campaign.startedAt) ? campaign.startedAt : 0,
+    actorLabel: String(campaign.actorLabel || "Chủ/Phó sự kiện"),
+    countedMatchIds: [...new Set((campaign.countedMatchIds ?? []).filter(Boolean))],
+    completedAt:
+      typeof campaign.completedAt === "number" ? campaign.completedAt : null,
+    updatedAt: Number.isFinite(campaign.updatedAt)
+      ? campaign.updatedAt
+      : Number.isFinite(campaign.startedAt)
+        ? campaign.startedAt
+        : 0,
   };
 }
 

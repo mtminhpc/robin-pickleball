@@ -31,6 +31,7 @@ import { achievableStreakCap, buildHistory, type History } from "./metrics";
 import { optimize, type OptimizeResult } from "./optimize";
 import { makeRng, seedFrom } from "./rng";
 import { hasWhistDesign, whistRound } from "./whist";
+import { planRoundRobinSchedule } from "./round-robin";
 
 export type PlanMode = "extend" | "rebuild";
 
@@ -61,6 +62,9 @@ export function planSchedule(
   state: EventState,
   options: PlanOptions = {},
 ): PlanOutcome {
+  if (state.scheduleMode === "round-robin" && state.roundRobinCampaign) {
+    return planRoundRobinSchedule(state, options);
+  }
   const mode = options.mode ?? "extend";
   const fromRound = Math.max(firstOpenRound(state), options.fromRound ?? 1);
   const activeIds = state.players.filter((p) => p.status === "active").map((p) => p.id);

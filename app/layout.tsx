@@ -20,7 +20,7 @@ const archivo = Archivo({
 export const metadata: Metadata = {
   title: "Robin Pickleball",
   description:
-    "Xếp lịch và tính điểm buổi đánh pickleball theo thể thức Americano, tính điểm theo hiệu số.",
+    "Xếp lịch và tính điểm pickleball theo Americano linh hoạt hoặc round robin chuẩn.",
 };
 
 export const viewport: Viewport = {

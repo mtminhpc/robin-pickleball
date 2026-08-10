@@ -144,6 +144,7 @@ function SideBar({ code }: { code: string }) {
   const { data } = useEvent();
   const isActive = useActive(code);
   const isAdmin = Boolean(data?.capabilities.canOpenAdmin);
+  const formatLabel = data ? scheduleModeLabel(data.state) : "Americano linh hoạt";
 
   return (
     <aside className="hidden w-[14.5rem] flex-none flex-col bg-ink text-mute-200 lg:flex">
@@ -161,7 +162,7 @@ function SideBar({ code }: { code: string }) {
           PICKLEBALL
         </p>
         <p className="eyebrow mt-2.5 font-normal text-mute-500">
-          Americano · Round robin
+          {formatLabel}
         </p>
       </Link>
 
@@ -265,6 +266,7 @@ function Band({ code }: { code: string }) {
           <p className="mt-2 font-display text-display lg:text-[2.875rem]">{title}</p>
           <p className="mt-2 text-[11px] text-mute-400">
             {activeCourtCount} sân đang mở
+            {` · ${scheduleModeLabel(state)}`}
             {` · ${data.roleLabel.toLowerCase()}`}
           </p>
         </div>
@@ -277,6 +279,14 @@ function Band({ code }: { code: string }) {
       </div>
     </header>
   );
+}
+
+function scheduleModeLabel(state: EventSnapshot["state"]): string {
+  return state.scheduleMode === "round-robin"
+    ? state.roundRobinCampaign?.status === "completed"
+      ? "Round robin đã hoàn tất"
+      : "Round robin chuẩn"
+    : "Americano linh hoạt";
 }
 
 function RoleInvitationAcceptor({ code }: { code: string }) {

@@ -42,6 +42,20 @@ describe("quyền theo vai", () => {
     expect(isAllowedForRole("RemovePlayer", "player")).toBe(false);
     expect(isAllowedForRole("SwapRounds", "player")).toBe(false);
   });
+
+  it("chỉ Chủ và Phó được đổi thể thức round robin", () => {
+    for (const type of [
+      "StartRoundRobinCampaign",
+      "RemoveRoundRobinPlayer",
+      "ResumeAmericano",
+    ] as const) {
+      expect(isAllowedForRole(type, "owner"), type).toBe(true);
+      expect(isAllowedForRole(type, "manager"), type).toBe(true);
+      expect(isAllowedForRole(type, "operator"), type).toBe(false);
+      expect(isAllowedForRole(type, "player"), type).toBe(false);
+      expect(isAllowedForRole(type, "viewer"), type).toBe(false);
+    }
+  });
 });
 
 describe("quyền theo chính chủ", () => {

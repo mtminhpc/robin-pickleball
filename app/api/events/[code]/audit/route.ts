@@ -3,6 +3,7 @@ import { fail, isResponse, resolveContext } from "@/lib/api/context";
 import { publicRoleAudit } from "@/lib/api/audit";
 import { freshRoleState } from "@/lib/api/event-roles";
 import type { Command, CommandEnvelope } from "@/lib/domain/commands";
+import { apply, emptyState } from "@/lib/domain/reduce";
 import { getRepo } from "@/lib/sheets/cache";
 
 const MANAGEMENT_COMMANDS = new Set<Command["type"]>([
@@ -10,6 +11,8 @@ const MANAGEMENT_COMMANDS = new Set<Command["type"]>([
   "PlayerLeft", "RemovePlayer", "DeclareAvailability", "SetPlayerPlan",
   "ConfirmPlayerSpan", "AddCourt", "RenameCourt", "ReorderCourts",
   "SetCourtAvailability", "ArchiveCourt", "TransferMatch", "SetSchedule",
+  "StartRoundRobinCampaign", "RemoveRoundRobinPlayer", "ResumeAmericano",
+  "EndEventEarly",
 ]);
 
 export async function GET(
@@ -26,6 +29,7 @@ export async function GET(
   const [commands, roles] = await Promise.all([getRepo().readLog(code), freshRoleState(ctx)]);
   const items = [
     ...commands.filter((entry) => MANAGEMENT_COMMANDS.has(entry.command.type)).map(commandAudit),
+    ...roundRobinCompletionAudit(code, commands),
     ...roles.actions.map(publicRoleAudit),
   ].sort((a, b) => b.at - a.at || b.id.localeCompare(a.id));
   const page = items.slice(offset, offset + 50);
@@ -35,7 +39,16 @@ export async function GET(
   });
 }
 
-function commandAudit(entry: CommandEnvelope) {
+interface AuditItem {
+  id: string;
+  actorLabel: string;
+  at: number;
+  type: string;
+  effectiveRound: number | null;
+  summary: string;
+}
+
+function commandAudit(entry: CommandEnvelope): AuditItem {
   return {
     id: `command:${entry.id}`,
     actorLabel: entry.actor.label,
@@ -72,6 +85,32 @@ function commandSummary(command: Command): string {
     case "RejectJoin": return "Từ chối người chơi";
     case "DeclareAvailability": return "Đổi khoảng tham gia kiểu cũ";
     case "SetSchedule": return "Cập nhật phần lịch chưa bắt đầu";
+    case "StartRoundRobinCampaign": return `Bắt đầu round robin với ${command.playerIds.length} người`;
+    case "RemoveRoundRobinPlayer": return "Loại một người khỏi mục tiêu round robin";
+    case "ResumeAmericano": return "Chuyển lại Americano sau khi hoàn tất";
+    case "EndEventEarly": return "Kết thúc sớm; round robin chưa hoàn tất";
     default: return "Thay đổi quản lý";
   }
+}
+
+function roundRobinCompletionAudit(code: string, commands: CommandEnvelope[]) {
+  let state = emptyState(code);
+  const items: AuditItem[] = [];
+  for (const entry of commands) {
+    const before = state.roundRobinCampaign?.status;
+    const outcome = apply(state, entry);
+    if (!outcome.ok) continue;
+    state = outcome.value;
+    if (before === "active" && state.roundRobinCampaign?.status === "completed") {
+      items.push({
+        id: `round-robin-completed:${entry.id}`,
+        actorLabel: entry.actor.label,
+        at: entry.at,
+        type: "RoundRobinCompleted",
+        effectiveRound: state.roundRobinCampaign.effectiveRound,
+        summary: "Hoàn tất toàn bộ cặp round robin",
+      });
+    }
+  }
+  return items;
 }

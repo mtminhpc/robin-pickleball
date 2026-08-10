@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import type { StructureIntent, StructureDiff } from "@/lib/domain/structure";
 import type { Command } from "@/lib/domain/commands";
+import type { RoundRobinForecast } from "@/lib/scheduler/round-robin";
 import { useEvent } from "@/hooks/useEventState";
 
 export interface StructurePreviewResponse {
@@ -14,6 +15,7 @@ export interface StructurePreviewResponse {
   blocked: string[];
   expiresAt?: number;
   token: string | null;
+  roundRobin?: RoundRobinForecast | null;
 }
 
 export function useStructureChange(code: string) {

@@ -27,6 +27,7 @@ import { ScoreEntryDialog } from "@/components/ScoreEntryDialog";
 import { Button, Dialog, Empty, SectionHead } from "@/components/ui";
 import { useStructureChange, type StructurePreviewResponse } from "@/hooks/useStructureChange";
 import { StructurePreviewDialog } from "@/components/StructurePreviewDialog";
+import { RoundRobinManager } from "@/components/RoundRobinManager";
 
 export default function SchedulePage() {
   const { code } = useParams<{ code: string }>();
@@ -95,6 +96,7 @@ export default function SchedulePage() {
   if (rounds.length === 0) {
     return (
       <div className="space-y-4 pt-6">
+        <RoundRobinManager compact />
         <Empty>Chưa có lịch. Bắt đầu buổi đánh để hệ thống xếp.</Empty>
         {capabilities.canManageStructure && state.status === "running" && (
           <Button tone="primary" full onClick={() => setQuickCourt(true)}>Thêm sân để tiếp tục</Button>
@@ -107,6 +109,7 @@ export default function SchedulePage() {
 
   return (
     <>
+      <div className="mb-5 pt-5"><RoundRobinManager compact /></div>
       {capabilities.canManageStructure && state.status === "running" && (
         <section className="mb-5 flex flex-wrap items-center justify-between gap-3 border-l-4 border-accent bg-surface p-4">
           <div><p className="font-display text-xs font-extrabold uppercase">Điều phối sân nhanh</p><p className="mt-1 text-xs text-mute-700">Thêm sân, đóng sân hoặc chuyển nguyên trạng một trận.</p></div>
