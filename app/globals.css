@@ -78,4 +78,20 @@ input[type="number"] {
   .rule-head {
     @apply flex items-baseline gap-3 border-b-2 border-ink pb-2 pt-6;
   }
+
+  /*
+   * Dải cuộn ngang không thanh cuộn — dùng cho dải nhà tài trợ.
+   *
+   * Giấu thanh cuộn ở đây không làm mất lối đi: dải nằm ngay dưới băng tiêu đề,
+   * vuốt ngang là phản xạ sẵn có, và nút "Tất cả (n)" luôn hiện nên vẫn còn một
+   * đường xem hết bằng bàn phím lẫn trình đọc màn hình.
+   */
+  .scroll-x {
+    @apply overflow-x-auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
 }

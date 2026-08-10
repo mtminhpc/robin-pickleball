@@ -77,10 +77,16 @@ export async function GET(request: NextRequest) {
         updatedAt: record.updatedAt,
         courts: state.config.courts,
         players: state.players.length,
+        sponsorLogoShape: state.presentation.sponsorLogoShape,
+        // Hạng đi kèm để thẻ sự kiện vẽ đúng khung ánh kim mà không phải gọi
+        // thêm một vòng `/state` cho từng buổi. Đây là dữ liệu vẫn hiện công
+        // khai trong sự kiện, không thêm gì nhạy cảm vào danh sách này.
         sponsors: state.presentation.sponsors.map((sponsor) => ({
           id: sponsor.id,
           name: sponsor.name,
           assetId: sponsor.assetId,
+          tier: sponsor.tier,
+          tierLabel: sponsor.tierLabel,
         })),
       }))
       .sort((a, b) => (b.scheduledAt ?? b.createdAt) - (a.scheduledAt ?? a.createdAt)),

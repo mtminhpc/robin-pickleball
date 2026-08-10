@@ -24,12 +24,23 @@ import {
 import { clearLocalEventCache } from "@/lib/identity/event-local-cache";
 import { Button, Field, inputClass } from "@/components/ui";
 import { Avatar } from "@/components/Avatar";
+import { MetalFrame, sponsorMetal } from "@/components/Metal";
+import type { SponsorLogoShape, SponsorTier } from "@/lib/domain/types";
 import { DeleteEventDialog } from "@/components/DeleteEventDialog";
 import { ACCOUNT_KEY, signInHref, useAccount } from "@/hooks/useAccount";
 import { scheduledAtFromInputs } from "@/lib/scheduled-at";
 import { estimateEvent, formatEstimatedDuration } from "@/lib/domain/estimate";
 
 const HOME_ACCENT = "#087a55";
+
+/** Cỡ khung logo trên thẻ sự kiện — thang nhỏ nhất của bản thiết kế (1c). */
+const CARD_SIZE: Record<SponsorTier, number> = {
+  diamond: 38,
+  gold: 35,
+  silver: 33,
+  partner: 33,
+  custom: 33,
+};
 
 export default function HomePage() {
   const [recent, setRecent] = useState<RecentEvent[]>([]);
@@ -411,7 +422,8 @@ interface OwnedEvent {
   createdAt: number;
   courts: number;
   players: number;
-  sponsors: Array<{ id: string; name: string; assetId: string }>;
+  sponsorLogoShape: SponsorLogoShape;
+  sponsors: Array<{ id: string; name: string; assetId: string; tier: SponsorTier; tierLabel?: string }>;
 }
 
 function CreatedEvents() {
@@ -499,7 +511,8 @@ function eventTime(event: OwnedEvent): number {
 }
 
 function OwnedEventCard({ event }: { event: OwnedEvent }) {
-  const first = event.sponsors[0];
+  // Bốn logo là chỗ vừa đủ cho khổ 390px; phần còn lại đếm bằng "+N", đúng 1c.
+  const visibleSponsors = event.sponsors.slice(0, 4);
   const router = useRouter();
   const client = useQueryClient();
   const account = useAccount();
@@ -558,28 +571,47 @@ function OwnedEventCard({ event }: { event: OwnedEvent }) {
   };
   return (
     <div className="bg-paper">
-    <Link href={`/e/${event.code}`} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-3 py-3 hover:bg-mute-300">
-      <div className="grid size-12 place-items-center overflow-hidden border border-ink bg-ink text-white">
-        {first ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={`/api/events/${event.code}/assets/${first.assetId}`} alt={first.name} className="size-full object-contain" />
-        ) : (
-          <span className="font-display text-[10px] font-extrabold">RP</span>
-        )}
+    <Link href={`/e/${event.code}`} className="block py-3 hover:bg-mute-300">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-display text-sm font-extrabold uppercase">{event.name}</p>
+          <p className="mt-1 text-[10px] text-mute-600">
+            {new Date(eventTime(event)).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" })} · {event.courts} sân · {event.players} người
+          </p>
+          {event.venueAddress && <p className="mt-1 truncate text-[9px] text-mute-600">{event.venueAddress}</p>}
+          {event.relation === "manager" && <p className="mt-1 text-[9px] font-bold uppercase text-[#087a55]">Phó sự kiện</p>}
+        </div>
+        <div className="text-right">
+          <span className="block font-mono text-[11px] font-bold text-[#087a55]">{event.code}</span>
+          <span className="text-[9px] uppercase text-mute-600">{event.status === "draft" ? "Sắp diễn ra" : event.status === "running" ? "Đang đánh" : "Đã xong"}</span>
+        </div>
       </div>
-      <div className="min-w-0">
-        <p className="truncate font-display text-sm font-extrabold uppercase">{event.name}</p>
-        <p className="mt-1 text-[10px] text-mute-600">
-          {new Date(eventTime(event)).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" })} · {event.courts} sân · {event.players} người
-        </p>
-        {event.venueAddress && <p className="mt-1 truncate text-[9px] text-mute-600">{event.venueAddress}</p>}
-        {event.relation === "manager" && <p className="mt-1 text-[9px] font-bold uppercase text-[#087a55]">Phó sự kiện</p>}
-        {event.sponsors.length > 1 && <p className="mt-1 text-[9px] font-bold text-[#087a55]">+{event.sponsors.length - 1} logo tài trợ</p>}
-      </div>
-      <div className="text-right">
-        <span className="block font-mono text-[11px] font-bold text-[#087a55]">{event.code}</span>
-        <span className="text-[9px] uppercase text-mute-600">{event.status === "draft" ? "Sắp diễn ra" : event.status === "running" ? "Đang đánh" : "Đã xong"}</span>
-      </div>
+      {/*
+        Hàng tài trợ của bản thiết kế 1c. Trước đây chỗ này là một ô đen 48px kèm
+        dòng chữ "+N logo tài trợ" — nhà tài trợ trả tiền để được nhìn thấy, chứ
+        không phải để được đếm.
+      */}
+      {visibleSponsors.length > 0 && (
+        <div className="mt-3 flex items-center gap-2 border-t border-line pt-2.5">
+          <span className="eyebrow flex-none text-[9px] text-mute-600">Tài trợ</span>
+          {visibleSponsors.map((sponsor) => (
+            <MetalFrame
+              key={sponsor.id}
+              metal={sponsorMetal(sponsor.tier)}
+              size={CARD_SIZE[sponsor.tier]}
+              round={event.sponsorLogoShape === "round"}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/events/${event.code}/assets/${sponsor.assetId}`} alt={sponsor.name} className="size-full object-contain" />
+            </MetalFrame>
+          ))}
+          {event.sponsors.length > visibleSponsors.length && (
+            <span className="ml-auto flex-none text-[11px] font-semibold text-mute-700">
+              +{event.sponsors.length - visibleSponsors.length}
+            </span>
+          )}
+        </div>
+      )}
     </Link>
     {(canDelete || (event.status === "finished" && event.relation === "owner")) && (
       <div className="border-t border-line px-3 py-2 text-right">

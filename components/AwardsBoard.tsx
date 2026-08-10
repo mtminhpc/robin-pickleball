@@ -1,8 +1,25 @@
 "use client";
 
+/**
+ * Bảng vàng, dựng theo bản thiết kế 2a và thang giải 2c.
+ *
+ * Giải dùng **đúng thang ánh kim của nhà tài trợ**, chỉ đổi tông: vàng → bạc →
+ * đồng → viền mảnh. Đó là lý do `Metal.tsx` phục vụ cả hai chỗ; hai hệ kim loại
+ * song song trong một ứng dụng thì kiểu gì cũng trôi khỏi nhau.
+ *
+ * Cúp lớn dần theo bậc nhưng chỉ chênh vài pixel. Bậc đọc được nhờ **thứ tự và
+ * chất liệu**, không phải nhờ một cái cúp to áp đảo phần còn lại.
+ *
+ * Đồng giải gộp vào cùng một khung kèm nhãn "Đồng giải"; bậc dưới không bị đẩy
+ * xuống, vì hai người cùng giải ba vẫn chỉ là một giải ba.
+ */
+
 import { useState } from "react";
 import type { AwardKind, EventAward, EventState, TrophyMode } from "@/lib/domain/types";
+import type { StandingRow } from "@/lib/domain/standings";
 import { ImageEditor, type ImageEditorValue } from "@/components/ImageEditor";
+import { Avatar } from "@/components/Avatar";
+import { MetalFrame, MetalText, METAL_STROKE, TrophyIcon, awardMetal } from "@/components/Metal";
 import { useEvent } from "@/hooks/useEventState";
 import { Button, Dialog, Field, inputClass } from "@/components/ui";
 
@@ -14,7 +31,26 @@ const KIND_LABEL: Record<AwardKind, string> = {
   custom: "Giải tự đặt",
 };
 
-export function AwardsBoard({ code }: { code: string }) {
+/** Cỡ khung cúp, nhãn giải và tên người nhận theo bậc — thang của 2c. */
+const SCALE: Record<AwardKind, { frame: number; icon: number; label: number; name: number }> = {
+  champion: { frame: 62, icon: 30, label: 12, name: 18 },
+  runnerUp: { frame: 52, icon: 25, label: 11, name: 16 },
+  third: { frame: 46, icon: 22, label: 11, name: 15 },
+  encouragement: { frame: 42, icon: 20, label: 11, name: 15 },
+  custom: { frame: 42, icon: 20, label: 11, name: 15 },
+};
+
+export function AwardsBoard({
+  code,
+  n = "01",
+  standings = [],
+}: {
+  code: string;
+  /** Số thứ tự mục, để trang Xếp hạng đánh số liền mạch. */
+  n?: string;
+  /** Dòng xếp hạng đã tính sẵn ở trang cha — chỉ để lấy hiệu số và số trận. */
+  standings?: StandingRow[];
+}) {
   const { data, applyServerState } = useEvent();
   const [editing, setEditing] = useState<EventAward | "new" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,39 +80,166 @@ export function AwardsBoard({ code }: { code: string }) {
   };
 
   return (
-    <section className="border-2 border-ink bg-[#151313] text-white">
-      <header className="flex items-center justify-between border-b border-white/20 px-4 py-3">
-        <div><p className="font-display text-[9px] font-extrabold uppercase tracking-[0.2em] text-[#f2c45c]">Hall of fame</p><h2 className="mt-1 text-xl uppercase">Bảng vàng</h2></div>
-        {data.ownerByAccount && <Button className="border-white text-white hover:bg-white/10" onClick={() => setEditing("new")}>Trao giải</Button>}
-      </header>
+    <section aria-label="Bảng vàng">
+      <div className="flex items-center gap-3 border-b-2 border-ink pb-2 pt-6">
+        <span className="font-display text-[11px] font-extrabold leading-none text-accent">{n}</span>
+        <h2 className="eyebrow m-0">Bảng vàng</h2>
+        {data.ownerByAccount && (
+          <Button className="ml-auto min-h-9 px-3 text-[10px]" onClick={() => setEditing("new")}>
+            Trao giải
+          </Button>
+        )}
+      </div>
+
       {awards.length === 0 ? (
-        <p className="p-5 text-sm text-mute-400">Sự kiện đã kết thúc. Chủ sự kiện có thể trao giải thủ công.</p>
+        <p className="border-b-2 border-ink py-5 text-sm text-mute-700">
+          Buổi đã kết thúc. Chủ sự kiện có thể trao giải cho từng người.
+        </p>
       ) : (
-        <div className="grid gap-px bg-white/15 sm:grid-cols-2">
-          {awards.map((award) => {
-            const names = award.recipientIds.map((id) => data.state.players.find((player) => player.id === id)?.name).filter(Boolean);
-            return (
-              <article key={award.id} className="relative flex min-h-32 items-center gap-4 bg-[#151313] p-4">
-                <Trophy code={code} award={award} />
-                <div className="min-w-0"><p className="font-display text-[9px] font-extrabold uppercase tracking-[0.16em] text-[#f2c45c]">{award.label}</p><p className="mt-2 text-lg font-extrabold leading-tight">{names.join(" · ")}</p>{names.length > 1 && <span className="mt-2 inline-block border border-[#f2c45c] px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#f2c45c]">Đồng giải</span>}</div>
-                {data.ownerByAccount && <div className="absolute right-2 top-2 flex"><button type="button" aria-label={`Sửa ${award.label}`} onClick={() => setEditing(award)} className="size-9 text-xs underline">Sửa</button><button type="button" aria-label={`Xoá ${award.label}`} onClick={() => void act({ action: "removeAward", id: award.id })} className="size-9 text-xs text-accent-400 underline">Xoá</button></div>}
-              </article>
-            );
-          })}
-        </div>
+        awards.map((award, index) => (
+          <AwardRow
+            key={award.id}
+            code={code}
+            award={award}
+            standings={standings}
+            state={data.state}
+            last={index === awards.length - 1}
+            canEdit={Boolean(data.ownerByAccount)}
+            onEdit={() => setEditing(award)}
+            onRemove={() => void act({ action: "removeAward", id: award.id })}
+          />
+        ))
       )}
-      {error && <p className="bg-accent p-3 text-sm text-white">{error}</p>}
-      <AwardDialog key={editing === "new" ? "new" : editing?.id ?? "closed"} open={editing !== null} award={editing === "new" ? null : editing} state={data.state} busy={busy} onClose={() => setEditing(null)} onSave={async (input) => { const ok = await act({ action: "upsertAward", ...input }); if (ok) setEditing(null); }} />
+
+      {error && <p className="mt-3 bg-accent p-3 text-sm text-paper">{error}</p>}
+
+      <AwardDialog
+        key={editing === "new" ? "new" : editing?.id ?? "closed"}
+        open={editing !== null}
+        award={editing === "new" ? null : editing}
+        state={data.state}
+        standings={standings}
+        busy={busy}
+        onClose={() => setEditing(null)}
+        onSave={async (input) => {
+          const ok = await act({ action: "upsertAward", ...input });
+          if (ok) setEditing(null);
+        }}
+      />
     </section>
   );
 }
 
-function Trophy({ code, award }: { code: string; award: EventAward }) {
-  const framed = award.trophyMode === "framed";
-  return <div className={`grid size-16 shrink-0 place-items-center ${framed ? "border-2 border-[#f2c45c] bg-black" : ""}`}>{award.trophyAssetId ? <img src={`/api/events/${code}/assets/${award.trophyAssetId}`} alt="Cúp" className="size-full object-contain" /> : <span aria-hidden className="text-4xl">🏆</span>}</div>;
+function AwardRow({
+  code,
+  award,
+  state,
+  standings,
+  last,
+  canEdit,
+  onEdit,
+  onRemove,
+}: {
+  code: string;
+  award: EventAward;
+  state: EventState;
+  standings: StandingRow[];
+  last: boolean;
+  canEdit: boolean;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const metal = awardMetal(award.kind);
+  const scale = SCALE[award.kind];
+  const shared = award.recipientIds.length > 1;
+  const winners = award.recipientIds
+    .map((id) => ({
+      id,
+      player: state.players.find((player) => player.id === id),
+      row: standings.find((item) => item.playerId === id),
+    }))
+    .filter((item) => item.player);
+
+  return (
+    <div className={`flex items-start gap-3.5 py-4 ${last ? "border-b-2 border-ink" : "border-b border-line"}`}>
+      <Trophy code={code} award={award} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <MetalText metal={metal} className="leading-none" style={{ fontSize: scale.label }}>
+            {award.label}
+          </MetalText>
+          {shared && (
+            <span className="border border-line px-1.5 py-px font-display text-[9px] font-extrabold uppercase tracking-[0.08em] text-mute-700">
+              Đồng giải
+            </span>
+          )}
+        </div>
+        {winners.map(({ id, player, row }) => (
+          <div key={id} className="mt-1.5 flex items-center gap-2">
+            <Avatar name={player!.name} avatarId={player!.avatarId} size="sm" />
+            <span
+              className="truncate font-display font-extrabold tracking-[-0.02em]"
+              style={{ fontSize: shared ? SCALE.third.name : scale.name }}
+            >
+              {player!.name}
+            </span>
+            {row && <span className="flex-none text-[11px] text-mute-700">{signed(row.diff)}</span>}
+          </div>
+        ))}
+        {!shared && winners[0]?.row && (
+          <p className="mt-1 text-[11px] text-mute-700">
+            Hiệu số {signed(winners[0].row.diff)} · {winners[0].row.games} trận
+          </p>
+        )}
+      </div>
+      {canEdit && (
+        <div className="flex flex-none">
+          <button type="button" aria-label={`Sửa ${award.label}`} onClick={onEdit} className="-ml-px grid size-11 place-items-center border border-line font-display text-[10px] font-extrabold uppercase hover:bg-ink/[0.07]">Sửa</button>
+          <button type="button" aria-label={`Xoá ${award.label}`} onClick={onRemove} className="-ml-px grid size-11 place-items-center border border-line font-display text-[10px] font-extrabold uppercase text-accent-700 hover:bg-accent-100">Xoá</button>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function AwardDialog({ open, award, state, busy, onClose, onSave }: { open: boolean; award: EventAward | null; state: EventState; busy: boolean; onClose: () => void; onSave: (body: object) => Promise<void> }) {
+/** Cúp: ảnh chủ sự kiện tải lên nếu có, không thì cúp mặc định của app. */
+function Trophy({ code, award }: { code: string; award: EventAward }) {
+  const metal = awardMetal(award.kind);
+  const scale = SCALE[award.kind];
+  const inner = award.trophyAssetId ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={`/api/events/${code}/assets/${award.trophyAssetId}`} alt="" className="size-full object-contain" />
+  ) : (
+    <TrophyIcon size={scale.icon} stroke={METAL_STROKE[metal]} />
+  );
+
+  if (award.trophyMode === "transparent") {
+    return (
+      <span className="grid flex-none place-items-center" style={{ width: scale.frame, height: scale.frame }}>
+        {inner}
+      </span>
+    );
+  }
+  return <MetalFrame metal={metal} size={scale.frame}>{inner}</MetalFrame>;
+}
+
+function AwardDialog({
+  open,
+  award,
+  state,
+  standings,
+  busy,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  award: EventAward | null;
+  state: EventState;
+  standings: StandingRow[];
+  busy: boolean;
+  onClose: () => void;
+  onSave: (body: object) => Promise<void>;
+}) {
   const [kind, setKind] = useState<AwardKind>(award?.kind ?? "champion");
   const [label, setLabel] = useState(award?.label ?? "Vô địch");
   const [recipientIds, setRecipientIds] = useState<string[]>(award?.recipientIds ?? []);
@@ -84,22 +247,190 @@ function AwardDialog({ open, award, state, busy, onClose, onSave }: { open: bool
   const [edited, setEdited] = useState<ImageEditorValue | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
-  const chooseKind = (next: AwardKind) => { setKind(next); setLabel(KIND_LABEL[next]); };
+  const chooseKind = (next: AwardKind) => {
+    setKind(next);
+    setLabel(KIND_LABEL[next]);
+  };
+  // Tên gọi thay thế của hai bậc đầu — bản thiết kế cho chủ sự kiện chọn một
+  // trong hai chứ không cho gõ tự do, để Bảng vàng không lẫn lộn cách gọi.
+  const altName = kind === "champion" ? "Giải nhất" : kind === "runnerUp" ? "Giải nhì" : null;
+
   return (
     <Dialog open={open} onClose={onClose} title={award ? "Sửa giải" : "Trao giải"}>
-      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void onSave({ id: award?.id, kind, label, recipientIds, trophyMode, ...edited, removeImage }); }}>
-        <h2 className="text-lg uppercase">{award ? "Sửa giải" : "Trao giải"}</h2>
-        <Field label="Bậc giải"><select value={kind} onChange={(event) => chooseKind(event.target.value as AwardKind)} className={inputClass}><option value="champion">Vô địch / Giải nhất</option><option value="runnerUp">Á quân / Giải nhì</option><option value="third">Giải ba</option><option value="encouragement">Khuyến khích</option><option value="custom">Giải tự đặt</option></select></Field>
-        {kind === "champion" && <Field label="Tên hiển thị"><select value={label} onChange={(event) => setLabel(event.target.value)} className={inputClass}><option>Vô địch</option><option>Giải nhất</option></select></Field>}
-        {kind === "runnerUp" && <Field label="Tên hiển thị"><select value={label} onChange={(event) => setLabel(event.target.value)} className={inputClass}><option>Á quân</option><option>Giải nhì</option></select></Field>}
-        {kind === "custom" && <Field label="Tên giải"><input value={label} onChange={(event) => setLabel(event.target.value)} minLength={2} required className={inputClass} /></Field>}
-        <fieldset><legend className="mb-2 text-xs text-mute-700">Người nhận (chọn nhiều để đồng giải)</legend><div className="max-h-44 divide-y divide-line overflow-auto border border-line">{state.players.map((player) => <label key={player.id} className="flex min-h-11 items-center gap-3 px-3 text-sm"><input type="checkbox" checked={recipientIds.includes(player.id)} onChange={(event) => setRecipientIds((current) => event.target.checked ? [...current, player.id] : current.filter((id) => id !== player.id))} className="size-5 accent-accent" />{player.name}</label>)}</div></fieldset>
-        <Field label="Kiểu cúp"><select value={trophyMode} onChange={(event) => setTrophyMode(event.target.value as TrophyMode)} className={inputClass}><option value="framed">Trong khung</option><option value="transparent">Nền trong</option></select></Field>
-        <ImageEditor label="Ảnh cúp tùy chọn" defaultFit="contain" shape={trophyMode === "transparent" ? "transparent" : "square"} onChange={(value, reason) => { setEdited(value); setImageError(reason ?? null); if (value) setRemoveImage(false); }} />
-        {award?.trophyAssetId && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={removeImage} onChange={(event) => { setRemoveImage(event.target.checked); if (event.target.checked) setEdited(null); }} />Bỏ ảnh cúp tùy chỉnh</label>}
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave({ id: award?.id, kind, label, recipientIds, trophyMode, ...edited, removeImage });
+        }}
+      >
+        <div>
+          <h2 className="text-lg uppercase">{award ? "Sửa giải" : "Trao giải"}</h2>
+          <p className="mt-1.5 text-xs text-mute-700">
+            Giải trao xong hiện ở đầu bảng xếp hạng và không tự đổi theo tỷ số nữa.
+          </p>
+        </div>
+
+        <fieldset>
+          <legend className="eyebrow mb-2 text-mute-600">Giải</legend>
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(KIND_LABEL) as AwardKind[]).map((value) => (
+              <KindChip key={value} kind={value} active={kind === value} onClick={() => chooseKind(value)} />
+            ))}
+          </div>
+        </fieldset>
+
+        {altName && (
+          <fieldset>
+            <legend className="eyebrow mb-2 text-mute-600">Tên gọi</legend>
+            <div className="grid grid-cols-2 border border-line bg-surface">
+              {[KIND_LABEL[kind], altName].map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={label === option}
+                  onClick={() => setLabel(option)}
+                  className={`min-h-11 border-r border-line font-display text-[10px] font-extrabold uppercase tracking-[0.08em] last:border-r-0 ${
+                    label === option ? "bg-ink text-paper" : "text-mute-700"
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
+
+        {kind === "custom" && (
+          <Field label="Tên giải">
+            <input value={label} onChange={(event) => setLabel(event.target.value)} minLength={2} required className={inputClass} placeholder="Tay vợt phong cách" />
+          </Field>
+        )}
+
+        <fieldset>
+          <legend className="eyebrow mb-2 text-mute-600">Trao cho — chọn nhiều người nếu đồng giải</legend>
+          <div className="max-h-56 divide-y divide-line overflow-auto border border-line">
+            {state.players.map((player) => {
+              const row = standings.find((item) => item.playerId === player.id);
+              return (
+                <label key={player.id} className="flex min-h-12 items-center gap-2.5 px-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={recipientIds.includes(player.id)}
+                    onChange={(event) =>
+                      setRecipientIds((current) =>
+                        event.target.checked ? [...current, player.id] : current.filter((id) => id !== player.id),
+                      )
+                    }
+                    className="size-[18px] accent-accent"
+                  />
+                  <Avatar name={player.name} avatarId={player.avatarId} size="sm" />
+                  <span className="flex-1 truncate font-semibold">{player.name}</span>
+                  {row && <span className="flex-none text-xs text-mute-700">{signed(row.diff)}</span>}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="eyebrow mb-2 text-mute-600">Cúp</legend>
+          <div className="grid grid-cols-2 border border-line bg-surface">
+            {(["framed", "transparent"] as TrophyMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={trophyMode === mode}
+                onClick={() => setTrophyMode(mode)}
+                className={`min-h-11 border-r border-line font-display text-[10px] font-extrabold uppercase tracking-[0.08em] last:border-r-0 ${
+                  trophyMode === mode ? "bg-ink text-paper" : "text-mute-700"
+                }`}
+              >
+                {mode === "framed" ? "Trong khung" : "Nền trong"}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3">
+            <ImageEditor
+              label="Ảnh cúp tùy chọn"
+              variant="tile"
+              tileLabel="Tải cúp"
+              defaultFit="contain"
+              shape={trophyMode === "transparent" ? "transparent" : "square"}
+              onChange={(value, reason) => {
+                setEdited(value);
+                setImageError(reason ?? null);
+                if (value) setRemoveImage(false);
+              }}
+              aside={
+                <p className="text-xs leading-relaxed text-mute-700">
+                  Để trống thì dùng cúp mặc định của app, đặt trong khung ánh kim đúng bậc giải.
+                </p>
+              }
+            />
+          </div>
+        </fieldset>
+
+        {award?.trophyAssetId && (
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={removeImage}
+              onChange={(event) => {
+                setRemoveImage(event.target.checked);
+                if (event.target.checked) setEdited(null);
+              }}
+            />
+            Bỏ ảnh cúp tùy chỉnh
+          </label>
+        )}
         {imageError && <p className="text-sm text-accent-700">{imageError}</p>}
-        <div className="flex gap-2"><Button type="button" tone="ghost" full onClick={onClose}>Huỷ</Button><Button type="submit" tone="primary" full disabled={busy || recipientIds.length === 0 || Boolean(imageError)}>{busy ? "Đang lưu…" : "Lưu giải"}</Button></div>
+
+        <div className="flex gap-2">
+          <Button type="submit" tone="primary" full disabled={busy || recipientIds.length === 0 || Boolean(imageError)}>
+            {busy ? "Đang lưu…" : award ? "Lưu giải" : "Trao giải"}
+          </Button>
+          <Button type="button" tone="neutral" onClick={onClose}>Huỷ</Button>
+        </div>
       </form>
     </Dialog>
   );
+}
+
+/** Chip chọn bậc giải — ba bậc đầu hiện đúng chất liệu ánh kim của chúng. */
+function KindChip({ kind, active, onClick }: { kind: AwardKind; active: boolean; onClick: () => void }) {
+  const metal = awardMetal(kind);
+  const text = "font-display text-[10px] font-extrabold uppercase tracking-[0.08em]";
+  if (active) {
+    return (
+      <button type="button" onClick={onClick} aria-pressed className={`min-h-9 bg-ink px-2.5 text-paper ${text}`}>
+        {KIND_LABEL[kind]}
+      </button>
+    );
+  }
+  if (metal === "plain") {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={false}
+        className={`min-h-9 border px-2.5 text-mute-700 hover:bg-ink/[0.07] ${kind === "custom" ? "border-dashed border-line" : "border-line"} ${text}`}
+      >
+        {kind === "custom" ? "+ Giải khác" : KIND_LABEL[kind]}
+      </button>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} aria-pressed={false} className="min-h-9">
+      <MetalFrame metal={metal} className="h-full">
+        <MetalText metal={metal} className="px-2.5 py-2 text-[10px] leading-none">
+          {KIND_LABEL[kind]}
+        </MetalText>
+      </MetalFrame>
+    </button>
+  );
+}
+
+function signed(x: number): string {
+  return x > 0 ? `+${x}` : String(x);
 }

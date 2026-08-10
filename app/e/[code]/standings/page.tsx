@@ -24,6 +24,8 @@ import { useMutationQueue } from "@/hooks/useMutationQueue";
 import { Avatar } from "@/components/Avatar";
 import { Button, Empty, Marker, SectionHead } from "@/components/ui";
 import { AwardsBoard } from "@/components/AwardsBoard";
+import { MetalFrame, METAL_STROKE, TrophyIcon, awardMetal } from "@/components/Metal";
+import type { EventAward } from "@/lib/domain/types";
 
 export default function StandingsPage() {
   const { data } = useEvent();
@@ -50,12 +52,18 @@ export default function StandingsPage() {
     );
   }
 
+  // Bảng vàng chiếm mục 01 khi nó có mặt, đúng như bản thiết kế 2a; các mục sau
+  // lùi một bậc thay vì để hai mục cùng mang số 01.
+  const showAwards = state.status === "finished" || state.presentation.awards.length > 0;
+  const rows = [...table.main, ...table.provisional];
+  const num = (index: number) => String(index + (showAwards ? 2 : 1)).padStart(2, "0");
+
   return (
     <div className="space-y-8">
-      <AwardsBoard code={state.code} />
+      <AwardsBoard code={state.code} standings={rows} />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] lg:items-start lg:gap-12">
       <div>
-        <SectionHead n="01" aside="hiệu số / trận">
+        <SectionHead n={num(0)} aside="hiệu số / trận">
           Xếp hạng
         </SectionHead>
         {table.main.map((row) => (
@@ -65,12 +73,13 @@ export default function StandingsPage() {
             row={row}
             player={state.players.find((p) => p.id === row.playerId)}
             awards={state.presentation.awards.filter((award) => award.recipientIds.includes(row.playerId))}
+            reserveTrophy={state.presentation.awards.length > 0}
           />
         ))}
 
         {table.provisional.length > 0 && (
           <>
-            <SectionHead n="02">Chưa đủ số trận</SectionHead>
+            <SectionHead n={num(1)}>Chưa đủ số trận</SectionHead>
             <p className="py-2.5 text-[11px] leading-relaxed text-mute-600">
               Cần ít nhất {table.threshold} trận để vào bảng chính. Đánh ít trận
               thì hiệu số trung bình dễ may rủi, nên tách riêng cho công bằng.
@@ -82,6 +91,7 @@ export default function StandingsPage() {
                 row={row}
                 player={state.players.find((p) => p.id === row.playerId)}
                 awards={state.presentation.awards.filter((award) => award.recipientIds.includes(row.playerId))}
+                reserveTrophy={state.presentation.awards.length > 0}
                 action={
                   data.capabilities.canEditAnyScore && state.status === "running" ? (
                     <Button
@@ -114,7 +124,7 @@ export default function StandingsPage() {
           className="rule-head w-full cursor-pointer text-left"
         >
           <span className="font-display text-[11px] font-extrabold leading-none text-accent">
-            {table.provisional.length > 0 ? "03" : "02"}
+            {num(table.provisional.length > 0 ? 2 : 1)}
           </span>
           <span className="eyebrow">Công bằng</span>
           <span aria-hidden className="ml-auto text-mute-600">
@@ -245,6 +255,7 @@ function StandingRowView({
   player,
   action,
   awards = [],
+  reserveTrophy = false,
 }: {
   code: string;
   row: StandingRow;
@@ -255,13 +266,31 @@ function StandingRowView({
    */
   player?: Player;
   action?: React.ReactNode;
-  awards?: Array<{ id: string; label: string }>;
+  awards?: EventAward[];
+  /** Buổi đã có giải: chừa cột cúp cho mọi hàng để bảng không so le. */
+  reserveTrophy?: boolean;
 }) {
+  // Giải cao nhất của người này. `sortAwards` đã xếp theo bậc nên phần tử đầu là
+  // bậc cao nhất — không cần so lại thứ tự ở tầng hiển thị.
+  const top = awards[0];
   return (
     <div className="flex items-center gap-3 border-b border-line py-3.5">
       <span className="w-7 flex-none font-display text-xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-mute-400">
         {row.rank ? String(row.rank).padStart(2, "0") : "—"}
       </span>
+      {/* Cúp nhỏ ánh kim đúng bậc, thay cho emoji 🏆 vốn không thuộc hệ nào cả.
+          Cột này chỉ tồn tại khi buổi đã có giải; chỗ trống giữ để các hàng
+          không so le nhau. */}
+      {reserveTrophy &&
+        (top ? (
+          <span title={top.label} className="flex-none">
+            <MetalFrame metal={awardMetal(top.kind)} size={22}>
+              <TrophyIcon size={12} stroke={METAL_STROKE[awardMetal(top.kind)]} strokeWidth={2} />
+            </MetalFrame>
+          </span>
+        ) : (
+          <span aria-hidden className="w-[22px] flex-none" />
+        ))}
       <Avatar
         name={row.name}
         avatarId={player?.avatarId}
@@ -280,7 +309,11 @@ function StandingRowView({
           </span>
           {row.hasLeft && <Marker>đã về</Marker>}
           {row.hasPartial && <Marker tone="accent">có trận dở dang</Marker>}
-          {awards.map((award) => <span key={award.id} title={award.label} aria-label={award.label} className="text-sm">🏆</span>)}
+          {/* Người nhận nhiều giải: cúp bên trái là bậc cao nhất, các giải còn
+              lại đọc bằng tên chứ không xếp thêm mấy cái cúp nhỏ cạnh nhau. */}
+          {awards.slice(1).map((award) => (
+            <Marker key={award.id}>{award.label}</Marker>
+          ))}
         </div>
         <div className="mt-0.5 text-[11px] text-mute-600">
           {row.games} trận · {row.wins}T {row.losses}B · tổng {signed(row.diff)}

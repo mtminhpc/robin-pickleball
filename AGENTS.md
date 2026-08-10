@@ -4,16 +4,24 @@
 trong `docs/TIEN-DO.md`. Tệp tiến độ là nhật ký đầy đủ; tệp này chỉ giữ những
 điều dễ làm hỏng dự án nếu một phiên mới không biết.
 
-> **Việc còn nợ:** luồng bấm nút *Xóa sự kiện* (v0.6.1) chưa ai chạy qua trên giao
-> diện, kể cả Production. Tầng hàm và đường đọc HTTP đã kiểm thật; phần bấm nút thì
-> chưa, vì kho thử gắn buổi vào `userId` giả `test-owner`. Xem mục **Chưa kiểm —
-> việc đầu tiên của phiên sau** trong `docs/TIEN-DO.md`.
+> **Việc còn nợ:** hai luồng bấm nút chưa ai chạy qua trên giao diện, kể cả
+> Production — *Xóa sự kiện* (v0.6.1) và phần ghi của *Quản lý nhà tài trợ* (v0.7.0).
+> Tầng hàm, đường đọc HTTP và bố cục đã kiểm thật; phần bấm nút thì chưa, vì kho thử
+> gắn buổi vào `userId` giả `test-owner`. Xem mục **Chưa kiểm — việc đầu tiên của
+> phiên sau** trong `docs/TIEN-DO.md`.
 
 ## Trạng thái đã chốt
 
-- Phiên bản mã hiện tại: `v0.6.2`, nhánh phát hành
-  `codex/v0.6.1-unlimited-sponsors-event-delete`. Tag/Production phải cùng trỏ bản
-  đã qua cổng kiểm định; xem huy hiệu dưới phải giao diện để biết commit đang chạy.
+- Phiên bản mã hiện tại: `v0.7.0 «Ánh kim»`, nhánh phát hành `claude/v0.7.0-anh-kim`.
+  Tag/Production phải cùng trỏ bản đã qua cổng kiểm định; xem huy hiệu dưới phải giao
+  diện để biết commit đang chạy.
+- **Mỗi số nhỏ (minor) mang một tên hiệu**, khai ở `APP_CODENAME` trong `lib/version.ts`.
+  Huy hiệu đọc là `vX.Y.Z · <commit> · <tên>`. Tên đứng **sau** cặp phiên bản · commit
+  chứ không chen vào giữa, vì bước kiểm phát hành dưới đây dò đúng cặp đó trong HTML.
+  Bản vá (patch) giữ nguyên tên của bản gốc.
+- Phần nhìn kim loại của nhà tài trợ, cúp và giải thưởng nằm trọn trong
+  `components/Metal.tsx`, gradient chép nguyên văn từ handoff Claude Design v3. Tài trợ
+  và giải thưởng cố ý dùng **chung một thang**; đừng dựng thang thứ hai ở nơi khác.
 - Production: https://robin-pickleball.vercel.app
 - `v0.6.1` đã phát hành (tag `v0.6.1` = `e648329`). `v0.6.2` là bản vá cuộc đua
   `ensureTab` phát hiện ngay ở lượt deploy đó (tag `v0.6.2` = `a30a0ab`) — xem mục dưới.

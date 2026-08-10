@@ -11,12 +11,31 @@ Không coi một `git push` là đã phát hành: nhánh tính năng chỉ tạo
 còn Production đi từ `main` và phải được kiểm lại qua alias công khai. Không sửa
 hay commit hai ZIP handoff của người dùng.
 
-> **Việc còn nợ, làm trước khi nhận việc mới:** luồng bấm nút *Xóa sự kiện* (v0.6.1)
-> **chưa ai chạy qua**, kể cả trên Production — kho thử gắn buổi vào `userId` giả
-> `test-owner` nên không đăng nhập được để hiện nút. Tầng hàm và đường đọc HTTP thì
-> đã kiểm thật. Chi tiết và các bước cần làm nằm ở mục **Chưa kiểm — việc đầu tiên
-> của phiên sau** trong `docs/TIEN-DO.md`. Đừng đọc "579/579 xanh" thành "đã có người
-> dùng thử".
+> **Việc còn nợ, làm trước khi nhận việc mới:** hai luồng bấm nút **chưa ai chạy qua**,
+> kể cả trên Production — *Xóa sự kiện* (v0.6.1) và phần ghi của *Quản lý nhà tài trợ*
+> (v0.7.0). Cùng một lý do: kho thử gắn buổi vào `userId` giả `test-owner` nên không
+> đăng nhập được để hiện nút. Tầng hàm, đường đọc HTTP và bố cục thì đã kiểm thật.
+> Chi tiết và các bước cần làm nằm ở mục **Chưa kiểm — việc đầu tiên của phiên sau**
+> trong `docs/TIEN-DO.md`. Đừng đọc "579/579 xanh" thành "đã có người dùng thử".
+
+## Trạng thái cuối phiên 10/08/2026 — v0.7.0 «Ánh kim»
+
+- Từ bản này mỗi số nhỏ mang một **tên hiệu**; huy hiệu góc dưới đọc là
+  `v0.7.0 · <commit> · Ánh kim`. Tên đứng **sau** cặp phiên bản · commit, vì quy trình
+  kiểm phát hành trong `AGENTS.md` dò đúng cặp đó trong HTML.
+- Dựng lại phần nhìn nhà tài trợ và Bảng vàng cho khớp handoff Claude Design v3: dải
+  trên nền giấy có kẻ ink 2px, khung ánh kim **ruột giấy sáng** (trước là ô đen `#111`
+  nuốt mất logo), cỡ 46/43/40 giảm dần theo hạng, nhãn hạng chữ ánh kim, cuộn ngang
+  thay cho ẩn bớt theo breakpoint, Bảng vàng dùng cùng thang kim loại đó.
+- Hệ ánh kim nằm trọn trong `components/Metal.tsx` — sửa phần nhìn kim loại thì sửa ở
+  đó, đừng rải hex ra từng tệp. Tài trợ và giải thưởng cố ý dùng chung một thang.
+- Viền đậm hơn bản thiết kế một bậc (3px, hạng không ánh kim 2px, thêm vạch tóc ink
+  1px bao ngoài) vì bản thiết kế vẽ khung trên thẻ mẫu có nền xám bao quanh, còn app
+  đặt nó thẳng trên nền giấy. Muốn chỉnh thì kéo chặng **tối** chứ đừng làm tối cả dải.
+- `/api/events` trả thêm `tier`, `tierLabel`, `sponsorLogoShape` cho thẻ sự kiện trang
+  chủ. `ImageEditor` có thêm `variant="tile"` và khe `aside`.
+- Cổng: 579/579 test, 152 lượt công bằng/0 vấn đề, typecheck và build sạch. Kho thử
+  không đổi (SHA `07f6e822…`).
 
 ## Trạng thái cuối phiên 10/08/2026 — v0.6.2
 

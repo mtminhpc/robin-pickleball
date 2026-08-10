@@ -1,8 +1,33 @@
 "use client";
 
+/**
+ * Dải nhà tài trợ, ngay dưới băng tiêu đề của sự kiện.
+ *
+ * Dựng theo bản bàn giao Claude Design v3, ba biến thể ứng đúng ba giá trị của
+ * `sponsorLogoShape`:
+ *
+ *   • `square`      → dải A (1d): ô vuông ánh kim trên băng giấy;
+ *   • `round`       → dải B (1e): cùng thứ đó nhưng bo tròn;
+ *   • `transparent` → dải C (1f): logo nền trong trên băng tối, hạng đọc bằng
+ *                      vạch ánh kim phía trên chứ không bằng khung.
+ *
+ * Hai điều dễ làm sai, đều đã từng sai ở bản trước:
+ *
+ *   • **Ruột khung là giấy sáng, không phải ô đen.** Logo thật hầu hết là chữ sẫm
+ *     nền trắng; nền đen nuốt mất chữ.
+ *   • **Dải cuộn ngang chứ không cắt bớt.** Bản trước ẩn logo theo breakpoint, tức
+ *     nhà tài trợ trả tiền rồi mà điện thoại hẹp thì không ai thấy. Cuộn thì ai
+ *     cũng tới được, và nút "Tất cả (n)" là đường tắt.
+ *
+ * Cỡ logo giảm dần theo hạng, nhưng chỉ vài pixel: thứ tự trong dải mới là thứ
+ * nói lên hạng, cỡ chỉ nhấn thêm.
+ */
+
 import { useState } from "react";
 import { useEvent } from "@/hooks/useEventState";
-import type { EventSponsor, SponsorTier } from "@/lib/domain/types";
+import { MetalFrame, MetalText, sponsorMetal } from "@/components/Metal";
+import { Dialog } from "@/components/ui";
+import type { EventSponsor, SponsorLogoShape, SponsorTier } from "@/lib/domain/types";
 
 const TIER_LABEL: Record<SponsorTier, string> = {
   diamond: "Kim cương",
@@ -12,13 +37,31 @@ const TIER_LABEL: Record<SponsorTier, string> = {
   custom: "Tài trợ",
 };
 
-const METAL: Record<SponsorTier, string> = {
-  diamond: "linear-gradient(135deg,#b9ffff,#fff 35%,#76bfd0 58%,#f8ffff 80%,#8bd9e7)",
-  gold: "linear-gradient(135deg,#7d5310,#fff2a5 32%,#c99316 55%,#fff5b5 78%,#8c5e0c)",
-  silver: "linear-gradient(135deg,#5e6266,#f6f8f9 32%,#9da4aa 55%,#fff 78%,#727980)",
-  partner: "linear-gradient(135deg,#7e3f19,#f2bd83 34%,#a85d2d 56%,#ffd2a5 78%,#753714)",
-  custom: "linear-gradient(135deg,#087a55,#8ee8c6 38%,#0c5f48 60%,#b7ffe5 82%,#07543d)",
+/** Cỡ khung trong dải, tính bằng pixel đúng như bản thiết kế 1d. */
+const STRIP_SIZE: Record<SponsorTier, number> = {
+  diamond: 46,
+  gold: 43,
+  silver: 40,
+  partner: 40,
+  custom: 40,
 };
+
+/** Vạch hạng của dải C: chỉ có nó nói lên hạng khi logo là PNG nền trong. */
+const BAR: Record<SponsorTier, { width: number; height: number; background: string }> = {
+  diamond: { width: 22, height: 3, background: "linear-gradient(90deg,#ffffff,#8fa1b3)" },
+  gold: { width: 18, height: 2, background: "linear-gradient(90deg,#fff3cf,#a9832a)" },
+  silver: { width: 16, height: 2, background: "linear-gradient(90deg,#f2f1f1,#8f8b8b)" },
+  partner: { width: 14, height: 2, background: "#7d7979" },
+  custom: { width: 14, height: 2, background: "#7d7979" },
+};
+
+function tierLabel(sponsor: EventSponsor): string {
+  return sponsor.tier === "custom" ? sponsor.tierLabel ?? TIER_LABEL.custom : TIER_LABEL[sponsor.tier];
+}
+
+function logoSrc(code: string, sponsor: EventSponsor): string {
+  return `/api/events/${code}/assets/${sponsor.assetId}`;
+}
 
 export function SponsorStrip({ code }: { code: string }) {
   const { data } = useEvent();
@@ -27,76 +70,125 @@ export function SponsorStrip({ code }: { code: string }) {
   const shape = data?.state.presentation.sponsorLogoShape ?? "square";
   if (sponsors.length === 0) return null;
 
-  const visible = sponsors.slice(0, 6);
+  const dark = shape === "transparent";
+
   return (
     <>
-      <section aria-label="Nhà tài trợ" className="border-b border-white/10 bg-[#151313] px-4 py-3 text-white lg:px-10">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 overflow-hidden">
-          <p className="hidden shrink-0 font-display text-[8px] font-extrabold uppercase tracking-[0.18em] text-mute-500 sm:block">Đồng hành</p>
-          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-            {visible.map((sponsor, index) => (
-              <div key={sponsor.id} className={index < 3 ? "block" : index === 3 ? "hidden sm:block" : "hidden lg:block"}>
-                <SponsorLogo code={code} sponsor={sponsor} shape={shape} compact />
-              </div>
+      <section
+        aria-label="Nhà tài trợ"
+        className={dark ? "border-b-2 border-accent bg-ink" : "border-b-2 border-ink bg-paper"}
+      >
+        <div className="flex items-center justify-between gap-3 pl-4 pr-2 pt-0.5 lg:pl-10 lg:pr-6">
+          {/* Cùng một xám cho cả hai nền: #7d7979 đủ tương phản trên giấy lẫn trên ink. */}
+          <p className="font-display text-[9px] font-extrabold uppercase tracking-[0.16em] text-mute-600">
+            Nhà tài trợ
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className={`min-h-9 flex-none px-2 font-display text-[9px] font-extrabold uppercase tracking-[0.08em] transition ${
+              dark ? "text-paper hover:text-accent-400" : "text-accent hover:text-accent-700"
+            }`}
+          >
+            Tất cả ({sponsors.length}) →
+          </button>
+        </div>
+
+        {dark ? (
+          <div className="scroll-x flex items-end pb-3 pl-4 lg:pl-10">
+            {sponsors.map((sponsor, index) => (
+              <span
+                key={sponsor.id}
+                className={`flex-none ${index === 0 ? "pr-3" : "border-l border-white/20 px-3"}`}
+              >
+                <span aria-hidden className="mb-1.5 block" style={BAR[sponsor.tier]} />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={logoSrc(code, sponsor)}
+                  alt={`${sponsor.name} · ${tierLabel(sponsor)}`}
+                  className="h-6 max-w-24 object-contain object-left"
+                />
+              </span>
             ))}
           </div>
-          {sponsors.length > 3 && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className={`min-h-10 shrink-0 border-l border-white/20 pl-3 font-display text-[9px] font-extrabold uppercase tracking-wide text-white hover:text-accent-400 ${sponsors.length <= 4 ? "sm:hidden" : sponsors.length <= 6 ? "lg:hidden" : ""}`}
-            >
-              Tất cả ({sponsors.length})
-            </button>
-          )}
-        </div>
+        ) : (
+          <div className="scroll-x flex items-end gap-[9px] px-4 pb-[9px] lg:px-10">
+            {sponsors.map((sponsor) => (
+              <span key={sponsor.id} className="flex-none text-center">
+                <MetalFrame
+                  metal={sponsorMetal(sponsor.tier)}
+                  size={STRIP_SIZE[sponsor.tier]}
+                  round={shape === "round"}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={logoSrc(code, sponsor)} alt={sponsor.name} className="size-full object-contain" />
+                </MetalFrame>
+                <MetalText metal={sponsorMetal(sponsor.tier)} className="mt-[3px] block text-[9px] leading-none">
+                  {tierLabel(sponsor)}
+                </MetalText>
+              </span>
+            ))}
+          </div>
+        )}
       </section>
-      {open && (
-        <div role="presentation" className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-0 sm:place-items-center sm:p-5" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}>
-          <section role="dialog" aria-modal="true" aria-labelledby="sponsor-dialog-title" className="max-h-[86dvh] w-full max-w-md overflow-auto border-2 border-ink bg-paper p-5 text-ink shadow-xl">
-            <header className="flex items-center justify-between border-b-2 border-ink pb-3">
-              <h2 id="sponsor-dialog-title" className="font-display text-lg font-extrabold uppercase">Nhà tài trợ</h2>
-              <button type="button" aria-label="Đóng danh sách nhà tài trợ" onClick={() => setOpen(false)} className="grid size-11 place-items-center border border-ink text-xl">×</button>
-            </header>
-            <div className="grid grid-cols-2 gap-4 py-5">
-              {sponsors.map((sponsor) => <SponsorLogo key={sponsor.id} code={code} sponsor={sponsor} shape={shape} />)}
-            </div>
-          </section>
-        </div>
-      )}
+
+      <AllSponsors code={code} sponsors={sponsors} shape={shape} open={open} onClose={() => setOpen(false)} />
     </>
   );
 }
 
-function SponsorLogo({ code, sponsor, shape, compact = false }: { code: string; sponsor: EventSponsor; shape: "square" | "round" | "transparent"; compact?: boolean }) {
-  const label = sponsor.tier === "custom" ? sponsor.tierLabel ?? TIER_LABEL.custom : TIER_LABEL[sponsor.tier];
-  const src = `/api/events/${code}/assets/${sponsor.assetId}`;
-  if (shape === "transparent") {
-    return (
-      <div className={`${compact ? "min-w-[5rem]" : "min-w-0"} text-center`}>
-        <div className={`${compact ? "h-8" : "h-16"} flex items-center justify-center`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={sponsor.name} className="max-h-full max-w-full object-contain" />
-        </div>
-        <div className="mx-auto mt-1 h-0.5 w-10" style={{ background: METAL[sponsor.tier] }} />
-        {!compact && <p className="mt-1 font-display text-[8px] font-extrabold uppercase tracking-wider text-mute-600">{label}</p>}
-      </div>
-    );
-  }
-  const round = shape === "round";
+/**
+ * Danh sách đầy đủ.
+ *
+ * Bản thiết kế không vẽ màn này — nó nằm ở mục "thử tiếp" — nên dựng bằng đúng
+ * ngữ pháp của hệ: khung ánh kim, nhãn hạng ánh kim, kẻ mảnh giữa các dòng.
+ */
+function AllSponsors({
+  code,
+  sponsors,
+  shape,
+  open,
+  onClose,
+}: {
+  code: string;
+  sponsors: EventSponsor[];
+  shape: SponsorLogoShape;
+  open: boolean;
+  onClose: () => void;
+}) {
   return (
-    <div className={`${compact ? "w-12" : "w-full"} text-center`}>
-      <div className={`mx-auto ${compact ? "size-10 p-[2px]" : "size-24 p-[3px]"} ${round ? "rounded-full" : ""}`} style={{ background: METAL[sponsor.tier] }}>
-        <div className={`grid size-full place-items-center overflow-hidden bg-[#111] ${round ? "rounded-full" : ""}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={sponsor.name} className="size-full object-contain" />
-        </div>
+    <Dialog open={open} onClose={onClose} title="Nhà tài trợ">
+      <header className="flex items-center justify-between border-b-2 border-ink pb-3">
+        <h2 className="text-lg uppercase">Nhà tài trợ</h2>
+        <button
+          type="button"
+          aria-label="Đóng danh sách nhà tài trợ"
+          onClick={onClose}
+          className="grid size-11 place-items-center border border-line text-xl"
+        >
+          ×
+        </button>
+      </header>
+      <div className="max-h-[60dvh] overflow-y-auto">
+        {sponsors.map((sponsor) => (
+          <div key={sponsor.id} className="flex items-center gap-3 border-b border-line py-3">
+            <MetalFrame
+              metal={sponsorMetal(sponsor.tier)}
+              size={48}
+              round={shape === "round"}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoSrc(code, sponsor)} alt="" className="size-full object-contain" />
+            </MetalFrame>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold">{sponsor.name}</span>
+              <MetalText metal={sponsorMetal(sponsor.tier)} className="mt-0.5 block text-[10px] leading-none">
+                {tierLabel(sponsor)}
+              </MetalText>
+            </span>
+          </div>
+        ))}
       </div>
-      {(!compact || !round) && (
-        <p className={`font-display font-extrabold uppercase tracking-wider ${compact ? "mt-1 truncate text-[6px] text-mute-500" : "mt-2 text-[8px] text-mute-600"}`}>
-          {label}
-        </p>
-      )}
-    </div>
+    </Dialog>
   );
 }

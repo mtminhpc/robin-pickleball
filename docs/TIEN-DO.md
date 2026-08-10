@@ -1,6 +1,6 @@
 # Tiến độ dự án
 
-Cập nhật: 10/08/2026 · nhánh `codex/v0.6.1-unlimited-sponsors-event-delete` ·
+Cập nhật: 10/08/2026 · nhánh `claude/v0.7.0-anh-kim` ·
 **đích Production: https://robin-pickleball.vercel.app**
 
 Tệp này để bạn (hoặc tôi ở phiên làm việc sau) mở ra là biết dự án đang ở đâu,
@@ -15,20 +15,19 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Phiên bản hiện tại: `v0.6.2 — vá cuộc đua tạo tab`**, đi ngay sau
-`v0.6.1 — tài trợ không giới hạn và xóa sự kiện an toàn`.
+**Phiên bản hiện tại: `v0.7.0 — Ánh kim`**, dựng lại phần nhìn của nhà tài trợ và
+Bảng vàng cho khớp bộ bàn giao Claude Design v3.
 
-`v0.6.1` đã phát hành thật: tag `v0.6.1`, `main` = `e648329`, Production đã kiểm qua
-alias công khai với huy hiệu `v0.6.1 · e648329`. `v0.6.2` vá một lỗi lộ ra đúng ở lượt
-deploy đó — chi tiết ở mục ghi chú v0.6.2 bên dưới.
+Từ bản này mỗi số nhỏ (minor) mang một **tên hiệu**, hiện luôn trên huy hiệu góc dưới:
+`v0.7.0 · <commit> · Ánh kim`. Con số nói thứ tự, cái tên nói bản đó làm gì — báo lỗi
+qua điện thoại thì "bản Ánh kim" dễ nói hơn dãy số. Bản vá giữ nguyên tên bản gốc.
 
 | | |
 |---|---|
 | Địa chỉ | https://robin-pickleball.vercel.app |
-| Production đang chạy | `v0.6.2`, đã kiểm huy hiệu qua alias công khai |
-| Mã của `v0.6.2` | Tag `v0.6.2` = **`a30a0ab`**. Huy hiệu hiện commit **mới nhất của `main`**, nên một commit chỉ-sửa-tài-liệu cũng làm phần hash đổi mà mã chạy vẫn y nguyên — so phần `v0.6.x` trước, hash sau |
-| `main` / nhánh / tag | `main` = `origin/main` = `codex/v0.6.1-unlimited-sponsors-event-delete`; tag `v0.6.1` (`e648329`) và `v0.6.2` (`a30a0ab`) |
-| Tên nhánh gây hiểu nhầm | Nhánh tên `...v0.6.1...` nhưng đang mang cả `v0.6.2`. Bản vá đi ngay sau nên không tách nhánh mới |
+| Production đang chạy | `v0.7.0 — Ánh kim`, đã kiểm huy hiệu qua alias công khai |
+| Cách đọc huy hiệu | Huy hiệu hiện commit **mới nhất của `main`**, nên một commit chỉ-sửa-tài-liệu cũng làm phần hash đổi mà mã chạy vẫn y nguyên — so phần `v0.x.y` trước, hash sau, tên hiệu chỉ để gọi tên |
+| `main` / nhánh / tag | `main` = `origin/main` = `claude/v0.7.0-anh-kim`; tag `v0.7.0`. Các mốc trước: `v0.6.2` (`a30a0ab`), `v0.6.1` (`e648329`) |
 | Dữ liệu | Google Sheet thật, đã kiểm bằng cách đọc lại 7 mã buổi |
 | Đăng nhập Google | **Đã bật và đã Publish** — ai có tài khoản Google cũng vào được |
 | Vercel ↔ GitHub | Đã nối. Nhánh thường → Preview; `main` → Production |
@@ -43,6 +42,12 @@ Các cổng trên mã phát hành đã xanh: `npm test` 579/579; `npm run scenar
 Phần này quan trọng hơn mọi mục khác trong tệp: **đừng đọc "579/579 xanh" thành "mọi
 thứ đã được người thật dùng thử".**
 
+- **Luồng ghi của màn Quản lý nhà tài trợ (v0.7.0) chưa ai bấm qua.** Bố cục và số đo
+  đã soi thật trên `TESTV5` — nhưng phải tạm bỏ chốt `ownerByAccount` mới thấy được
+  màn hình, vì cùng lý do `test-owner` nói ở gạch đầu dòng dưới. Nghĩa là *thêm logo*,
+  *sửa*, *xoá*, *đổi thứ tự* và *đổi hình dạng* chưa chạy hết một vòng qua giao diện.
+  Việc cần làm: đăng nhập Google trên Production, mở một buổi của mình, thêm một logo
+  ở mỗi hạng, đổi qua cả ba hình dạng, rồi xoá logo vừa thêm.
 - **Luồng bấm nút xóa sự kiện chưa ai chạy qua, kể cả trên Production.** Lý do: kho
   thử `.data/test-sandbox.json` gắn buổi vào `test-owner` — một `userId` giả không ứng
   với tài khoản Google nào — nên không đăng nhập được để hiện nút. Phiên trước cũng
@@ -59,6 +64,56 @@ thứ đã được người thật dùng thử".**
 - Muốn thử cục bộ thì phải sửa `scripts/seed-test-data.ts` cho một buổi mang
   `ownerUserId` khớp tài khoản Google thật của người kiểm; hiện chưa làm.
 - Nếu có gì sai, `v0.6.0` (`4e41af4`) là mốc quay lại an toàn.
+
+### Ghi chú khoá phiên 10/08/2026 — v0.7.0 «Ánh kim»
+
+Lý do có bản này: phần nhà tài trợ dựng ở các phiên trước **lệch bản thiết kế gần như
+mọi điểm**, và người dùng nói thẳng là xấu. Đối chiếu lại
+`Mobile app design request-handoff_v3.zip` (màn 1c/1d/1e/1f/1h và 2a/2b/2c) thì thấy:
+
+| | Trước | v0.7.0 |
+|---|---|---|
+| Nền dải | băng đen `#151313` | băng giấy `#f3f2f2` + kẻ ink 2px |
+| Ruột khung logo | ô đen `#111` — nuốt mất logo chữ sẫm nền trắng | giấy sáng `TILE_FILL` |
+| Cỡ theo hạng | mọi hạng bằng nhau | 46/43/40 giảm dần |
+| Nhãn hạng | 6px xám, bị `truncate` | chữ ánh kim 9px `background-clip:text` |
+| Quá nhiều logo | ẩn bớt theo breakpoint | cuộn ngang, hiện đủ, kèm `Tất cả (n) →` |
+| Bảng vàng | khối đen + vàng phẳng `#f2c45c` | nền giấy, cúp ánh kim 62/52/46/42 theo bậc |
+
+- Hệ ánh kim gom vào **`components/Metal.tsx`** — gradient chép nguyên văn từ các lớp
+  `.f-*` / `.mt-*` của bản thiết kế. Tài trợ và giải thưởng dùng **cùng một thang**
+  (vàng → bạc → đồng → viền mảnh); hai hệ kim loại song song thì kiểu gì cũng trôi
+  khỏi nhau. Sửa phần nhìn kim loại thì sửa ở đây, đừng rải hex ra từng tệp.
+- Ba giá trị `sponsorLogoShape` ứng đúng ba dải của bản thiết kế: `square` = 1d,
+  `round` = 1e, `transparent` = 1f (băng ink, kẻ đỏ 2px, hạng đọc bằng **vạch ánh kim**
+  22/18/16/14px phía trên chứ không bằng khung). Cả ba đã xem tận mắt.
+- **Đậm hơn bản thiết kế một bậc, có chủ ý.** Bản gốc vẽ khung trên thẻ mẫu `#f3f2f2`
+  đặt giữa trang `#e6e4e0`, nên lúc nào cũng có nền xám đỡ lấy các chặng sáng; trong
+  app thì dải nằm thẳng trên nền giấy và khung mỏng hẳn đi. Cách chữa: viền 3px (hạng
+  không ánh kim 2px), kéo các chặng **tối** xuống sâu hơn mà giữ nguyên chặng sáng, và
+  thêm vạch tóc ink 1px bao ngoài bằng `box-shadow` (nằm ngoài kích thước nên logo
+  không nhỏ đi). Đừng "sửa" bằng cách làm tối cả dải — vẻ kim loại nằm ở *khoảng cách*
+  sáng–tối, tối đều là thành nhựa.
+- `/api/events` nay trả thêm `tier`, `tierLabel`, `sponsorLogoShape` để thẻ sự kiện ở
+  trang chủ vẽ đúng khung mà không phải gọi `/state` cho từng buổi. Đây là dữ liệu vốn
+  đã hiện công khai trong sự kiện, không thêm gì nhạy cảm.
+- `ImageEditor` có thêm biến thể `variant="tile"` (ô nét đứt 64px của 1h/2b) và khe
+  `aside`. Phần cắt/xoay/phóng giữ nguyên — bản thiết kế không vẽ chúng nhưng người
+  dùng thì cần.
+- Lệch có chủ ý so với 1h: danh sách tài trợ giữ bốn nút rời (↑ ↓ Sửa Xoá) thay cho
+  một nút `⋯`. Gộp vào trình đơn là thêm một tầng tương tác bản thiết kế không mô tả,
+  mà thứ tự trong hạng thì phải sửa được ngay tại dòng.
+- Trang Xếp hạng đánh số lại theo 2a: có giải thì `01 Bảng vàng · 02 Xếp hạng ·
+  03 Công bằng`; không có giải thì lùi về như cũ. Emoji 🏆 ở hàng xếp hạng thay bằng
+  cúp ánh kim 22px đúng bậc.
+- Kiểm cục bộ trên `TESTV5` (9 logo, 3 giải) bằng công cụ trình duyệt: đo được nền
+  `#f3f2f2`, kẻ 2px ink, cỡ khung 46/46/43/43/40×5, viền 3px/2px + vạch tóc 1px, nhãn
+  ánh kim có `background-clip:text`, dải cuộn 607px trong khung 375px, hộp thoại
+  *Tất cả* đủ 9 logo. Để xem dải B và C phải tạm đổi `sponsorLogoShape` trên **bản sao**
+  kho thử rồi khôi phục — SHA `.data/test-sandbox.json` sau phiên vẫn là
+  `07f6e822ce32a3f944720a5cab4daf29f040a28453593d01c829f0a437663781`, đúng như trước.
+- Không đụng miền nghiệp vụ, lệnh, quyền hay lược đồ dữ liệu. Đây thuần tầng trình bày
+  cộng ba trường đọc thêm ở `/api/events`.
 
 ### Ghi chú khoá phiên 10/08/2026 — v0.6.2
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ImageEditMetadata, ImageFit } from "@/lib/assets/edit-metadata";
 import {
   loadEditableImage,
@@ -20,12 +20,24 @@ export function ImageEditor({
   defaultFit,
   shape = "square",
   required = false,
+  variant = "field",
+  tileLabel,
+  aside,
   onChange,
 }: {
   label: string;
   defaultFit: ImageFit;
   shape?: "square" | "round" | "transparent";
   required?: boolean;
+  /**
+   * `tile` là ô vuông nét đứt của bản thiết kế (khối "Thêm nhà tài trợ" 1h và ô
+   * "Tải cúp" 2b). Nó chỉ đổi cái nút chọn tệp; phần cắt/xoay/phóng bên dưới vẫn
+   * y nguyên, vì bản thiết kế không vẽ chúng nhưng người dùng thì cần.
+   */
+  variant?: "field" | "tile";
+  tileLabel?: string;
+  /** Nội dung đứng cạnh ô nét đứt — dùng cho ô tên và hàng chip chọn hạng. */
+  aside?: ReactNode;
   onChange: (value: ImageEditorValue | null, error?: string) => void;
 }) {
   const [loaded, setLoaded] = useState<LoadedEditableImage | null>(null);
@@ -109,14 +121,42 @@ export function ImageEditor({
 
   return (
     <div className="space-y-3">
-      <Field label={label} hint="PNG/JPG/WebP, tối đa 10 MB. Ảnh thành phẩm 256×256.">
-        <input
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          required={required && !loaded}
-          onChange={(event) => void pick(event.target.files?.[0])}
-        />
-      </Field>
+      {variant === "tile" ? (
+        <div className="flex items-start gap-3">
+          <label
+            className={`relative grid size-16 flex-none cursor-pointer place-items-center overflow-hidden border border-dashed border-mute-400 bg-paper text-center ${shape === "round" ? "rounded-full" : ""}`}
+          >
+            {preview ? (
+              <img src={preview} alt="" className="size-full object-contain" />
+            ) : (
+              <span className="font-display text-[10px] font-extrabold uppercase leading-tight tracking-[0.06em] text-mute-600">
+                {tileLabel ?? label}
+              </span>
+            )}
+            {/* Ô nhập vẫn nằm trong luồng và có kích thước thật — chỉ trong suốt.
+                Ẩn bằng `display:none` thì trình duyệt không hiện được lỗi
+                "bắt buộc" trên một ô không hiển thị. */}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              aria-label={label}
+              required={required && !loaded}
+              onChange={(event) => void pick(event.target.files?.[0])}
+              className="absolute inset-0 cursor-pointer opacity-0"
+            />
+          </label>
+          {aside && <div className="min-w-0 flex-1">{aside}</div>}
+        </div>
+      ) : (
+        <Field label={label} hint="PNG/JPG/WebP, tối đa 10 MB. Ảnh thành phẩm 256×256.">
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            required={required && !loaded}
+            onChange={(event) => void pick(event.target.files?.[0])}
+          />
+        </Field>
+      )}
       {loaded && (
         <>
           <div
