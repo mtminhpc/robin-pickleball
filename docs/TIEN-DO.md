@@ -19,8 +19,8 @@ Viết cho phiên làm việc kế tiếp, có thể trên máy khác.
 
 ### Đang ở đâu
 
-**Mã làm việc hiện tại: `v0.9.0 — Trao quyền`.** v0.8 đã được chốt ở commit
-`b891800` trên nhánh `codex/v0.8.0-linh-dong`: sân ổn định/đặt tên theo vòng, nhiều ca
+**Mã làm việc hiện tại: `v0.9.0 — Trao quyền`.** Mã v0.9 đã chốt ở commit `388d42b`;
+v0.8 đã chốt ở commit `b891800` trên nhánh `codex/v0.8.0-linh-dong`: sân ổn định/đặt tên theo vòng, nhiều ca
 sân và người, preview/confirm HMAC, xếp lại lịch chưa bắt đầu, chuyển trận giữ nguyên
 định danh/tỷ số, banner lịch đổi và seed idempotent `TESTV8`.
 
